@@ -48,11 +48,11 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/orgs/{org}/teams/{team}", h.handleTeamDetail)
 		r.Post("/orgs/{org}/teams/{team}/members", h.handleAddTeamMember)
 
-		r.Route("/admin", func(r chi.Router) {
+		r.Group(func(r chi.Router) {
 			r.Use(h.requireAdmin)
-			r.Get("/users", h.handleAdminUsers)
-			r.Post("/users", h.handleAdminCreateUser)
-			r.Post("/users/{id}/delete", h.handleAdminDeleteUser)
+			r.Get("/admin/users", h.handleAdminUsers)
+			r.Post("/admin/users", h.handleAdminCreateUser)
+			r.Post("/admin/users/{id}/delete", h.handleAdminDeleteUser)
 		})
 
 		r.Route("/{owner}/{repo}", func(r chi.Router) {
