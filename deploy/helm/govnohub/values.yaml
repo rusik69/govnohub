@@ -13,7 +13,7 @@ postgresql:
 
 opensearch:
   enabled: true
-  image: opensearchproject/opensearch:2.11.0
+  image: opensearchproject/opensearch:3.7.0
   storage: 10Gi
 
 ingress:
