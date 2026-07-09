@@ -11,7 +11,7 @@ INSTALL_HOST ?=
 INSTALL_USER ?= root
 INSTALL_SSH_KEY ?=
 
-.PHONY: build build-cli generate test test-unit test-integration test-e2e test-deploy-e2e test-k8s test-all \
+.PHONY: build build-cli generate test test-unit test-integration test-e2e test-deploy-e2e test-k8s test-k8s-e2e test-all \
         run-api run-git docker-build helm-install install \
         k3s-install k3s-uninstall k3s-status k3s-wait k3d-create k3d-delete \
         podman-k8s-create podman-k8s-delete deploy-k3s deploy-podman-k8s undeploy-k3s redeploy-k3s docs
@@ -49,6 +49,11 @@ test-deploy-e2e:
 
 test-k8s:
 	go test -count=1 -timeout=15m ./tests/e2e/... -tags=k8s
+
+test-k8s-e2e:
+	GOVNOHUB_K8S_E2E=1 NAMESPACE=$(NAMESPACE) make test-k8s
+	GOVNOHUB_DEPLOY_E2E=1 GOVNOHUB_BASE_URL=http://govnohub.local GOVNOHUB_GIT_URL=http://git.govnohub.local \
+		go test -race -count=1 -timeout=20m ./tests/e2e/... -tags=deploy -run TestDeployedClusterFullJourney
 
 test-all: test-unit test-integration test-e2e test-deploy-e2e
 
