@@ -16,8 +16,9 @@ import (
 )
 
 type Postgres struct {
-	Pool    *pgxpool.Pool
-	Cleanup func()
+	Pool        *pgxpool.Pool
+	DatabaseURL string
+	Cleanup     func()
 }
 
 func NewPostgres(t *testing.T) *Postgres {
@@ -71,5 +72,5 @@ func connectPostgres(t *testing.T, ctx context.Context, connStr string, afterClo
 			afterClose()
 		}
 	}
-	return &Postgres{Pool: pool, Cleanup: cleanup}
+	return &Postgres{Pool: pool, DatabaseURL: connStr, Cleanup: cleanup}
 }

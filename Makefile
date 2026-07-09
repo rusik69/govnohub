@@ -11,7 +11,7 @@ INSTALL_HOST ?=
 INSTALL_USER ?= root
 INSTALL_SSH_KEY ?=
 
-.PHONY: build build-cli test test-unit test-integration test-e2e test-k8s test-all test-frontend \
+.PHONY: build build-cli test test-unit test-integration test-e2e test-deploy-e2e test-k8s test-all test-frontend \
         run-api run-git docker-build helm-install install \
         k3s-install k3s-uninstall k3s-status k3s-wait k3d-create k3d-delete \
         podman-k8s-create podman-k8s-delete deploy-k3s deploy-podman-k8s undeploy-k3s redeploy-k3s docs
@@ -42,10 +42,13 @@ test-integration:
 test-e2e:
 	go test -race -count=1 -timeout=10m ./tests/e2e/... -tags=e2e
 
+test-deploy-e2e:
+	go test -race -count=1 -timeout=15m ./tests/e2e/... -tags=deploy
+
 test-k8s:
 	go test -count=1 -timeout=15m ./tests/e2e/... -tags=k8s
 
-test-all: test-unit test-integration test-e2e test-frontend
+test-all: test-unit test-integration test-e2e test-deploy-e2e test-frontend
 
 test-frontend:
 	cd frontend && npm run test
@@ -68,9 +71,9 @@ install:
 docker-build:
 	@for svc in api-server git-server actions-controller webhook-service search-indexer; do \
 		echo "building govnohub/$$svc:latest ($(CONTAINER_RUNTIME))"; \
-		$(CONTAINER_RUNTIME) build -f deploy/docker/Dockerfile --build-arg SERVICE=$$svc -t govnohub/$$svc:latest .; \
+		$(CONTAINER_RUNTIME) build -f deploy/docker/Dockerfile --build-arg SERVICE=$$svc -t govnohub/$${svc}:latest .; \
 		if [ "$(CONTAINER_RUNTIME)" = podman ]; then \
-			$(CONTAINER_RUNTIME) tag "localhost/govnohub/$$svc:latest" "govnohub/$$svc:latest" 2>/dev/null || true; \
+			$(CONTAINER_RUNTIME) tag "localhost/govnohub/$${svc}:latest" "govnohub/$${svc}:latest" 2>/dev/null || true; \
 		fi; \
 	done
 	$(CONTAINER_RUNTIME) build -f deploy/docker/Dockerfile.frontend -t govnohub/frontend:latest .

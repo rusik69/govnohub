@@ -23,11 +23,14 @@ import (
 )
 
 type Env struct {
-	Pool    *pgxpool.Pool
-	Git     *gitstore.Store
-	Server  *httptest.Server
-	URL     string
-	Cleanup func()
+	Pool         *pgxpool.Pool
+	DatabaseURL  string
+	GitRoot      string
+	ArtifactRoot string
+	Git          *gitstore.Store
+	Server       *httptest.Server
+	URL          string
+	Cleanup      func()
 }
 
 func New(t *testing.T) *Env {
@@ -60,10 +63,13 @@ func New(t *testing.T) *Env {
 
 	ts := httptest.NewServer(srv.Router())
 	return &Env{
-		Pool: pg.Pool,
-		Git:  gitStore,
-		Server: ts,
-		URL:  ts.URL,
+		Pool:         pg.Pool,
+		DatabaseURL:  pg.DatabaseURL,
+		GitRoot:      gitRoot,
+		ArtifactRoot: artifactRoot,
+		Git:          gitStore,
+		Server:       ts,
+		URL:          ts.URL,
 		Cleanup: func() {
 			ts.Close()
 			pg.Cleanup()

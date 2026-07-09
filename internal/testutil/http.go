@@ -18,12 +18,22 @@ func DoJSON(t *testing.T, method, url, token string, body any) (*http.Response, 
 		}
 		r = bytes.NewReader(b)
 	}
-	req, err := http.NewRequest(method, url, r)
+	return doRequest(t, method, url, token, r, "application/json")
+}
+
+func DoBody(t *testing.T, method, url, token, contentType string, body io.Reader) (*http.Response, map[string]any) {
+	t.Helper()
+	return doRequest(t, method, url, token, body, contentType)
+}
+
+func doRequest(t *testing.T, method, url, token string, body io.Reader, contentType string) (*http.Response, map[string]any) {
+	t.Helper()
+	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if body != nil && contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -46,9 +56,14 @@ func RegisterAndLogin(t *testing.T, baseURL, username string) string {
 		"email":    username + "@test.local",
 		"password": "password123",
 	})
+	return Login(t, baseURL, username, "password123")
+}
+
+func Login(t *testing.T, baseURL, username, password string) string {
+	t.Helper()
 	resp, out := DoJSON(t, http.MethodPost, baseURL+"/api/v1/auth/login", "", map[string]string{
 		"username": username,
-		"password": "password123",
+		"password": password,
 	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("login status=%d", resp.StatusCode)
@@ -58,4 +73,17 @@ func RegisterAndLogin(t *testing.T, baseURL, username string) string {
 		t.Fatal("missing token")
 	}
 	return token
+}
+
+func AdminCreateUser(t *testing.T, baseURL, adminToken, username string) {
+	t.Helper()
+	resp, _ := DoJSON(t, http.MethodPost, baseURL+"/api/v1/admin/users", adminToken, map[string]string{
+		"username": username,
+		"email":    username + "@test.local",
+		"password": "password123",
+		"role":     "user",
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin create user %s: %d", username, resp.StatusCode)
+	}
 }
