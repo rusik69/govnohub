@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -43,6 +44,63 @@ func (s *Store) Init(ctx context.Context, owner, name string) error {
 	}
 	_, err := git.PlainInit(path, true)
 	return err
+}
+
+func (s *Store) SeedMainBranch(owner, repoName, branch string) (string, error) {
+	repo, err := s.Open(owner, repoName)
+	if err != nil {
+		return "", err
+	}
+	content := []byte("# " + repoName + "\n\nInitial commit.\n")
+	obj := repo.Storer.NewEncodedObject()
+	obj.SetType(plumbing.BlobObject)
+	obj.SetSize(int64(len(content)))
+	w, err := obj.Writer()
+	if err != nil {
+		return "", err
+	}
+	if _, err := w.Write(content); err != nil {
+		return "", err
+	}
+	w.Close()
+	blobHash, err := repo.Storer.SetEncodedObject(obj)
+	if err != nil {
+		return "", err
+	}
+
+	tree := &object.Tree{Entries: []object.TreeEntry{{
+		Name: "README.md", Mode: filemode.Regular, Hash: blobHash,
+	}}}
+	treeObj := repo.Storer.NewEncodedObject()
+	if err := tree.Encode(treeObj); err != nil {
+		return "", err
+	}
+	treeHash, err := repo.Storer.SetEncodedObject(treeObj)
+	if err != nil {
+		return "", err
+	}
+
+	now := time.Now()
+	sig := object.Signature{Name: "govnohub", Email: "govnohub@local", When: now}
+	commit := &object.Commit{
+		Message:  "Initial commit",
+		TreeHash: treeHash,
+		Author:   sig,
+		Committer: sig,
+	}
+	commitObj := repo.Storer.NewEncodedObject()
+	if err := commit.Encode(commitObj); err != nil {
+		return "", err
+	}
+	commitHash, err := repo.Storer.SetEncodedObject(commitObj)
+	if err != nil {
+		return "", err
+	}
+	ref := plumbing.NewHashReference(plumbing.NewBranchReferenceName(branch), commitHash)
+	if err := repo.Storer.SetReference(ref); err != nil {
+		return "", err
+	}
+	return commitHash.String(), nil
 }
 
 func (s *Store) Open(owner, name string) (*git.Repository, error) {

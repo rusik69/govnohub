@@ -7,6 +7,7 @@ const router = createRouter({
     { path: '/login', component: () => import('../views/Login.vue'), meta: { guest: true } },
     { path: '/admin/users', component: () => import('../views/AdminUsers.vue'), meta: { admin: true } },
     { path: '/', component: () => import('../views/Dashboard.vue') },
+    { path: '/projects', redirect: '/' },
     { path: '/search', component: () => import('../views/Search.vue') },
     { path: '/settings', component: () => import('../views/UserSettings.vue') },
     { path: '/:owner/:repo', component: () => import('../views/Repo.vue') },

@@ -18,15 +18,17 @@ type Document struct {
 	Repo     string `json:"repo"`
 	Path     string `json:"path,omitempty"`
 	FullName string `json:"full_name,omitempty"`
+	Ref     string `json:"ref,omitempty"`
 }
 
 type Hit struct {
-	ID    string  `json:"id"`
-	Type  string  `json:"type"`
-	Title string  `json:"title"`
-	Repo  string  `json:"repo"`
-	Score float64 `json:"score"`
-	Snippet string `json:"snippet"`
+	ID      string  `json:"id"`
+	Type    string  `json:"type"`
+	Title   string  `json:"title"`
+	Repo    string  `json:"repo"`
+	Ref     string  `json:"ref,omitempty"`
+	Score   float64 `json:"score"`
+	Snippet string  `json:"snippet"`
 }
 
 type Service struct {
@@ -124,7 +126,7 @@ func (s *Service) Search(ctx context.Context, q string, limit int) ([]Hit, error
 		}
 		hits = append(hits, Hit{
 			ID: h.Source.ID, Type: h.Source.Type, Title: h.Source.Title,
-			Repo: h.Source.Repo, Score: h.Score, Snippet: snippet,
+			Repo: h.Source.Repo, Ref: h.Source.Ref, Score: h.Score, Snippet: snippet,
 		})
 	}
 	return hits, nil

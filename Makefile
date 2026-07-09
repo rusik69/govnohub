@@ -121,7 +121,7 @@ k3s-import-images: docker-build
 			if [ "$(CONTAINER_RUNTIME)" = podman ]; then \
 				src=$$img; \
 				podman image exists localhost/$$img 2>/dev/null && src=localhost/$$img; \
-				archive=$$(mktemp /tmp/govnohub-img.XXXXXX.tar); \
+				archive=$$(mktemp /tmp/govnohub-img-XXXXXX); \
 				podman save -q $$src -o $$archive; \
 				kind load image-archive $$archive --name $(KIND_CLUSTER); \
 				rm -f $$archive; \

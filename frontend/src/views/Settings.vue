@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { repoApi, webhookApi, protectedBranchApi, collaboratorApi } from '../api/client'
+import { repoApi, webhookApi, protectedBranchApi, collaboratorApi, issueApi } from '../api/client'
 import RepoNav from '../components/RepoNav.vue'
 
 const route = useRoute()
@@ -17,16 +17,29 @@ const requireReviews = ref(1)
 const collaborators = ref<any[]>([])
 const collabUsername = ref('')
 const collabPermission = ref('read')
+const labels = ref<any[]>([])
+const labelName = ref('')
+const labelColor = ref('#0366d6')
+const branchName = ref('')
+const branchBase = ref('main')
+const message = ref('')
+const error = ref('')
 
 onMounted(async () => {
-  const [hooks, rules, collabs] = await Promise.all([
-    webhookApi.list(owner.value, repo.value),
-    protectedBranchApi.list(owner.value, repo.value),
-    collaboratorApi.list(owner.value, repo.value),
-  ])
-  webhooks.value = hooks.data
-  protectedBranches.value = rules.data
-  collaborators.value = collabs.data
+  try {
+    const [hooks, rules, collabs, lbls] = await Promise.all([
+      webhookApi.list(owner.value, repo.value),
+      protectedBranchApi.list(owner.value, repo.value),
+      collaboratorApi.list(owner.value, repo.value),
+      issueApi.labels(owner.value, repo.value),
+    ])
+    webhooks.value = hooks.data
+    protectedBranches.value = rules.data
+    collaborators.value = collabs.data
+    labels.value = lbls.data
+  } catch (e: any) {
+    error.value = e.response?.data?.error || 'Failed to load settings'
+  }
 })
 
 async function addWebhook() {
@@ -35,6 +48,7 @@ async function addWebhook() {
   webhooks.value = data
   hookUrl.value = ''
   hookSecret.value = ''
+  message.value = 'Webhook added'
 }
 
 async function protect() {
@@ -46,6 +60,7 @@ async function protect() {
   })
   const { data } = await protectedBranchApi.list(owner.value, repo.value)
   protectedBranches.value = data
+  message.value = 'Branch protection updated'
 }
 
 async function addCollaborator() {
@@ -54,6 +69,7 @@ async function addCollaborator() {
   const { data } = await collaboratorApi.list(owner.value, repo.value)
   collaborators.value = data
   collabUsername.value = ''
+  message.value = 'Collaborator added'
 }
 
 async function removeCollaborator(username: string) {
@@ -64,10 +80,31 @@ async function removeCollaborator(username: string) {
 
 async function star() {
   await repoApi.star(owner.value, repo.value)
+  message.value = 'Project starred'
+}
+
+async function watch() {
+  await repoApi.watch(owner.value, repo.value)
+  message.value = 'Now watching this project'
 }
 
 async function fork() {
-  await repoApi.fork(owner.value, repo.value)
+  const { data } = await repoApi.fork(owner.value, repo.value)
+  message.value = `Forked to ${data.full_name}`
+}
+
+async function createBranch() {
+  await repoApi.createBranch(owner.value, repo.value, branchName.value, branchBase.value)
+  branchName.value = ''
+  message.value = 'Branch created'
+}
+
+async function addLabel() {
+  await issueApi.createLabel(owner.value, repo.value, labelName.value, labelColor.value)
+  const { data } = await issueApi.labels(owner.value, repo.value)
+  labels.value = data
+  labelName.value = ''
+  message.value = 'Label created'
 }
 </script>
 
@@ -75,18 +112,44 @@ async function fork() {
   <div>
     <RepoNav />
     <div class="max-w-4xl mx-auto p-4 space-y-4">
+      <p v-if="message" class="text-sm text-[#1a7f37]">{{ message }}</p>
+      <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
+
       <div class="card p-4">
         <h3 class="font-semibold mb-2">Repository actions</h3>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
           <button class="btn-secondary" @click="star">Star</button>
+          <button class="btn-secondary" @click="watch">Watch</button>
           <button class="btn-secondary" @click="fork">Fork</button>
         </div>
       </div>
+
+      <div class="card p-4">
+        <h3 class="font-semibold mb-2">Branches</h3>
+        <div class="flex flex-wrap gap-2">
+          <input v-model="branchName" class="input" placeholder="New branch name" />
+          <input v-model="branchBase" class="input" placeholder="Base branch" />
+          <button class="btn" @click="createBranch">Create branch</button>
+        </div>
+      </div>
+
+      <div class="card p-4">
+        <h3 class="font-semibold mb-2">Labels</h3>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <input v-model="labelName" class="input" placeholder="Label name" />
+          <input v-model="labelColor" class="input w-32" placeholder="#0366d6" />
+          <button class="btn" @click="addLabel">Add label</button>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <span v-for="l in labels" :key="l.id" class="badge" :style="{ backgroundColor: l.color + '33', color: l.color }">{{ l.name }}</span>
+        </div>
+      </div>
+
       <div class="card p-4">
         <h3 class="font-semibold mb-2">Branch protection</h3>
         <div class="flex flex-wrap gap-2 mb-3">
           <input v-model="protectBranch" class="input" placeholder="Branch name" />
-          <input v-model="requiredChecks" class="input flex-1" placeholder="Required checks (job IDs, comma-separated)" />
+          <input v-model="requiredChecks" class="input flex-1" placeholder="Required checks (comma-separated)" />
           <input v-model.number="requireReviews" type="number" min="0" class="input w-24" placeholder="Reviews" />
           <button class="btn" @click="protect">Protect</button>
         </div>
@@ -95,6 +158,7 @@ async function fork() {
           — {{ pb.require_reviews }} review(s), checks: {{ pb.required_checks?.join(', ') || 'none' }}
         </div>
       </div>
+
       <div class="card p-4">
         <h3 class="font-semibold mb-2">Collaborators</h3>
         <div class="flex gap-2 mb-3">
@@ -110,6 +174,7 @@ async function fork() {
           <button class="text-red-600 hover:underline" @click="removeCollaborator(c.username)">Remove</button>
         </div>
       </div>
+
       <div class="card p-4">
         <h3 class="font-semibold mb-2">Webhooks</h3>
         <div class="flex gap-2 mb-3">

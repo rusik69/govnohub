@@ -29,6 +29,7 @@ type Review struct {
 	ID         uuid.UUID `json:"id"`
 	PRID       uuid.UUID `json:"pr_id"`
 	ReviewerID uuid.UUID `json:"reviewer_id"`
+	Reviewer   string    `json:"reviewer,omitempty"`
 	State      string    `json:"state"`
 	Body       string    `json:"body"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -100,6 +101,27 @@ func (s *Service) AddReview(ctx context.Context, prID, reviewerID uuid.UUID, sta
 		prID, reviewerID, state, body,
 	).Scan(&r.ID, &r.PRID, &r.ReviewerID, &r.State, &r.Body, &r.CreatedAt)
 	return &r, err
+}
+
+func (s *Service) ListReviews(ctx context.Context, prID uuid.UUID) ([]Review, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT r.id, r.pr_id, r.reviewer_id, COALESCE(u.username,''), r.state, COALESCE(r.body,''), r.created_at
+		FROM pr_reviews r
+		LEFT JOIN users u ON r.reviewer_id = u.id
+		WHERE r.pr_id=$1 ORDER BY r.created_at ASC`, prID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Review
+	for rows.Next() {
+		var r Review
+		if err := rows.Scan(&r.ID, &r.PRID, &r.ReviewerID, &r.Reviewer, &r.State, &r.Body, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 func (s *Service) Merge(ctx context.Context, prID uuid.UUID, mergeSHA string) error {

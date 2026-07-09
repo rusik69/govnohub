@@ -24,6 +24,7 @@ type Comment struct {
 	ID        uuid.UUID `json:"id"`
 	IssueID   uuid.UUID `json:"issue_id"`
 	AuthorID  uuid.UUID `json:"author_id"`
+	Author    string    `json:"author,omitempty"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -93,6 +94,44 @@ func (s *Service) AddComment(ctx context.Context, issueID, authorID uuid.UUID, b
 		RETURNING id, issue_id, author_id, body, created_at`, issueID, authorID, body,
 	).Scan(&c.ID, &c.IssueID, &c.AuthorID, &c.Body, &c.CreatedAt)
 	return &c, err
+}
+
+func (s *Service) ListComments(ctx context.Context, issueID uuid.UUID) ([]Comment, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.id, c.issue_id, c.author_id, COALESCE(u.username,''), c.body, c.created_at
+		FROM issue_comments c
+		LEFT JOIN users u ON c.author_id = u.id
+		WHERE c.issue_id=$1 ORDER BY c.created_at ASC`, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Comment
+	for rows.Next() {
+		var c Comment
+		if err := rows.Scan(&c.ID, &c.IssueID, &c.AuthorID, &c.Author, &c.Body, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) ListLabels(ctx context.Context, repoID uuid.UUID) ([]Label, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, name, color FROM labels WHERE repo_id=$1 ORDER BY name`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Label
+	for rows.Next() {
+		var l Label
+		if err := rows.Scan(&l.ID, &l.Name, &l.Color); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
 }
 
 func (s *Service) Close(ctx context.Context, issueID uuid.UUID) error {

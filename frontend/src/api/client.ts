@@ -91,7 +91,23 @@ export const repoApi = {
   commits: (owner: string, repo: string, ref?: string) =>
     api.get(`/repos/${owner}/${repo}/commits`, { params: { ref } }),
   star: (owner: string, repo: string) => api.post(`/repos/${owner}/${repo}/star`),
-  fork: (owner: string, repo: string) => api.post(`/repos/${owner}/${repo}/fork`),
+  watch: (owner: string, repo: string) => api.post(`/repos/${owner}/${repo}/watch`),
+  fork: (owner: string, repo: string) => api.post<Repository>(`/repos/${owner}/${repo}/fork`),
+  createBranch: (owner: string, repo: string, name: string, base?: string) =>
+    api.post(`/repos/${owner}/${repo}/branches`, { name, base }),
+}
+
+export interface IssueComment {
+  id: string
+  author?: string
+  body: string
+  created_at: string
+}
+
+export interface Label {
+  id: string
+  name: string
+  color: string
 }
 
 export const issueApi = {
@@ -100,10 +116,23 @@ export const issueApi = {
     api.post(`/repos/${owner}/${repo}/issues`, { title, body }),
   get: (owner: string, repo: string, number: number) =>
     api.get(`/repos/${owner}/${repo}/issues/${number}`),
+  comments: (owner: string, repo: string, number: number) =>
+    api.get<IssueComment[]>(`/repos/${owner}/${repo}/issues/${number}/comments`),
   comment: (owner: string, repo: string, number: number, body: string) =>
     api.post(`/repos/${owner}/${repo}/issues/${number}/comments`, { body }),
   close: (owner: string, repo: string, number: number) =>
     api.post(`/repos/${owner}/${repo}/issues/${number}/close`),
+  labels: (owner: string, repo: string) => api.get<Label[]>(`/repos/${owner}/${repo}/labels`),
+  createLabel: (owner: string, repo: string, name: string, color: string) =>
+    api.post(`/repos/${owner}/${repo}/labels`, { name, color }),
+}
+
+export interface PRReview {
+  id: string
+  reviewer?: string
+  state: string
+  body: string
+  created_at: string
 }
 
 export const prApi = {
@@ -112,6 +141,8 @@ export const prApi = {
     api.post(`/repos/${owner}/${repo}/pulls`, data),
   get: (owner: string, repo: string, number: number) =>
     api.get(`/repos/${owner}/${repo}/pulls/${number}`),
+  reviews: (owner: string, repo: string, number: number) =>
+    api.get<PRReview[]>(`/repos/${owner}/${repo}/pulls/${number}/reviews`),
   review: (owner: string, repo: string, number: number, state: string, body: string) =>
     api.post(`/repos/${owner}/${repo}/pulls/${number}/reviews`, { state, body }),
   merge: (owner: string, repo: string, number: number, squash = false) =>
@@ -153,10 +184,25 @@ export const releaseApi = {
 
 export const packageApi = {
   list: (owner: string, repo: string) => api.get(`/repos/${owner}/${repo}/packages`),
+  publish: (owner: string, repo: string, data: { name: string; version: string; type?: string; content: string }) =>
+    api.post(`/repos/${owner}/${repo}/packages?name=${encodeURIComponent(data.name)}&version=${encodeURIComponent(data.version)}&type=${encodeURIComponent(data.type || 'generic')}`, data.content, {
+      headers: { 'Content-Type': 'text/plain' },
+    }),
+  downloadUrl: (owner: string, repo: string, name: string, version: string) =>
+    `/api/v1/repos/${owner}/${repo}/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
+}
+
+export interface SearchHit {
+  id: string
+  type: string
+  title: string
+  repo: string
+  ref?: string
+  snippet: string
 }
 
 export const searchApi = {
-  search: (q: string) => api.get('/search', { params: { q } }),
+  search: (q: string) => api.get<SearchHit[]>('/search', { params: { q } }),
 }
 
 export const webhookApi = {

@@ -106,13 +106,16 @@ func (s *Server) Router() http.Handler {
 			r.Get("/issues", s.handleListIssues)
 			r.Post("/issues", s.handleCreateIssue)
 			r.Get("/issues/{number}", s.handleGetIssue)
+			r.Get("/issues/{number}/comments", s.handleListIssueComments)
 			r.Post("/issues/{number}/comments", s.handleAddIssueComment)
 			r.Post("/issues/{number}/close", s.handleCloseIssue)
+			r.Get("/labels", s.handleListLabels)
 			r.Post("/labels", s.handleCreateLabel)
 
 			r.Get("/pulls", s.handleListPRs)
 			r.Post("/pulls", s.handleCreatePR)
 			r.Get("/pulls/{number}", s.handleGetPR)
+			r.Get("/pulls/{number}/reviews", s.handleListPRReviews)
 			r.Post("/pulls/{number}/reviews", s.handleAddReview)
 			r.Post("/pulls/{number}/merge", s.handleMergePR)
 			r.Get("/pulls/{number}/diff", s.handlePRDiff)
@@ -373,6 +376,17 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request, ownerType st
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	sha, err := s.git.SeedMainBranch(ownerName, req.Name, repository.DefaultBranch)
+	if err != nil {
+		s.pool.Exec(r.Context(), `DELETE FROM repos WHERE id=$1`, repository.ID)
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_, _ = s.pool.Exec(r.Context(), `UPDATE branches SET head_sha=$1 WHERE repo_id=$2 AND name=$3`, sha, repository.ID, repository.DefaultBranch)
+	s.search.Index(r.Context(), search.Document{
+		ID: "repo-" + repository.ID.String(), Type: "repo",
+		Title: repository.Name, Body: repository.Description, Repo: repository.FullName,
+	})
 	jsonOK(w, repository)
 }
 
@@ -528,7 +542,8 @@ func (s *Server) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.search.Index(r.Context(), search.Document{
-		ID: "issue-" + i.ID.String(), Type: "issue", Title: i.Title, Body: i.Body, Repo: repository.FullName,
+		ID: "issue-" + i.ID.String(), Type: "issue", Title: i.Title, Body: i.Body,
+		Repo: repository.FullName, Ref: strconv.Itoa(i.Number),
 	})
 	jsonOK(w, i)
 }
@@ -574,6 +589,31 @@ func (s *Server) handleAddIssueComment(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, c)
 }
 
+func (s *Server) handleListIssueComments(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	i, err := s.issues.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	comments, err := s.issues.ListComments(r.Context(), i.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if comments == nil {
+		comments = []issue.Comment{}
+	}
+	jsonOK(w, comments)
+}
+
 func (s *Server) handleCloseIssue(w http.ResponseWriter, r *http.Request) {
 	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
@@ -608,6 +648,22 @@ func (s *Server) handleCreateLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, l)
+}
+
+func (s *Server) handleListLabels(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	labels, err := s.issues.ListLabels(r.Context(), repository.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if labels == nil {
+		labels = []issue.Label{}
+	}
+	jsonOK(w, labels)
 }
 
 func (s *Server) handleListPRs(w http.ResponseWriter, r *http.Request) {
@@ -685,6 +741,31 @@ func (s *Server) handleAddReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, review)
+}
+
+func (s *Server) handleListPRReviews(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	pr, err := s.pulls.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	reviews, err := s.pulls.ListReviews(r.Context(), pr.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if reviews == nil {
+		reviews = []pull.Review{}
+	}
+	jsonOK(w, reviews)
 }
 
 func (s *Server) handleMergePR(w http.ResponseWriter, r *http.Request) {
