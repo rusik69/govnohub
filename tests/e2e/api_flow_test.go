@@ -3,7 +3,6 @@
 package e2e
 
 import (
-	"context"
 	"net/http"
 	"testing"
 
@@ -25,10 +24,6 @@ func TestFullUserJourney(t *testing.T) {
 		t.Fatalf("create repo: %d", resp.StatusCode)
 	}
 
-	if err := env.Git.Init(context.Background(), user, "app"); err != nil {
-		t.Fatal(err)
-	}
-
 	resp, out := testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+user+"/app/issues", token, map[string]string{
 		"title": "first issue", "body": "details",
 	})
@@ -36,6 +31,13 @@ func TestFullUserJourney(t *testing.T) {
 		t.Fatalf("issue: %d", resp.StatusCode)
 	}
 	issueNum, _ := out["number"].(float64)
+
+	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+user+"/app/branches", token, map[string]string{
+		"name": "feature", "base": "main",
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create branch: %d", resp.StatusCode)
+	}
 
 	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+user+"/app/pulls", token, map[string]string{
 		"title": "feature", "body": "", "head": "feature", "base": "main",

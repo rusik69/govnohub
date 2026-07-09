@@ -3,7 +3,6 @@
 package integration
 
 import (
-	"context"
 	"net/http"
 	"testing"
 
@@ -24,15 +23,19 @@ func TestBranchProtectionBlocksMerge(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("create repo: %d", resp.StatusCode)
 	}
-	if err := env.Git.Init(context.Background(), owner, "app"); err != nil {
-		t.Fatal(err)
-	}
 
 	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+owner+"/app/protected-branches", token, map[string]any{
 		"branch": "main", "required_checks": []string{}, "require_reviews": 1,
 	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("protect: %d", resp.StatusCode)
+	}
+
+	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+owner+"/app/branches", token, map[string]string{
+		"name": "feature", "base": "main",
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create branch: %d", resp.StatusCode)
 	}
 
 	resp, out := testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+owner+"/app/pulls", token, map[string]string{
