@@ -124,6 +124,13 @@ func runFullJourney(t *testing.T, base, gitBase string, allowRegister bool) {
 		t.Fatalf("label: %d", resp.StatusCode)
 	}
 
+	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+owner+"/app/branches", token, map[string]string{
+		"name": "feature", "base": "main",
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create branch: %d", resp.StatusCode)
+	}
+
 	resp, out = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+owner+"/app/pulls", token, map[string]string{
 		"title": "feature", "body": "", "head": "feature", "base": "main",
 	})
@@ -225,7 +232,7 @@ jobs:
 		adminToken := testutil.Login(t, base, "admin", "admin")
 		testutil.AdminCreateUser(t, base, adminToken, collab)
 	}
-	collabTok := testutil.Login(t, base, collab, "password123")
+	testutil.Login(t, base, collab, "password123")
 
 	resp, _ = testutil.DoJSON(t, http.MethodPut, base+"/api/v1/repos/"+owner+"/app/collaborators/"+collab, token, map[string]string{
 		"permission": "read",
@@ -276,7 +283,7 @@ jobs:
 		t.Fatalf("close issue: %d", resp.StatusCode)
 	}
 
-	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+owner+"/app/fork", collabTok, nil)
+	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+owner+"/app/fork", token, nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("fork: %d", resp.StatusCode)
 	}
