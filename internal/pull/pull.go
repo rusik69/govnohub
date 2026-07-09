@@ -136,3 +136,50 @@ func (s *Service) ReviewCount(ctx context.Context, prID uuid.UUID, state string)
 	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM pr_reviews WHERE pr_id=$1 AND state=$2`, prID, state).Scan(&n)
 	return n, err
 }
+
+type LineComment struct {
+	ID        uuid.UUID `json:"id"`
+	PRID      uuid.UUID `json:"pr_id"`
+	AuthorID  uuid.UUID `json:"author_id"`
+	Author    string    `json:"author,omitempty"`
+	Body      string    `json:"body"`
+	Path      string    `json:"path,omitempty"`
+	Line      int       `json:"line,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (s *Service) AddComment(ctx context.Context, prID, authorID uuid.UUID, body, path string, line int) (*LineComment, error) {
+	var c LineComment
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO pr_comments (pr_id, author_id, body, path, line) VALUES ($1,$2,$3,$4,$5)
+		RETURNING id, pr_id, author_id, body, COALESCE(path,''), COALESCE(line,0), created_at`,
+		prID, authorID, body, path, line,
+	).Scan(&c.ID, &c.PRID, &c.AuthorID, &c.Body, &c.Path, &c.Line, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.pool.QueryRow(ctx, `SELECT username FROM users WHERE id=$1`, authorID).Scan(&c.Author)
+	return &c, nil
+}
+
+func (s *Service) ListComments(ctx context.Context, prID uuid.UUID) ([]LineComment, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.id, c.pr_id, c.author_id, COALESCE(u.username,''), c.body,
+		       COALESCE(c.path,''), COALESCE(c.line,0), c.created_at
+		FROM pr_comments c
+		LEFT JOIN users u ON c.author_id = u.id
+		WHERE c.pr_id=$1 ORDER BY c.created_at ASC`, prID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LineComment
+	for rows.Next() {
+		var c LineComment
+		if err := rows.Scan(&c.ID, &c.PRID, &c.AuthorID, &c.Author, &c.Body, &c.Path, &c.Line, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}

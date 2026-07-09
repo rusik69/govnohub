@@ -9,15 +9,21 @@ import (
 )
 
 type Issue struct {
-	ID        uuid.UUID `json:"id"`
-	RepoID    uuid.UUID `json:"repo_id"`
-	Number    int       `json:"number"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	State     string    `json:"state"`
-	AuthorID  uuid.UUID `json:"author_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            uuid.UUID  `json:"id"`
+	RepoID        uuid.UUID  `json:"repo_id"`
+	Number        int        `json:"number"`
+	Title         string     `json:"title"`
+	Body          string     `json:"body"`
+	State         string     `json:"state"`
+	AuthorID      uuid.UUID  `json:"author_id"`
+	Author        string     `json:"author,omitempty"`
+	AssigneeID    *uuid.UUID `json:"assignee_id,omitempty"`
+	Assignee      string     `json:"assignee,omitempty"`
+	MilestoneID   *uuid.UUID `json:"milestone_id,omitempty"`
+	Milestone     string     `json:"milestone,omitempty"`
+	Labels        []Label    `json:"labels,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 type Comment struct {
@@ -35,6 +41,16 @@ type Label struct {
 	Color string    `json:"color"`
 }
 
+type Milestone struct {
+	ID          uuid.UUID  `json:"id"`
+	RepoID      uuid.UUID  `json:"repo_id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	State       string     `json:"state"`
+	DueOn       *time.Time `json:"due_on,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
 type Service struct {
 	pool *pgxpool.Pool
 }
@@ -43,48 +59,114 @@ func NewService(pool *pgxpool.Pool) *Service {
 	return &Service{pool: pool}
 }
 
+const issueSelect = `
+	SELECT i.id, i.repo_id, i.number, i.title, COALESCE(i.body,''), i.state, i.author_id,
+	       COALESCE(au.username,''), i.assignee_id, COALESCE(asg.username,''),
+	       i.milestone_id, COALESCE(m.title,''), i.created_at, i.updated_at`
+
+const issueFrom = `
+	FROM issues i
+	LEFT JOIN users au ON i.author_id = au.id
+	LEFT JOIN users asg ON i.assignee_id = asg.id
+	LEFT JOIN milestones m ON i.milestone_id = m.id`
+
+func (s *Service) scanIssue(row interface {
+	Scan(dest ...any) error
+}) (*Issue, error) {
+	var i Issue
+	err := row.Scan(&i.ID, &i.RepoID, &i.Number, &i.Title, &i.Body, &i.State, &i.AuthorID,
+		&i.Author, &i.AssigneeID, &i.Assignee, &i.MilestoneID, &i.Milestone, &i.CreatedAt, &i.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &i, nil
+}
+
+func (s *Service) loadLabels(ctx context.Context, issueID uuid.UUID) ([]Label, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT l.id, l.name, l.color FROM labels l
+		JOIN issue_labels il ON il.label_id = l.id
+		WHERE il.issue_id=$1 ORDER BY l.name`, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Label
+	for rows.Next() {
+		var l Label
+		if err := rows.Scan(&l.ID, &l.Name, &l.Color); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) enrich(ctx context.Context, i *Issue) error {
+	labels, err := s.loadLabels(ctx, i.ID)
+	if err != nil {
+		return err
+	}
+	i.Labels = labels
+	return nil
+}
+
 func (s *Service) Create(ctx context.Context, repoID, authorID uuid.UUID, title, body string) (*Issue, error) {
 	var number int
 	err := s.pool.QueryRow(ctx, `SELECT COALESCE(MAX(number),0)+1 FROM issues WHERE repo_id=$1`, repoID).Scan(&number)
 	if err != nil {
 		return nil, err
 	}
-	var i Issue
+	var id uuid.UUID
 	err = s.pool.QueryRow(ctx, `
 		INSERT INTO issues (repo_id, number, title, body, author_id)
-		VALUES ($1,$2,$3,$4,$5)
-		RETURNING id, repo_id, number, title, COALESCE(body,''), state, author_id, created_at, updated_at`,
-		repoID, number, title, body, authorID,
-	).Scan(&i.ID, &i.RepoID, &i.Number, &i.Title, &i.Body, &i.State, &i.AuthorID, &i.CreatedAt, &i.UpdatedAt)
-	return &i, err
+		VALUES ($1,$2,$3,$4,$5) RETURNING id`, repoID, number, title, body, authorID).Scan(&id)
+	if err != nil {
+		return nil, err
+	}
+	return s.GetByID(ctx, id)
+}
+
+func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*Issue, error) {
+	i, err := s.scanIssue(s.pool.QueryRow(ctx, issueSelect+issueFrom+` WHERE i.id=$1`, id))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.enrich(ctx, i); err != nil {
+		return nil, err
+	}
+	return i, nil
 }
 
 func (s *Service) List(ctx context.Context, repoID uuid.UUID) ([]Issue, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, repo_id, number, title, COALESCE(body,''), state, author_id, created_at, updated_at
-		FROM issues WHERE repo_id=$1 ORDER BY number DESC`, repoID)
+	rows, err := s.pool.Query(ctx, issueSelect+issueFrom+` WHERE i.repo_id=$1 ORDER BY i.number DESC`, repoID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var issues []Issue
 	for rows.Next() {
-		var i Issue
-		if err := rows.Scan(&i.ID, &i.RepoID, &i.Number, &i.Title, &i.Body, &i.State, &i.AuthorID, &i.CreatedAt, &i.UpdatedAt); err != nil {
+		i, err := s.scanIssue(rows)
+		if err != nil {
 			return nil, err
 		}
-		issues = append(issues, i)
+		if err := s.enrich(ctx, i); err != nil {
+			return nil, err
+		}
+		issues = append(issues, *i)
 	}
 	return issues, rows.Err()
 }
 
 func (s *Service) Get(ctx context.Context, repoID uuid.UUID, number int) (*Issue, error) {
-	var i Issue
-	err := s.pool.QueryRow(ctx, `
-		SELECT id, repo_id, number, title, COALESCE(body,''), state, author_id, created_at, updated_at
-		FROM issues WHERE repo_id=$1 AND number=$2`, repoID, number,
-	).Scan(&i.ID, &i.RepoID, &i.Number, &i.Title, &i.Body, &i.State, &i.AuthorID, &i.CreatedAt, &i.UpdatedAt)
-	return &i, err
+	i, err := s.scanIssue(s.pool.QueryRow(ctx, issueSelect+issueFrom+` WHERE i.repo_id=$1 AND i.number=$2`, repoID, number))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.enrich(ctx, i); err != nil {
+		return nil, err
+	}
+	return i, nil
 }
 
 func (s *Service) AddComment(ctx context.Context, issueID, authorID uuid.UUID, body string) (*Comment, error) {
@@ -93,7 +175,13 @@ func (s *Service) AddComment(ctx context.Context, issueID, authorID uuid.UUID, b
 		INSERT INTO issue_comments (issue_id, author_id, body) VALUES ($1,$2,$3)
 		RETURNING id, issue_id, author_id, body, created_at`, issueID, authorID, body,
 	).Scan(&c.ID, &c.IssueID, &c.AuthorID, &c.Body, &c.CreatedAt)
-	return &c, err
+	if err != nil {
+		return nil, err
+	}
+	var author string
+	_ = s.pool.QueryRow(ctx, `SELECT username FROM users WHERE id=$1`, authorID).Scan(&author)
+	c.Author = author
+	return &c, nil
 }
 
 func (s *Service) ListComments(ctx context.Context, issueID uuid.UUID) ([]Comment, error) {
@@ -151,4 +239,86 @@ func (s *Service) CreateLabel(ctx context.Context, repoID uuid.UUID, name, color
 func (s *Service) AddLabel(ctx context.Context, issueID, labelID uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `INSERT INTO issue_labels (issue_id, label_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, issueID, labelID)
 	return err
+}
+
+func (s *Service) RemoveLabel(ctx context.Context, issueID, labelID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM issue_labels WHERE issue_id=$1 AND label_id=$2`, issueID, labelID)
+	return err
+}
+
+func (s *Service) SetAssignee(ctx context.Context, issueID uuid.UUID, assigneeID *uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `UPDATE issues SET assignee_id=$2, updated_at=NOW() WHERE id=$1`, issueID, assigneeID)
+	return err
+}
+
+func (s *Service) SetMilestone(ctx context.Context, issueID uuid.UUID, milestoneID *uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `UPDATE issues SET milestone_id=$2, updated_at=NOW() WHERE id=$1`, issueID, milestoneID)
+	return err
+}
+
+func (s *Service) CreateMilestone(ctx context.Context, repoID uuid.UUID, title, description string, dueOn *time.Time) (*Milestone, error) {
+	var m Milestone
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO milestones (repo_id, title, description, due_on)
+		VALUES ($1,$2,$3,$4)
+		RETURNING id, repo_id, title, COALESCE(description,''), state, due_on, created_at`,
+		repoID, title, description, dueOn,
+	).Scan(&m.ID, &m.RepoID, &m.Title, &m.Description, &m.State, &m.DueOn, &m.CreatedAt)
+	return &m, err
+}
+
+func (s *Service) ListMilestones(ctx context.Context, repoID uuid.UUID) ([]Milestone, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, repo_id, title, COALESCE(description,''), state, due_on, created_at
+		FROM milestones WHERE repo_id=$1 ORDER BY created_at DESC`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Milestone
+	for rows.Next() {
+		var m Milestone
+		if err := rows.Scan(&m.ID, &m.RepoID, &m.Title, &m.Description, &m.State, &m.DueOn, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) GetMilestone(ctx context.Context, repoID, id uuid.UUID) (*Milestone, error) {
+	var m Milestone
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, repo_id, title, COALESCE(description,''), state, due_on, created_at
+		FROM milestones WHERE repo_id=$1 AND id=$2`, repoID, id,
+	).Scan(&m.ID, &m.RepoID, &m.Title, &m.Description, &m.State, &m.DueOn, &m.CreatedAt)
+	return &m, err
+}
+
+func (s *Service) CloseMilestone(ctx context.Context, id uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `UPDATE milestones SET state='closed' WHERE id=$1`, id)
+	return err
+}
+
+func (s *Service) ListRepoUsers(ctx context.Context, repoID uuid.UUID) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT u.username FROM users u
+		JOIN repo_collaborators c ON c.user_id = u.id AND c.repo_id=$1
+		UNION
+		SELECT u.username FROM users u
+		JOIN repos r ON r.id=$1 AND r.owner_type='user' AND r.owner_id=u.id
+		ORDER BY 1`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
 }

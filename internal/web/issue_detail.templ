@@ -1,0 +1,94 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/rusik69/govnohub/internal/issue"
+)
+
+templ IssueDetailPage(layout LayoutData, nav RepoNavData, iss *issue.Issue, comments []issue.Comment, labels []issue.Label, milestones []issue.Milestone, users []string, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: IssueDetailContent(nav, iss, comments, labels, milestones, users, csrf),
+	})
+}
+
+templ IssueDetailContent(nav RepoNavData, iss *issue.Issue, comments []issue.Comment, labels []issue.Label, milestones []issue.Milestone, users []string, csrf string) {
+	@RepoNav(nav)
+	<div class="flex gap-4 max-md-flex-col">
+		<div class="flex-1">
+			<div class="flex items-center gap-2 mb-2">
+				@StateBadge(iss.State)
+				<h1 class="text-xl font-bold m-0">{ iss.Title } <span class="text-muted font-normal">#{ iss.Number }</span></h1>
+			</div>
+			<div class="card p-4 mb-4 markdown">
+				@templ.Raw(issueBodyHTML(iss.Body))
+			</div>
+			for _, c := range comments {
+				<div class="card p-4 mb-3">
+					<p class="text-sm text-muted m-0 mb-2"><strong>{ c.Author }</strong> commented</p>
+					<div class="markdown">@templ.Raw(issueBodyHTML(c.Body))</div>
+				</div>
+			}
+			<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/comment") } class="card p-4">
+				@CSRFInput(csrf)
+				<textarea name="body" class="input mb-3" rows="4" placeholder="Leave a comment"></textarea>
+				<button type="submit" class="btn">Comment</button>
+			</form>
+		</div>
+		<aside class="sidebar">
+			<div class="card p-4 mb-4">
+				<h3 class="text-sm font-semibold mb-2">Assignee</h3>
+				<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/assignee" } hx-swap="none">
+					@CSRFInput(csrf)
+					<select name="assignee" class="input" onchange="this.form.requestSubmit()">
+						<option value="">Unassigned</option>
+						for _, u := range users {
+							<option value={ u } selected?={ iss.Assignee == u }>{ u }</option>
+						}
+					</select>
+				</form>
+			</div>
+			<div class="card p-4 mb-4">
+				<h3 class="text-sm font-semibold mb-2">Milestone</h3>
+				<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/milestone" } hx-swap="none">
+					@CSRFInput(csrf)
+					<select name="milestone_id" class="input" onchange="this.form.requestSubmit()">
+						<option value="">No milestone</option>
+						for _, m := range milestones {
+							<option value={ m.ID.String() } selected?={ iss.MilestoneID != nil && iss.MilestoneID.String() == m.ID.String() }>{ m.Title }</option>
+						}
+					</select>
+				</form>
+			</div>
+			<div class="card p-4 mb-4">
+				<h3 class="text-sm font-semibold mb-2">Labels</h3>
+				<div class="flex flex-wrap gap-2 mb-3">
+					for _, l := range iss.Labels {
+						@LabelBadge(l.Name, l.Color)
+					}
+				</div>
+				for _, l := range labels {
+					<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/labels/" + l.ID.String()) } class="inline mr-2">
+						@CSRFInput(csrf)
+						<button type="submit" class="btn-secondary text-xs">+ { l.Name }</button>
+					</form>
+				}
+			</div>
+			if iss.State == "open" {
+				<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/close") }>
+					@CSRFInput(csrf)
+					<button type="submit" class="btn-secondary w-full">Close issue</button>
+				</form>
+			}
+		</aside>
+	</div>
+}
+
+func issueBodyHTML(body string) string {
+	html, err := RenderMarkdown(body)
+	if err != nil {
+		return body
+	}
+	return html
+}

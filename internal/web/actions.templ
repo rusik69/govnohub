@@ -1,0 +1,63 @@
+package web
+
+import "time"
+
+type WorkflowRun struct {
+	ID         string
+	RunNumber  int
+	Event      string
+	HeadBranch string
+	Status     string
+	Conclusion string
+	CreatedAt  time.Time
+}
+
+templ ActionsPage(layout LayoutData, nav RepoNavData, runs []WorkflowRun) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: ActionsContent(nav, runs),
+	})
+}
+
+templ ActionsContent(nav RepoNavData, runs []WorkflowRun) {
+	@RepoNav(nav)
+	<h1 class="text-xl font-bold mb-4">Actions</h1>
+	if len(runs) == 0 {
+		@EmptyState("No workflow runs")
+	} else {
+		<table class="card">
+			<thead><tr><th>Run</th><th>Event</th><th>Branch</th><th>Status</th><th>Logs</th></tr></thead>
+			<tbody>
+				for _, run := range runs {
+					<tr>
+						<td>#{ run.RunNumber }</td>
+						<td>{ run.Event }</td>
+						<td>{ run.HeadBranch }</td>
+						<td>{ runStatusLabel(run) }</td>
+						<td>
+							<div
+								hx-get={ "/" + nav.Owner + "/" + nav.Repo + "/actions/runs/" + run.ID + "/logs" }
+								hx-trigger="every 2s"
+								hx-swap="innerHTML"
+								class="font-mono text-xs"
+							>
+								Loading logs...
+							</div>
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}
+
+templ ActionLogsPartial(logs string) {
+	<pre class="m-0 p-3 bg-hover rounded text-xs overflow-auto max-h-64">{ logs }</pre>
+}
+
+func runStatusLabel(run WorkflowRun) string {
+	if run.Conclusion != "" {
+		return run.Status + " (" + run.Conclusion + ")"
+	}
+	return run.Status
+}

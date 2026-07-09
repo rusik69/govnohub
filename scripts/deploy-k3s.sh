@@ -54,7 +54,6 @@ import_images() {
     govnohub/actions-controller:latest
     govnohub/webhook-service:latest
     govnohub/search-indexer:latest
-    govnohub/frontend:latest
   )
   for img in "${images[@]}"; do
     log "importing $img into $runtime"

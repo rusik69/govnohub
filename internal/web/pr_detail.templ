@@ -1,0 +1,157 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/rusik69/govnohub/internal/pull"
+)
+
+type PRDetailData struct {
+	Nav      RepoNavData
+	PR       *pull.PullRequest
+	Reviews  []pull.Review
+	Comments []pull.LineComment
+	Files    []DiffFile
+	CSRF     string
+}
+
+templ PRDetailPage(layout LayoutData, data PRDetailData) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		Content: PRDetailContent(data),
+	})
+}
+
+templ PRDetailContent(data PRDetailData) {
+	<div class="max-w-7xl mx-auto">
+		@RepoNav(data.Nav)
+		<div class="flex gap-4 max-md-flex-col">
+			<div class="flex-1">
+				<h1 class="text-xl font-bold mb-2">{ data.PR.Title } <span class="text-muted">#{ data.PR.Number }</span></h1>
+				<p class="text-sm text-muted mb-4">{ data.PR.HeadBranch } → { data.PR.BaseBranch }</p>
+				if data.PR.Body != "" {
+					<div class="card p-4 mb-4 markdown">@templ.Raw(issueBodyHTML(data.PR.Body))</div>
+				}
+				for _, f := range data.Files {
+					<div class="diff-file">
+						<div class="diff-header">{ diffFilePath(f) }</div>
+						for _, line := range f.Lines {
+							@diffLineRow(data, f, line)
+						}
+					</div>
+				}
+			</div>
+			<aside class="sidebar">
+				if data.PR.State == "open" {
+					<form method="post" action={ templ.SafeURL("/" + data.Nav.Owner + "/" + data.Nav.Repo + "/pulls/" + strconv.Itoa(data.PR.Number) + "/merge") } class="card p-4 mb-4">
+						@CSRFInput(data.CSRF)
+						<button type="submit" class="btn w-full">Merge pull request</button>
+					</form>
+					<form method="post" action={ templ.SafeURL("/" + data.Nav.Owner + "/" + data.Nav.Repo + "/pulls/" + strconv.Itoa(data.PR.Number) + "/review") } class="card p-4 mb-4">
+						@CSRFInput(data.CSRF)
+						<select name="state" class="input mb-2"><option value="approved">Approve</option><option value="changes_requested">Request changes</option><option value="commented">Comment</option></select>
+						<textarea name="body" class="input mb-2" rows="2"></textarea>
+						<button type="submit" class="btn-secondary w-full">Submit review</button>
+					</form>
+				}
+				<div class="card p-4 mb-4">
+					<h3 class="text-sm font-semibold mb-2">Reviews</h3>
+					for _, r := range data.Reviews {
+						<div class="text-sm mb-2"><strong>{ r.Reviewer }</strong>: { r.State }</div>
+					}
+				</div>
+				<div class="card p-4" id="inline-comments">
+					<h3 class="text-sm font-semibold mb-2">Inline comments</h3>
+					for _, c := range data.Comments {
+						if c.Path != "" {
+							<div class="text-sm mb-2 border-b pb-2">
+								<strong>{ c.Author }</strong> on { c.Path }:{ strconv.Itoa(c.Line) }
+								<p class="m-0 mt-1">{ c.Body }</p>
+							</div>
+						}
+					}
+					<form method="post" action={ templ.SafeURL("/" + data.Nav.Owner + "/" + data.Nav.Repo + "/pulls/" + strconv.Itoa(data.PR.Number) + "/comment") } class="mt-3">
+						@CSRFInput(data.CSRF)
+						<input type="hidden" name="path" id="comment-path"/>
+						<input type="hidden" name="line" id="comment-line"/>
+						<textarea name="body" class="input mb-2" rows="3" placeholder="Add inline comment (click a line)"></textarea>
+						<button type="submit" class="btn-secondary w-full">Add comment</button>
+					</form>
+				</div>
+			</aside>
+		</div>
+	</div>
+	<script>
+		document.querySelectorAll('.diff-line.clickable').forEach(el => {
+			el.addEventListener('click', () => {
+				document.getElementById('comment-path').value = el.dataset.path;
+				document.getElementById('comment-line').value = el.dataset.line;
+			});
+		});
+	</script>
+}
+
+templ diffLineRow(data PRDetailData, f DiffFile, line DiffLine) {
+	if line.Type == "hunk" {
+		<div class="diff-line diff-hunk"><span class="code">{ line.Content }</span></div>
+	} else if line.Type == "add" || line.Type == "del" {
+		<div
+			class={ "diff-line clickable " + diffLineClass(line.Type) }
+			data-path={ diffFilePath(f) }
+			data-line={ strconv.Itoa(lineNum(line)) }
+		>
+			<span class="num">{ lineNumStr(line.OldLine) }</span>
+			<span class="num">{ lineNumStr(line.NewLine) }</span>
+			<span class="code">{ diffPrefix(line.Type) }{ line.Content }</span>
+		</div>
+	} else {
+		<div class={ "diff-line " + diffLineClass(line.Type) }>
+			<span class="num">{ lineNumStr(line.OldLine) }</span>
+			<span class="num">{ lineNumStr(line.NewLine) }</span>
+			<span class="code"> { line.Content }</span>
+		</div>
+	}
+}
+
+func diffFilePath(f DiffFile) string {
+	if f.NewPath != "" {
+		return f.NewPath
+	}
+	return f.OldPath
+}
+
+func diffLineClass(t string) string {
+	switch t {
+	case "add":
+		return "diff-add"
+	case "del":
+		return "diff-del"
+	default:
+		return ""
+	}
+}
+
+func diffPrefix(t string) string {
+	if t == "add" {
+		return "+"
+	}
+	if t == "del" {
+		return "-"
+	}
+	return ""
+}
+
+func lineNum(line DiffLine) int {
+	if line.NewLine > 0 {
+		return line.NewLine
+	}
+	return line.OldLine
+}
+
+func lineNumStr(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strconv.Itoa(n)
+}

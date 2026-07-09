@@ -1,0 +1,36 @@
+package web
+
+import "github.com/rusik69/govnohub/internal/notification"
+
+templ NotificationsPartial(notifs []notification.Notification, csrf string) {
+	<div class="card p-2 notif-dropdown" style="display:block">
+		if len(notifs) == 0 {
+			<p class="text-sm text-muted p-3 m-0">No notifications</p>
+		} else {
+			for _, n := range notifs {
+				<div class={ "p-3 border-b " + notifClass(n.Read) }>
+					<p class="text-sm font-medium m-0">{ n.Title }</p>
+					if n.Body != "" {
+						<p class="text-xs text-muted m-0 mt-1">{ n.Body }</p>
+					}
+					if n.Link != "" {
+						<a href={ templ.SafeURL(n.Link) } class="text-xs">View</a>
+					}
+					if !n.Read {
+						<form method="post" action={ templ.SafeURL("/notifications/" + n.ID.String() + "/read") } class="mt-1">
+							<input type="hidden" name="csrf_token" value={ csrf }/>
+							<button type="submit" class="text-xs btn-secondary" style="padding:2px 6px">Mark read</button>
+						</form>
+					}
+				</div>
+			}
+		}
+	</div>
+}
+
+func notifClass(read bool) string {
+	if read {
+		return ""
+	}
+	return "bg-hover"
+}

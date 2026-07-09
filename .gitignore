@@ -23,12 +23,6 @@ coverage.out
 /webhook-service
 /search-indexer
 
-# Frontend
-node_modules/
-dist/
-frontend/dist/
-frontend/node_modules/
-
 # Runtime data
 backend/volumes/
 data/

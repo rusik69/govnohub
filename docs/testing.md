@@ -8,7 +8,6 @@
 | Integration | `make test-integration` | API handlers via httptest (`-tags=integration`) |
 | E2E | `make test-e2e` | Full user journey (`-tags=e2e`) |
 | K8s smoke | `make test-k8s` | Helm template + optional cluster check (`-tags=k8s`) |
-| Frontend | `make test-frontend` | Vitest unit tests |
 | All | `make test-all` | Runs all of the above |
 
 ## Requirements
@@ -29,7 +28,7 @@ make test-all
 
 Located alongside packages in `internal/*/`:
 
-- `auth` — register, login, JWT, PAT
+- `auth` — register, login, JWT, PAT, SSH keys
 - `repo` — create, access, star, fork
 - `git` — init repo, commits
 - `issue`, `pull`, `release`, `package`, `org`
@@ -58,14 +57,6 @@ Full journey: register → create repo → issue → PR → workflow → release
 - Validates `helm template` renders
 - Optional deployed pod check with `GOVNOHUB_K8S_E2E=1`
 
-## Frontend Tests
-
-```bash
-cd frontend && npm run test
-```
-
-Tests auth store and API client helpers.
-
 ## CI
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
@@ -73,9 +64,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 1. `make test-unit`
 2. `make test-integration`
 3. `make test-e2e`
-4. `make test-frontend`
-5. `go build ./...`
-6. `cd frontend && npm run build`
+4. `make generate && go build ./...`
 
 ## Writing New Tests
 

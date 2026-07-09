@@ -1,0 +1,36 @@
+package web
+
+import "github.com/rusik69/govnohub/internal/release"
+
+templ ReleasesPage(layout LayoutData, nav RepoNavData, releases []release.Release, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: ReleasesContent(nav, releases, csrf),
+	})
+}
+
+templ ReleasesContent(nav RepoNavData, releases []release.Release, csrf string) {
+	@RepoNav(nav)
+	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/releases") } class="card p-4 mb-4 grid grid-cols-2 gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="tag" placeholder="Tag" required class="input"/>
+		<input type="text" name="name" placeholder="Release name" class="input"/>
+		<textarea name="body" placeholder="Release notes" class="input col-span-2" rows="3"></textarea>
+		<button type="submit" class="btn col-span-2">Create release</button>
+	</form>
+	if len(releases) == 0 {
+		@EmptyState("No releases")
+	} else {
+		<ul class="card">
+			for _, rel := range releases {
+				<li class="border-b px-4 py-3">
+					<strong>{ rel.TagName }</strong>
+					if rel.Name != "" {
+						<span class="ml-2">{ rel.Name }</span>
+					}
+					<p class="text-sm text-muted m-0 mt-1">{ rel.CreatedAt.Format("2006-01-02") }</p>
+				</li>
+			}
+		</ul>
+	}
+}

@@ -1,0 +1,52 @@
+package web
+
+templ RepoSettingsPage(layout LayoutData, nav RepoNavData, webhooks []WebhookRow, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: RepoSettingsContent(nav, webhooks, csrf),
+	})
+}
+
+type WebhookRow struct {
+	ID     string
+	URL    string
+	Events string
+	Active bool
+}
+
+templ RepoSettingsContent(nav RepoNavData, webhooks []WebhookRow, csrf string) {
+	@RepoNav(nav)
+	<h1 class="text-xl font-bold mb-4">Settings</h1>
+	<section class="mb-6">
+		<h2 class="text-lg font-semibold mb-3">Webhooks</h2>
+		<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/settings/webhook") } class="card p-4 mb-4 flex flex-col gap-3">
+			@CSRFInput(csrf)
+			<input type="url" name="url" placeholder="Payload URL" required class="input"/>
+			<input type="text" name="events" placeholder="Events (comma-separated)" class="input"/>
+			<button type="submit" class="btn self-start">Add webhook</button>
+		</form>
+		if len(webhooks) == 0 {
+			@EmptyState("No webhooks")
+		} else {
+			<table class="card">
+				<thead><tr><th>URL</th><th>Events</th><th>Active</th></tr></thead>
+				<tbody>
+					for _, w := range webhooks {
+						<tr>
+							<td class="text-sm">{ w.URL }</td>
+							<td class="text-sm">{ w.Events }</td>
+							<td>{ webhookActive(w.Active) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</section>
+}
+
+func webhookActive(active bool) string {
+	if active {
+		return "yes"
+	}
+	return "no"
+}

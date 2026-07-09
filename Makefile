@@ -5,27 +5,29 @@ RELEASE ?= govnohub
 K3D_CLUSTER ?= govnohub
 HELM_CHART := ./deploy/helm/govnohub
 VALUES_K3S := $(HELM_CHART)/values-k3s.yaml
-IMAGES := api-server git-server actions-controller webhook-service search-indexer frontend
+IMAGES := api-server git-server actions-controller webhook-service search-indexer
 
 INSTALL_HOST ?=
 INSTALL_USER ?= root
 INSTALL_SSH_KEY ?=
 
-.PHONY: build build-cli test test-unit test-integration test-e2e test-deploy-e2e test-k8s test-all test-frontend \
+.PHONY: build build-cli generate test test-unit test-integration test-e2e test-deploy-e2e test-k8s test-all \
         run-api run-git docker-build helm-install install \
         k3s-install k3s-uninstall k3s-status k3s-wait k3d-create k3d-delete \
         podman-k8s-create podman-k8s-delete deploy-k3s deploy-podman-k8s undeploy-k3s redeploy-k3s docs
 
 CONTAINER_RUNTIME ?= $(shell if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then echo docker; elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then echo podman; else echo docker; fi)
 
-build:
+build: generate
 	go build -o bin/api-server ./cmd/api-server
 	go build -o bin/git-server ./cmd/git-server
 	go build -o bin/govnohub ./cmd/govnohub
 	go build -o bin/actions-controller ./cmd/actions-controller
 	go build -o bin/webhook-service ./cmd/webhook-service
 	go build -o bin/search-indexer ./cmd/search-indexer
-	cd frontend && npm run build
+
+generate:
+	@go run github.com/a-h/templ/cmd/templ@latest generate ./internal/web/...
 
 build-cli:
 	go build -o bin/govnohub ./cmd/govnohub
@@ -48,10 +50,7 @@ test-deploy-e2e:
 test-k8s:
 	go test -count=1 -timeout=15m ./tests/e2e/... -tags=k8s
 
-test-all: test-unit test-integration test-e2e test-deploy-e2e test-frontend
-
-test-frontend:
-	cd frontend && npm run test
+test-all: test-unit test-integration test-e2e test-deploy-e2e
 
 run-api:
 	go run ./cmd/api-server
@@ -76,10 +75,6 @@ docker-build:
 			$(CONTAINER_RUNTIME) tag "localhost/govnohub/$${svc}:latest" "govnohub/$${svc}:latest" 2>/dev/null || true; \
 		fi; \
 	done
-	$(CONTAINER_RUNTIME) build -f deploy/docker/Dockerfile.frontend -t govnohub/frontend:latest .
-	@if [ "$(CONTAINER_RUNTIME)" = podman ]; then \
-		podman tag "localhost/govnohub/frontend:latest" "govnohub/frontend:latest" 2>/dev/null || true; \
-	fi
 
 k3s-install:
 	@if command -v k3s >/dev/null 2>&1; then \

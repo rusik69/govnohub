@@ -13,6 +13,7 @@ import (
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
 	pkg "github.com/rusik69/govnohub/internal/package"
+	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
 	"github.com/rusik69/govnohub/internal/pull"
 	"github.com/rusik69/govnohub/internal/release"
@@ -20,6 +21,7 @@ import (
 	"github.com/rusik69/govnohub/internal/search"
 	"github.com/rusik69/govnohub/internal/testutil"
 	"github.com/rusik69/govnohub/internal/webhook"
+	"github.com/rusik69/govnohub/internal/wiki"
 )
 
 type Env struct {
@@ -59,6 +61,8 @@ func New(t *testing.T) *Env {
 		pg.Pool,
 		org.NewService(pg.Pool),
 		aireview.NewService(pg.Pool, aireview.NewClient(aireview.Config{Enabled: false})),
+		notification.NewService(pg.Pool),
+		wiki.NewService(pg.Pool),
 	)
 
 	ts := httptest.NewServer(srv.Router())

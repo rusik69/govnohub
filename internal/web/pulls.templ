@@ -1,0 +1,42 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/rusik69/govnohub/internal/pull"
+)
+
+templ PullsPage(layout LayoutData, nav RepoNavData, prs []pull.PullRequest, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: PullsContent(nav, prs, csrf),
+	})
+}
+
+templ PullsContent(nav RepoNavData, prs []pull.PullRequest, csrf string) {
+	@RepoNav(nav)
+	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls") } class="card p-4 mb-4 grid grid-cols-2 gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="title" placeholder="PR title" required class="input col-span-2"/>
+		<input type="text" name="head" placeholder="Head branch" required class="input"/>
+		<input type="text" name="base" placeholder="Base branch" value="main" class="input"/>
+		<textarea name="body" placeholder="Description" class="input col-span-2" rows="3"></textarea>
+		<button type="submit" class="btn col-span-2">Open pull request</button>
+	</form>
+	if len(prs) == 0 {
+		@EmptyState("No pull requests")
+	} else {
+		<ul class="card">
+			for _, pr := range prs {
+				<li class="border-b px-4 py-3">
+					<div class="flex items-center gap-2">
+						@StateBadge(pr.State)
+						<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls/" + strconv.Itoa(pr.Number)) } class="font-medium">{ pr.Title }</a>
+						<span class="text-sm text-muted">#{ pr.Number }</span>
+					</div>
+					<p class="text-sm text-muted m-0 mt-1">{ pr.HeadBranch } → { pr.BaseBranch }</p>
+				</li>
+			}
+		</ul>
+	}
+}

@@ -1,0 +1,32 @@
+package web
+
+import pkg "github.com/rusik69/govnohub/internal/package"
+
+templ PackagesPage(layout LayoutData, nav RepoNavData, packages []pkg.Package) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: PackagesContent(nav, packages),
+	})
+}
+
+templ PackagesContent(nav RepoNavData, packages []pkg.Package) {
+	@RepoNav(nav)
+	<h1 class="text-xl font-bold mb-4">Packages</h1>
+	if len(packages) == 0 {
+		@EmptyState("No packages published")
+	} else {
+		<table class="card">
+			<thead><tr><th>Name</th><th>Type</th><th>Version</th><th>Published</th></tr></thead>
+			<tbody>
+				for _, p := range packages {
+					<tr>
+						<td>{ p.Name }</td>
+						<td>{ p.PackageType }</td>
+						<td>{ p.Version }</td>
+						<td class="text-sm text-muted">{ p.CreatedAt.Format("2006-01-02") }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}

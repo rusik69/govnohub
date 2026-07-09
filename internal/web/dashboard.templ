@@ -1,0 +1,54 @@
+package web
+
+import (
+	"github.com/rusik69/govnohub/internal/org"
+	"github.com/rusik69/govnohub/internal/repo"
+)
+
+templ DashboardPage(layout LayoutData, repos []repo.Repository, orgs []org.Org) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: DashboardContent(repos, orgs),
+	})
+}
+
+templ DashboardContent(repos []repo.Repository, orgs []org.Org) {
+	<h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+	<div class="grid grid-cols-2 gap-6 max-md-flex-col">
+		<section>
+			<h2 class="text-lg font-semibold mb-3">Your repositories</h2>
+			if len(repos) == 0 {
+				@EmptyState("No repositories yet")
+			} else {
+				<ul class="card">
+					for _, r := range repos {
+						<li class="border-b px-4 py-3">
+							<a href={ templ.SafeURL("/" + r.FullName) } class="font-medium">{ r.FullName }</a>
+							if r.Description != "" {
+								<p class="text-sm text-muted m-0 mt-1">{ r.Description }</p>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</section>
+		<section>
+			<h2 class="text-lg font-semibold mb-3">Organizations</h2>
+			if len(orgs) == 0 {
+				@EmptyState("No organizations")
+			} else {
+				<ul class="card">
+					for _, o := range orgs {
+						<li class="border-b px-4 py-3">
+							<a href={ templ.SafeURL("/orgs/" + o.Name) } class="font-medium">{ o.Name }</a>
+							if o.Description != "" {
+								<p class="text-sm text-muted m-0 mt-1">{ o.Description }</p>
+							}
+						</li>
+					}
+				</ul>
+			}
+			<a href="/orgs" class="btn-secondary mt-4 inline-flex">View all orgs</a>
+		</section>
+	</div>
+}

@@ -12,7 +12,6 @@ IMAGES=(
   govnohub/actions-controller:latest
   govnohub/webhook-service:latest
   govnohub/search-indexer:latest
-  govnohub/frontend:latest
 )
 
 log() { echo "==> $*"; }

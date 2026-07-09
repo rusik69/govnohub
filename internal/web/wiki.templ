@@ -1,0 +1,61 @@
+package web
+
+import "github.com/rusik69/govnohub/internal/wiki"
+
+templ WikiPage(layout LayoutData, nav RepoNavData, pages []wiki.Page) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: WikiListContent(nav, pages),
+	})
+}
+
+templ WikiListContent(nav RepoNavData, pages []wiki.Page) {
+	@RepoNav(nav)
+	<h1 class="text-xl font-bold mb-4">Wiki</h1>
+	<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/home/edit") } class="btn mb-4">New page</a>
+	if len(pages) == 0 {
+		@EmptyState("No wiki pages")
+	} else {
+		<ul class="card">
+			for _, p := range pages {
+				<li class="border-b px-4 py-3">
+					<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/" + p.Slug) } class="font-medium">{ p.Title }</a>
+				</li>
+			}
+		</ul>
+	}
+}
+
+templ WikiViewPage(layout LayoutData, nav RepoNavData, page *wiki.Page, html string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: WikiViewContent(nav, page, html),
+	})
+}
+
+templ WikiViewContent(nav RepoNavData, page *wiki.Page, html string) {
+	@RepoNav(nav)
+	<div class="flex justify-between items-center mb-4">
+		<h1 class="text-xl font-bold m-0">{ page.Title }</h1>
+		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/" + page.Slug + "/edit") } class="btn-secondary">Edit</a>
+	</div>
+	<div class="card p-6 markdown">@templ.Raw(html)</div>
+}
+
+templ WikiEditPage(layout LayoutData, nav RepoNavData, slug, title, content, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: WikiEditContent(nav, slug, title, content, csrf),
+	})
+}
+
+templ WikiEditContent(nav RepoNavData, slug, title, content, csrf string) {
+	@RepoNav(nav)
+	<h1 class="text-xl font-bold mb-4">Edit wiki page</h1>
+	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/" + slug) } class="card p-4 flex flex-col gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="title" value={ title } placeholder="Title" required class="input"/>
+		<textarea name="content" class="input font-mono" rows="20">{ content }</textarea>
+		<button type="submit" class="btn self-start">Save</button>
+	</form>
+}

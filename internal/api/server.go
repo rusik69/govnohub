@@ -19,12 +19,15 @@ import (
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
 	pkg "github.com/rusik69/govnohub/internal/package"
+	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
 	"github.com/rusik69/govnohub/internal/pull"
 	"github.com/rusik69/govnohub/internal/release"
 	"github.com/rusik69/govnohub/internal/repo"
 	"github.com/rusik69/govnohub/internal/search"
+	"github.com/rusik69/govnohub/internal/web"
 	"github.com/rusik69/govnohub/internal/webhook"
+	"github.com/rusik69/govnohub/internal/wiki"
 )
 
 type Server struct {
@@ -40,6 +43,9 @@ type Server struct {
 	pool     *pgxpool.Pool
 	org      *org.Service
 	aiReview *aireview.Service
+	notify   *notification.Service
+	wiki     *wiki.Service
+	web      *web.Handler
 }
 
 func NewServer(
@@ -55,13 +61,23 @@ func NewServer(
 	pool *pgxpool.Pool,
 	orgSvc *org.Service,
 	aiReviewSvc *aireview.Service,
+	notifySvc *notification.Service,
+	wikiSvc *wiki.Service,
 ) *Server {
-	return &Server{
+	s := &Server{
 		auth: authSvc, repos: repoSvc, git: gitStore,
 		issues: issueSvc, pulls: pullSvc, releases: releaseSvc,
 		packages: pkgSvc, webhooks: webhookSvc, search: searchSvc,
 		pool: pool, org: orgSvc, aiReview: aiReviewSvc,
+		notify: notifySvc, wiki: wikiSvc,
 	}
+	s.web = web.NewHandler(web.Deps{
+		Auth: authSvc, Repos: repoSvc, Git: gitStore, Issues: issueSvc,
+		Pulls: pullSvc, Releases: releaseSvc, Packages: pkgSvc,
+		Webhooks: webhookSvc, Search: searchSvc, Pool: pool,
+		Org: orgSvc, AIReview: aiReviewSvc, Notify: notifySvc, Wiki: wikiSvc,
+	})
+	return s
 }
 
 func (s *Server) Router() http.Handler {
@@ -92,6 +108,8 @@ func (s *Server) Router() http.Handler {
 		r.Delete("/user/ssh-keys/{keyID}", s.handleDeleteSSHKey)
 		r.Get("/user/repos", s.handleListUserRepos)
 		r.Get("/search", s.handleSearch)
+		r.Get("/notifications", s.handleListNotifications)
+		r.Post("/notifications/{id}/read", s.handleMarkNotificationRead)
 		s.registerOrgRoutes(r)
 		s.registerAdminRoutes(r)
 
@@ -112,8 +130,14 @@ func (s *Server) Router() http.Handler {
 			r.Get("/issues/{number}/comments", s.handleListIssueComments)
 			r.Post("/issues/{number}/comments", s.handleAddIssueComment)
 			r.Post("/issues/{number}/close", s.handleCloseIssue)
+			r.Patch("/issues/{number}", s.handlePatchIssue)
+			r.Post("/issues/{number}/labels/{labelID}", s.handleAddIssueLabel)
+			r.Delete("/issues/{number}/labels/{labelID}", s.handleRemoveIssueLabel)
 			r.Get("/labels", s.handleListLabels)
 			r.Post("/labels", s.handleCreateLabel)
+			r.Get("/milestones", s.handleListMilestones)
+			r.Post("/milestones", s.handleCreateMilestone)
+			r.Post("/milestones/{milestoneID}/close", s.handleCloseMilestone)
 
 			r.Get("/pulls", s.handleListPRs)
 			r.Post("/pulls", s.handleCreatePR)
@@ -122,6 +146,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/pulls/{number}/reviews", s.handleAddReview)
 			r.Post("/pulls/{number}/merge", s.handleMergePR)
 			r.Get("/pulls/{number}/diff", s.handlePRDiff)
+			r.Get("/pulls/{number}/comments", s.handleListPRComments)
+			r.Post("/pulls/{number}/comments", s.handleAddPRComment)
 			r.Get("/pulls/{number}/ai-reviews", s.handleListAIReviews)
 			r.Post("/pulls/{number}/ai-reviews", s.handleCreateAIReview)
 			r.Get("/ai-review/config", s.handleAIReviewConfig)
@@ -150,8 +176,14 @@ func (s *Server) Router() http.Handler {
 			r.Get("/collaborators", s.handleListCollaborators)
 			r.Put("/collaborators/{username}", s.handleAddCollaborator)
 			r.Delete("/collaborators/{username}", s.handleRemoveCollaborator)
+
+			r.Get("/wiki", s.handleListWikiPages)
+			r.Get("/wiki/{slug}", s.handleGetWikiPage)
+			r.Put("/wiki/{slug}", s.handleUpsertWikiPage)
+			r.Delete("/wiki/{slug}", s.handleDeleteWikiPage)
 		})
 	})
+	r.Mount("/", s.web.Routes())
 	return r
 }
 
@@ -592,6 +624,11 @@ func (s *Server) handleAddIssueComment(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if i.AuthorID != userIDFrom(r.Context()) {
+		s.notify.NotifyAsync(i.AuthorID, "Issue comment",
+			"New comment on #"+strconv.Itoa(num)+" in "+repository.FullName,
+			"/"+repository.OwnerName+"/"+repository.Name+"/issues/"+strconv.Itoa(num))
+	}
 	jsonOK(w, c)
 }
 
@@ -745,6 +782,11 @@ func (s *Server) handleAddReview(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if pr.AuthorID != userIDFrom(r.Context()) {
+		s.notify.NotifyAsync(pr.AuthorID, "PR review",
+			"New review on PR #"+strconv.Itoa(num)+" in "+repository.FullName,
+			"/"+repository.OwnerName+"/"+repository.Name+"/pulls/"+strconv.Itoa(num))
 	}
 	jsonOK(w, review)
 }

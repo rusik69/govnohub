@@ -80,9 +80,9 @@ check "create PAT" "$(api POST /api/v1/user/tokens "$DEV_TOKEN" '{"name":"cli","
 check "list PATs" "$(api GET /api/v1/user/tokens "$DEV_TOKEN")" 200
 
 echo "==> UI"
-check "frontend /" "$(curl -s -o /dev/null -w "%{http_code}" "$BASE/")" 200
-check "frontend /login" "$(curl -s -o /dev/null -w "%{http_code}" "$BASE/login")" 200
-check "frontend /search" "$(curl -s -o /dev/null -w "%{http_code}" -H "Host: govnohub.local" "$BASE/search")" 200
+check "web /" "$(curl -s -o /dev/null -w "%{http_code}" "$BASE/")" 200
+check "web /login" "$(curl -s -o /dev/null -w "%{http_code}" "$BASE/login")" 200
+check "web /search" "$(curl -s -o /dev/null -w "%{http_code}" -H "Host: govnohub.local" "$BASE/search")" 200
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

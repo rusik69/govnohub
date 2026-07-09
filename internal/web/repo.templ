@@ -1,0 +1,91 @@
+package web
+
+import (
+	gitstore "github.com/rusik69/govnohub/internal/git"
+	"github.com/rusik69/govnohub/internal/repo"
+)
+
+type RepoPageData struct {
+	Layout   LayoutData
+	Nav      RepoNavData
+	Repo     *repo.Repository
+	Path     string
+	Ref      string
+	Entries  []gitstore.TreeEntry
+	Content  string
+	IsBinary bool
+}
+
+templ RepoPage(data RepoPageData) {
+	@Layout(LayoutData{
+		Title: data.Layout.Title, User: data.Layout.User, CSRF: data.Layout.CSRF,
+		UnreadNotifs: data.Layout.UnreadNotifs, FullWidth: true,
+		Content: RepoContent(data),
+	})
+}
+
+templ RepoContent(data RepoPageData) {
+	<div class="max-w-7xl mx-auto">
+		<h1 class="text-xl font-bold mb-2">
+			<a href={ templ.SafeURL("/" + data.Repo.FullName) }>{ data.Repo.FullName }</a>
+		</h1>
+		if data.Repo.Description != "" {
+			<p class="text-muted mb-4">{ data.Repo.Description }</p>
+		}
+		@RepoNav(data.Nav)
+		<div class="flex gap-4 max-md-flex-col">
+			<aside class="sidebar file-tree card p-3">
+				@fileTree(data.Repo.FullName, data.Ref, data.Path, data.Entries)
+			</aside>
+			<div class="flex-1">
+				if data.Content != "" {
+					<div class="card p-4">
+						<pre class="m-0 font-mono text-sm whitespace-pre-wrap overflow-auto">{ data.Content }</pre>
+					</div>
+				} else if len(data.Entries) > 0 {
+					<table class="card">
+						<tbody>
+							for _, e := range data.Entries {
+								<tr>
+									<td>
+										<a href={ templ.SafeURL(repoEntryURL(data.Repo.FullName, data.Ref, data.Path, e)) }>
+											{ entryIcon(e.Type) } { e.Path }
+										</a>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				} else {
+					@EmptyState("Empty repository")
+				}
+			</div>
+		</div>
+	</div>
+}
+
+templ fileTree(fullName, ref, path string, entries []gitstore.TreeEntry) {
+	for _, e := range entries {
+		<a href={ templ.SafeURL(repoEntryURL(fullName, ref, path, e)) }>
+			{ entryIcon(e.Type) } { e.Path }
+		</a>
+	}
+}
+
+func repoEntryURL(fullName, ref, basePath string, e gitstore.TreeEntry) string {
+	p := e.Path
+	if basePath != "" {
+		p = basePath + "/" + e.Path
+	}
+	if e.Type == "dir" {
+		return "/" + fullName + "/tree/" + p + "?ref=" + ref
+	}
+	return "/" + fullName + "/blob/" + p + "?ref=" + ref
+}
+
+func entryIcon(t string) string {
+	if t == "dir" {
+		return "📁"
+	}
+	return "📄"
+}

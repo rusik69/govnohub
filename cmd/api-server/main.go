@@ -17,12 +17,14 @@ import (
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
 	pkg "github.com/rusik69/govnohub/internal/package"
+	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
 	"github.com/rusik69/govnohub/internal/pull"
 	"github.com/rusik69/govnohub/internal/release"
 	"github.com/rusik69/govnohub/internal/repo"
 	"github.com/rusik69/govnohub/internal/search"
 	"github.com/rusik69/govnohub/internal/webhook"
+	"github.com/rusik69/govnohub/internal/wiki"
 )
 
 func main() {
@@ -73,6 +75,8 @@ func main() {
 			Model:   cfg.AIReview.Model,
 			Auto:    cfg.AIReview.Auto,
 		})),
+		notification.NewService(pool),
+		wiki.NewService(pool),
 	)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: srv.Router()}

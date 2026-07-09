@@ -1,0 +1,49 @@
+package web
+
+import "github.com/rusik69/govnohub/internal/search"
+
+templ SearchPage(layout LayoutData, query string, hits []search.Hit) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: SearchContent(query, hits),
+	})
+}
+
+templ SearchContent(query string, hits []search.Hit) {
+	<h1 class="text-2xl font-bold mb-4">Search</h1>
+	<form method="get" action="/search" class="mb-6">
+		<input type="search" name="q" value={ query } placeholder="Search repos, issues..." class="input max-w-3xl"/>
+	</form>
+	if query == "" {
+		@EmptyState("Enter a search query")
+	} else if len(hits) == 0 {
+		@EmptyState("No results found")
+	} else {
+		<ul class="card">
+			for _, h := range hits {
+				<li class="border-b px-4 py-3">
+					<div class="flex items-center gap-2">
+						<span class="badge">{ h.Type }</span>
+						<a href={ templ.SafeURL(searchHitURL(h)) } class="font-medium">{ h.Title }</a>
+					</div>
+					if h.Repo != "" {
+						<p class="text-sm text-muted m-0 mt-1">{ h.Repo }</p>
+					}
+					if h.Snippet != "" {
+						<p class="text-sm m-0 mt-1">{ h.Snippet }</p>
+					}
+				</li>
+			}
+		</ul>
+	}
+}
+
+func searchHitURL(h search.Hit) string {
+	if h.Type == "repo" && h.Repo != "" {
+		return "/" + h.Repo
+	}
+	if h.Type == "issue" && h.Repo != "" && h.Ref != "" {
+		return "/" + h.Repo + "/issues/" + h.Ref
+	}
+	return "/search?q=" + h.Title
+}

@@ -96,27 +96,6 @@ spec:
             claimName: {{ include "govnohub.fullname" $root }}-artifacts
 {{- end }}
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: {{ include "govnohub.fullname" . }}-frontend
-spec:
-  replicas: {{ .Values.services.frontend.replicas }}
-  selector:
-    matchLabels:
-      app: {{ include "govnohub.fullname" . }}-frontend
-  template:
-    metadata:
-      labels:
-        app: {{ include "govnohub.fullname" . }}-frontend
-    spec:
-      containers:
-        - name: frontend
-          image: "{{ .Values.image.repository }}/frontend:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports:
-            - containerPort: 80
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -149,13 +128,3 @@ spec:
     app: {{ include "govnohub.fullname" . }}-webhook-service
   ports:
     - port: 8082
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: frontend
-spec:
-  selector:
-    app: {{ include "govnohub.fullname" . }}-frontend
-  ports:
-    - port: 80

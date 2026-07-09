@@ -1,0 +1,104 @@
+package web
+
+import "github.com/rusik69/govnohub/internal/auth"
+
+templ SettingsPage(layout LayoutData, pats []auth.PATInfo, keys []auth.SSHKeyInfo, newPAT, errMsg string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: SettingsContent(layout.CSRF, pats, keys, newPAT, errMsg),
+	})
+}
+
+templ SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, newPAT, errMsg string) {
+	<h1 class="text-2xl font-bold mb-6">Settings</h1>
+	@ErrorAlert(errMsg)
+	if newPAT != "" {
+		<div class="alert card p-4 mb-4">
+			<strong>New token (copy now):</strong>
+			<code class="block mt-2 font-mono text-sm">{ newPAT }</code>
+		</div>
+	}
+	<section class="mb-6">
+		<h2 class="text-lg font-semibold mb-3">Personal access tokens</h2>
+		<form method="post" action="/settings/pat" class="card p-4 mb-4 flex gap-3 items-end">
+			@CSRFInput(csrf)
+			<div class="flex-1">
+				<label class="text-sm">Name</label>
+				<input type="text" name="name" required class="input mt-2"/>
+			</div>
+			<button type="submit" class="btn">Create token</button>
+		</form>
+		if len(pats) == 0 {
+			@EmptyState("No tokens")
+		} else {
+			<table class="card">
+				<thead><tr><th>Name</th><th>Scopes</th><th>Created</th><th></th></tr></thead>
+				<tbody>
+					for _, p := range pats {
+						<tr>
+							<td>{ p.Name }</td>
+							<td class="text-sm">{ joinScopes(p.Scopes) }</td>
+							<td class="text-sm text-muted">{ p.CreatedAt.Format("2006-01-02") }</td>
+							<td>
+								<form method="post" action={ templ.SafeURL("/settings/pat/" + p.ID.String() + "/revoke") }>
+									@CSRFInput(csrf)
+									<button type="submit" class="btn-secondary text-sm">Revoke</button>
+								</form>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</section>
+	<section>
+		<h2 class="text-lg font-semibold mb-3">SSH keys</h2>
+		<form method="post" action="/settings/ssh-key" class="card p-4 mb-4 flex flex-col gap-3">
+			@CSRFInput(csrf)
+			<div>
+				<label class="text-sm">Title</label>
+				<input type="text" name="title" required class="input mt-2"/>
+			</div>
+			<div>
+				<label class="text-sm">Public key</label>
+				<textarea name="key" required class="input mt-2 font-mono" rows="4"></textarea>
+			</div>
+			<button type="submit" class="btn self-start">Add SSH key</button>
+		</form>
+		if len(keys) == 0 {
+			@EmptyState("No SSH keys")
+		} else {
+			<table class="card">
+				<thead><tr><th>Title</th><th>Fingerprint</th><th></th></tr></thead>
+				<tbody>
+					for _, k := range keys {
+						<tr>
+							<td>{ k.Title }</td>
+							<td class="text-sm font-mono">{ k.Fingerprint }</td>
+							<td>
+								<form method="post" action={ templ.SafeURL("/settings/ssh-key/" + k.ID.String() + "/delete") }>
+									@CSRFInput(csrf)
+									<button type="submit" class="btn-secondary text-sm">Delete</button>
+								</form>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</section>
+}
+
+func joinScopes(scopes []string) string {
+	if len(scopes) == 0 {
+		return "all"
+	}
+	out := ""
+	for i, s := range scopes {
+		if i > 0 {
+			out += ", "
+		}
+		out += s
+	}
+	return out
+}

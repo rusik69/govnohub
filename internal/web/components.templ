@@ -1,0 +1,93 @@
+package web
+
+type RepoNavData struct {
+	Owner    string
+	Repo     string
+	Tab      string
+	FullName string
+}
+
+templ RepoNav(data RepoNavData) {
+	<nav class="tab-nav">
+		@repoTab(data, "code", "/")
+		@repoTab(data, "issues", "/issues")
+		@repoTab(data, "pulls", "/pulls")
+		@repoTab(data, "actions", "/actions")
+		@repoTab(data, "releases", "/releases")
+		@repoTab(data, "packages", "/packages")
+		@repoTab(data, "wiki", "/wiki")
+		@repoTab(data, "settings", "/settings")
+	</nav>
+}
+
+templ repoTab(data RepoNavData, tab, suffix string) {
+	<a href={ templ.SafeURL("/" + data.Owner + "/" + data.Repo + suffix) } class={ tabClass(data.Tab, tab) }>
+		{ tabTitle(tab) }
+	</a>
+}
+
+func tabClass(active, tab string) string {
+	if active == tab {
+		return "active"
+	}
+	return ""
+}
+
+func tabTitle(tab string) string {
+	switch tab {
+	case "code":
+		return "Code"
+	case "issues":
+		return "Issues"
+	case "pulls":
+		return "Pulls"
+	case "actions":
+		return "Actions"
+	case "releases":
+		return "Releases"
+	case "packages":
+		return "Packages"
+	case "wiki":
+		return "Wiki"
+	case "settings":
+		return "Settings"
+	default:
+		return tab
+	}
+}
+
+templ StateBadge(state string) {
+	if state == "open" {
+		<span class="badge badge-open">Open</span>
+	} else {
+		<span class="badge badge-closed">Closed</span>
+	}
+}
+
+templ LabelBadge(name, color string) {
+	<span class="label-chip" style={ "background:" + labelColor(color) }>{ name }</span>
+}
+
+func labelColor(color string) string {
+	if color == "" {
+		return "#656d76"
+	}
+	if color[0] != '#' {
+		return "#" + color
+	}
+	return color
+}
+
+templ CSRFInput(token string) {
+	<input type="hidden" name="csrf_token" value={ token }/>
+}
+
+templ ErrorAlert(msg string) {
+	if msg != "" {
+		<div class="alert alert-error">{ msg }</div>
+	}
+}
+
+templ EmptyState(msg string) {
+	<p class="text-muted text-center py-4">{ msg }</p>
+}

@@ -1,0 +1,39 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/rusik69/govnohub/internal/issue"
+)
+
+templ IssuesPage(layout LayoutData, nav RepoNavData, issues []issue.Issue, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: IssuesContent(nav, issues, csrf),
+	})
+}
+
+templ IssuesContent(nav RepoNavData, issues []issue.Issue, csrf string) {
+	<div class="flex justify-between items-center mb-4">
+		<h1 class="text-xl font-bold">Issues</h1>
+	</div>
+	@RepoNav(nav)
+	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class="card p-4 mb-4 flex gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="title" placeholder="Issue title" required class="input flex-1"/>
+		<button type="submit" class="btn">New issue</button>
+	</form>
+	if len(issues) == 0 {
+		@EmptyState("No issues yet")
+	} else {
+		<ul class="card">
+			for _, i := range issues {
+				<li class="border-b px-4 py-3 flex items-center gap-3">
+					@StateBadge(i.State)
+					<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(i.Number)) } class="font-medium">{ i.Title }</a>
+					<span class="text-sm text-muted ml-auto">#{ i.Number }</span>
+				</li>
+			}
+		</ul>
+	}
+}

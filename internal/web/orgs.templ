@@ -1,0 +1,114 @@
+package web
+
+import "github.com/rusik69/govnohub/internal/org"
+
+templ OrgsPage(layout LayoutData, orgs []org.Org, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: OrgsContent(orgs, csrf),
+	})
+}
+
+templ OrgsContent(orgs []org.Org, csrf string) {
+	<h1 class="text-2xl font-bold mb-6">Organizations</h1>
+	<form method="post" action="/orgs" class="card p-4 mb-6 grid grid-cols-2 gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="name" placeholder="org-name" required class="input"/>
+		<input type="text" name="display_name" placeholder="Display name" class="input"/>
+		<textarea name="description" placeholder="Description" class="input col-span-2" rows="2"></textarea>
+		<button type="submit" class="btn col-span-2">Create organization</button>
+	</form>
+	if len(orgs) == 0 {
+		@EmptyState("No organizations")
+	} else {
+		<ul class="card">
+			for _, o := range orgs {
+				<li class="border-b px-4 py-3">
+					<a href={ templ.SafeURL("/orgs/" + o.Name) } class="font-medium">{ o.Name }</a>
+					if o.DisplayName != "" {
+						<span class="text-muted ml-2">{ o.DisplayName }</span>
+					}
+				</li>
+			}
+		</ul>
+	}
+}
+
+templ OrgDetailPage(layout LayoutData, o *org.Org, members []org.Member, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: OrgDetailContent(o, members, csrf),
+	})
+}
+
+templ OrgDetailContent(o *org.Org, members []org.Member, csrf string) {
+	<h1 class="text-2xl font-bold mb-2">{ o.Name }</h1>
+	if o.Description != "" {
+		<p class="text-muted mb-4">{ o.Description }</p>
+	}
+	<div class="flex gap-3 mb-6">
+		<a href={ templ.SafeURL("/orgs/" + o.Name + "/teams") } class="btn-secondary">Teams</a>
+	</div>
+	<form method="post" action={ templ.SafeURL("/orgs/" + o.Name + "/members") } class="card p-4 mb-4 flex gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="username" placeholder="Username" required class="input flex-1"/>
+		<select name="role" class="input"><option value="member">member</option><option value="admin">admin</option></select>
+		<button type="submit" class="btn">Add member</button>
+	</form>
+	<table class="card">
+		<thead><tr><th>User</th><th>Role</th></tr></thead>
+		<tbody>
+			for _, m := range members {
+				<tr><td>{ m.Username }</td><td>{ m.Role }</td></tr>
+			}
+		</tbody>
+	</table>
+}
+
+templ OrgTeamsPage(layout LayoutData, orgName string, teams []org.Team, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: OrgTeamsContent(orgName, teams, csrf),
+	})
+}
+
+templ OrgTeamsContent(orgName string, teams []org.Team, csrf string) {
+	<h1 class="text-2xl font-bold mb-4"><a href={ templ.SafeURL("/orgs/" + orgName) }>{ orgName }</a> / Teams</h1>
+	<form method="post" action={ templ.SafeURL("/orgs/" + orgName + "/teams") } class="card p-4 mb-4 flex gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="name" placeholder="Team name" required class="input flex-1"/>
+		<input type="text" name="description" placeholder="Description" class="input flex-1"/>
+		<button type="submit" class="btn">Create team</button>
+	</form>
+	<ul class="card">
+		for _, t := range teams {
+			<li class="border-b px-4 py-3">
+				<a href={ templ.SafeURL("/orgs/" + orgName + "/teams/" + t.Name) } class="font-medium">{ t.Name }</a>
+				if t.Description != "" {
+					<p class="text-sm text-muted m-0">{ t.Description }</p>
+				}
+			</li>
+		}
+	</ul>
+}
+
+templ TeamDetailPage(layout LayoutData, orgName string, team *org.Team, members []org.Member, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: TeamDetailContent(orgName, team, members, csrf),
+	})
+}
+
+templ TeamDetailContent(orgName string, team *org.Team, members []org.Member, csrf string) {
+	<h1 class="text-2xl font-bold mb-4">{ orgName } / { team.Name }</h1>
+	<form method="post" action={ templ.SafeURL("/orgs/" + orgName + "/teams/" + team.Name + "/members") } class="card p-4 mb-4 flex gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="username" placeholder="Username" required class="input flex-1"/>
+		<button type="submit" class="btn">Add to team</button>
+	</form>
+	<ul class="card">
+		for _, m := range members {
+			<li class="border-b px-4 py-3">{ m.Username }</li>
+		}
+	</ul>
+}

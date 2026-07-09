@@ -5,11 +5,11 @@ Kubernetes-native GitHub + GitHub Actions clone.
 ## Quick Commands
 
 ```bash
-make build              # build all binaries + frontend
+make build              # build all binaries + generate templ
 make test-unit          # unit tests (testcontainers)
 make test-integration   # API integration tests
 make test-e2e           # full user journey e2e
-make test-all           # everything including frontend
+make test-all           # everything
 make k3d-create         # create local k3d cluster (macOS/Linux)
 make deploy-k3s         # build, import images, helm deploy
 make install INSTALL_HOST=192.168.1.10  # remote Linux VM over SSH
@@ -25,7 +25,7 @@ make install INSTALL_HOST=192.168.1.10  # remote Linux VM over SSH
 ## Stack
 
 - **Backend:** Go services (api-server, git-server, actions-controller, webhook-service, search-indexer)
-- **Frontend:** Vue 3 + TypeScript + Tailwind
+- **Web UI:** templ + HTMX + Tailwind (embedded in api-server)
 - **Data:** PostgreSQL, OpenSearch, PVC storage
 - **CI Runtime:** GitHub Actions YAML parser + Kubernetes Jobs
 
@@ -36,7 +36,7 @@ cp .env.example .env
 docker run -d --name govnohub-pg -e POSTGRES_USER=govnohub -e POSTGRES_PASSWORD=govnohub \
   -e POSTGRES_DB=govnohub -p 5432:5432 postgres:16-alpine
 make run-api
-cd frontend && npm run dev
+open http://localhost:8080
 ```
 
 Default admin (created on first startup when no users exist): `admin` / `admin`. Public self-registration is disabled; admins manage users at `/admin/users`.
@@ -63,7 +63,7 @@ open http://govnohub.local
 
 | Service | Port | Description |
 |---------|------|-------------|
-| api-server | 8080 | REST API |
+| api-server | 8080 | REST API + web UI |
 | git-server | 8081 | Smart HTTP git |
+| git-server (SSH) | 2222 | Git over SSH |
 | webhook-service | 8082 | Event dispatcher |
-| frontend | 80 | Vue SPA |

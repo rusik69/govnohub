@@ -1,0 +1,108 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/rusik69/govnohub/internal/auth"
+)
+
+type LayoutData struct {
+	Title            string
+	User             *SessionUser
+	CSRF             string
+	UnreadNotifs     int
+	Content          templ.Component
+	FullWidth        bool
+	HideNav          bool
+}
+
+templ Layout(data LayoutData) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<meta name="csrf-token" content={ data.CSRF }/>
+			<title>{ data.Title } · Govnohub</title>
+			<link rel="stylesheet" href="/static/app.css"/>
+			<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JBL2yH9sZz4MhyRgGO3rdv6j9sZ9rN8jdtJ0ZvW+hi87" crossorigin="anonymous"></script>
+			<script>
+				document.documentElement.classList.toggle('dark', localStorage.getItem('theme') === 'dark');
+				function toggleTheme() {
+					const dark = !document.documentElement.classList.contains('dark');
+					document.documentElement.classList.toggle('dark', dark);
+					localStorage.setItem('theme', dark ? 'dark' : 'light');
+				}
+				document.addEventListener('htmx:configRequest', function(evt) {
+					const token = document.querySelector('meta[name="csrf-token"]');
+					if (token) evt.detail.headers['X-CSRF-Token'] = token.content;
+				});
+			</script>
+		</head>
+		<body class="min-h-screen">
+			if !data.HideNav {
+				<header class="site-header">
+					<div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+						<div class="flex items-center gap-4">
+							<a href="/" class="text-lg font-bold">Govnohub</a>
+							if data.User != nil {
+								<form action="/search" method="get" class="hidden md:block">
+									<input type="search" name="q" placeholder="Search..." class="input" style="width:16rem"/>
+								</form>
+							}
+						</div>
+						<div class="flex items-center gap-3">
+							<button type="button" class="theme-btn" onclick="toggleTheme()">Theme</button>
+							if data.User != nil {
+								<div class="notif-bell">
+									<button
+										class="btn-secondary"
+										style="background:transparent;border-color:rgba(255,255,255,.3);color:#fff"
+										hx-get="/notifications"
+										hx-target="#notif-panel"
+										hx-swap="innerHTML"
+									>
+										🔔
+									</button>
+									if data.UnreadNotifs > 0 {
+										<span class="notif-count">{ unreadLabel(data.UnreadNotifs) }</span>
+									}
+									<div id="notif-panel" class="notif-dropdown card hidden"></div>
+								</div>
+								<div class="flex items-center gap-2">
+									<a href={ templ.SafeURL("/settings") }>{ data.User.Username }</a>
+									if data.User.User != nil && data.User.User.Role == auth.RoleAdmin {
+										<a href="/admin/users" class="text-sm">Admin</a>
+									}
+									<form action="/logout" method="post" class="inline">
+										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+										<button type="submit" class="btn-secondary" style="background:transparent;border-color:rgba(255,255,255,.3);color:#fff">Logout</button>
+									</form>
+								</div>
+							} else {
+								<a href="/login">Sign in</a>
+							}
+						</div>
+					</div>
+				</header>
+			}
+			<main class={ layoutMainClass(data) }>
+				@data.Content
+			</main>
+		</body>
+	</html>
+}
+
+func layoutMainClass(data LayoutData) string {
+	if data.FullWidth {
+		return "p-4"
+	}
+	return "max-w-7xl mx-auto p-4"
+}
+
+func unreadLabel(n int) string {
+	if n > 99 {
+		return "99+"
+	}
+	return strconv.Itoa(n)
+}

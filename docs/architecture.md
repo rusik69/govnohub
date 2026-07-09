@@ -1,18 +1,17 @@
 # Architecture
 
-Govnohub is a modular monorepo with separate deployable Go services, a Vue SPA, and Kubernetes-native workflow execution.
+Govnohub is a modular monorepo with separate deployable Go services, a server-rendered web UI, and Kubernetes-native workflow execution.
 
 ## Components
 
 ```mermaid
 flowchart TB
   subgraph clients [Clients]
-    Browser[Vue SPA]
+    Browser[Browser]
     GitCLI[git CLI]
   end
 
   subgraph ingress [Ingress]
-    Web[frontend]
     API[api-server]
     GitHTTP[git-server]
   end
@@ -51,16 +50,24 @@ flowchart TB
 
 | Service | Role |
 |---------|------|
-| `api-server` | REST API for users, repos, issues, PRs, actions, releases |
-| `git-server` | Smart HTTP git protocol (clone/push) |
+| `api-server` | REST API + templ/HTMX web UI for users, repos, issues, PRs, actions, releases |
+| `git-server` | Smart HTTP + SSH git protocol (clone/push) |
 | `webhook-service` | Receives push/PR events, enqueues workflow runs |
 | `actions-controller` | Polls queued runs, creates K8s Jobs per workflow job |
 | `search-indexer` | Indexes repos, issues, PRs into OpenSearch |
-| `frontend` | Vue 3 SPA served via nginx |
+
+## Web UI
+
+The browser UI is served directly from `api-server` via the `internal/web` package:
+
+- **templ** for type-safe HTML components
+- **HTMX** for partial page updates (comments, notifications, action logs)
+- **Session cookies** for browser auth (JWT/PAT unchanged for API/CLI)
+- Static CSS/JS embedded with `go:embed`
 
 ## Data Model
 
-PostgreSQL stores all metadata: users, orgs, teams, repos, issues, pull requests, workflows, workflow runs, releases, packages, webhooks.
+PostgreSQL stores all metadata: users, orgs, teams, repos, issues, pull requests, workflows, workflow runs, releases, packages, webhooks, wiki pages, notifications.
 
 Git bare repositories live on PVC at `/data/git`. Workflow logs and release assets use `/data/artifacts`.
 
