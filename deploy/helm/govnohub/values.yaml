@@ -5,7 +5,7 @@ image:
 
 postgresql:
   enabled: true
-  image: postgres:16-alpine
+  image: postgres:17-alpine
   database: govnohub
   username: govnohub
   password: govnohub
@@ -30,7 +30,7 @@ artifacts:
 
 runner:
   namespace: govnohub-runners
-  image: alpine:3.20
+  image: alpine:3.24
 
 jwtSecret: change-me-in-production
 

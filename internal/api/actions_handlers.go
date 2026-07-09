@@ -29,14 +29,17 @@ func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 		var id uuid.UUID
 		var name, path string
 		var active bool
-		rows.Scan(&id, &name, &path, &active)
+		if err := rows.Scan(&id, &name, &path, &active); err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		wfs = append(wfs, map[string]interface{}{"id": id, "name": name, "path": path, "active": active})
 	}
 	jsonOK(w, wfs)
 }
 
 func (s *Server) handleUpsertWorkflow(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
@@ -83,7 +86,10 @@ func (s *Server) handleListRuns(w http.ResponseWriter, r *http.Request) {
 		var event, sha, branch, status string
 		var conclusion *string
 		var createdAt interface{}
-		rows.Scan(&id, &runNumber, &event, &sha, &branch, &status, &conclusion, &createdAt)
+		if err := rows.Scan(&id, &runNumber, &event, &sha, &branch, &status, &conclusion, &createdAt); err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		runs = append(runs, map[string]interface{}{
 			"id": id, "run_number": runNumber, "event": event, "head_sha": sha,
 			"head_branch": branch, "status": status, "conclusion": conclusion, "created_at": createdAt,
@@ -93,7 +99,7 @@ func (s *Server) handleListRuns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTriggerRun(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
@@ -108,10 +114,18 @@ func (s *Server) handleTriggerRun(w http.ResponseWriter, r *http.Request) {
 		req.Branch = repository.DefaultBranch
 	}
 	if req.SHA == "" {
-		req.SHA, _ = s.git.UpdateHead(repository.OwnerName, repository.Name, req.Branch)
+		var err error
+		req.SHA, err = s.git.UpdateHead(repository.OwnerName, repository.Name, req.Branch)
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, "invalid branch")
+			return
+		}
 	}
 	var runNumber int
-	s.pool.QueryRow(r.Context(), `SELECT COALESCE(MAX(run_number),0)+1 FROM workflow_runs WHERE repo_id=$1`, repository.ID).Scan(&runNumber)
+	if err := s.pool.QueryRow(r.Context(), `SELECT COALESCE(MAX(run_number),0)+1 FROM workflow_runs WHERE repo_id=$1`, repository.ID).Scan(&runNumber); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	var runID uuid.UUID
 	err := s.pool.QueryRow(r.Context(), `
 		INSERT INTO workflow_runs (repo_id, workflow_id, run_number, event, head_sha, head_branch, status)
@@ -125,9 +139,22 @@ func (s *Server) handleTriggerRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRunLogs(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
 	runID, err := uuid.Parse(chi.URLParam(r, "runID"))
 	if err != nil {
 		jsonError(w, http.StatusBadRequest, "invalid run id")
+		return
+	}
+	var runRepoID uuid.UUID
+	if err := s.pool.QueryRow(r.Context(), `SELECT repo_id FROM workflow_runs WHERE id=$1`, runID).Scan(&runRepoID); err != nil {
+		jsonError(w, http.StatusNotFound, "run not found")
+		return
+	}
+	if runRepoID != repository.ID {
+		jsonError(w, http.StatusNotFound, "run not found")
 		return
 	}
 	rows, err := s.pool.Query(r.Context(), `
@@ -147,7 +174,10 @@ func (s *Server) handleRunLogs(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var jl jobLog
 		var logPath *string
-		rows.Scan(&jl.JobID, &jl.Name, &jl.Status, new(*string), &logPath)
+		if err := rows.Scan(&jl.JobID, &jl.Name, &jl.Status, new(*string), &logPath); err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		if logPath != nil {
 			b, _ := os.ReadFile(*logPath)
 			jl.Log = string(b)
@@ -171,7 +201,7 @@ func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateRelease(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
@@ -189,18 +219,26 @@ func (s *Server) handleCreateRelease(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUploadAsset(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
 	tag := chi.URLParam(r, "tag")
-	releases, _ := s.releases.List(r.Context(), repository.ID)
+	releases, err := s.releases.List(r.Context(), repository.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	var releaseID uuid.UUID
 	for _, rel := range releases {
 		if rel.TagName == tag {
 			releaseID = rel.ID
 			break
 		}
+	}
+	if releaseID == uuid.Nil {
+		jsonError(w, http.StatusNotFound, "release not found")
+		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -230,7 +268,7 @@ func (s *Server) handleListPackages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePublishPackage(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
@@ -281,14 +319,17 @@ func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 		var url string
 		var events []string
 		var active bool
-		rows.Scan(&id, &url, &events, &active)
+		if err := rows.Scan(&id, &url, &events, &active); err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		hooks = append(hooks, map[string]interface{}{"id": id, "url": url, "events": events, "active": active})
 	}
 	jsonOK(w, hooks)
 }
 
 func (s *Server) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
@@ -307,7 +348,7 @@ func (s *Server) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateBranch(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
@@ -320,13 +361,20 @@ func (s *Server) handleCreateBranch(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	sha, _ := s.git.UpdateHead(repository.OwnerName, repository.Name, req.Name)
-	s.repos.UpdateBranchHead(r.Context(), repository.ID, req.Name, sha)
+	sha, err := s.git.UpdateHead(repository.OwnerName, repository.Name, req.Name)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := s.repos.UpdateBranchHead(r.Context(), repository.ID, req.Name, sha); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	jsonOK(w, map[string]string{"branch": req.Name, "sha": sha})
 }
 
 func (s *Server) handleProtectBranch(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}

@@ -91,7 +91,6 @@ func (s *Service) ListForUser(ctx context.Context, userID uuid.UUID) ([]Reposito
 		LEFT JOIN orgs o ON r.owner_type='org' AND r.owner_id=o.id
 		WHERE (r.owner_type='user' AND r.owner_id=$1)
 		   OR r.id IN (SELECT repo_id FROM repo_collaborators WHERE user_id=$1)
-		   OR (r.is_private=false)
 		ORDER BY r.updated_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -111,6 +110,19 @@ func (s *Service) CanAccess(ctx context.Context, repoID, userID uuid.UUID, minPe
 	}
 	if ownerType == "user" && ownerID == userID {
 		return true, nil
+	}
+	if ownerType == "org" {
+		var role string
+		err = s.pool.QueryRow(ctx, `SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2`, ownerID, userID).Scan(&role)
+		if err == nil {
+			orgPerm := "read"
+			if role == "admin" {
+				orgPerm = "admin"
+			}
+			if permRank(orgPerm) >= permRank(minPerm) {
+				return true, nil
+			}
+		}
 	}
 	var perm string
 	err = s.pool.QueryRow(ctx, `SELECT permission FROM repo_collaborators WHERE repo_id=$1 AND user_id=$2`, repoID, userID).Scan(&perm)
@@ -138,7 +150,14 @@ func (s *Service) Star(ctx context.Context, repoID, userID uuid.UUID) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, `INSERT INTO repo_stars (repo_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, repoID, userID); err != nil {
+	var inserted uuid.UUID
+	err = tx.QueryRow(ctx, `
+		INSERT INTO repo_stars (repo_id, user_id) VALUES ($1,$2)
+		ON CONFLICT DO NOTHING RETURNING user_id`, repoID, userID).Scan(&inserted)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return tx.Commit(ctx)
+		}
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE repos SET star_count = star_count + 1 WHERE id=$1`, repoID); err != nil {

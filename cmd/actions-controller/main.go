@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -57,79 +59,95 @@ func main() {
 }
 
 func processQueuedRuns(ctx context.Context, pool *pgxpool.Pool, k8s *kubernetes.Clientset, cfg config.Config) error {
-	rs, err := pool.Query(ctx, `
-		SELECT wr.id, wr.head_sha, wr.head_branch, wr.event,
-		       w.content, COALESCE(u.username, o.name) AS owner, r.name AS repo_name
-		FROM workflow_runs wr
-		JOIN workflows w ON w.id = wr.workflow_id
-		JOIN repos r ON r.id = wr.repo_id
+	for {
+		runID, sha, branch, event, content, owner, repoName, err := claimQueuedRun(ctx, pool)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := processRun(ctx, pool, k8s, cfg, runID, sha, branch, event, content, owner, repoName); err != nil {
+			log.Printf("process run %s: %v", runID, err)
+		}
+	}
+}
+
+func claimQueuedRun(ctx context.Context, pool *pgxpool.Pool) (uuid.UUID, string, string, string, string, string, string, error) {
+	var runID uuid.UUID
+	var sha, branch, event, content, owner, repoName string
+	err := pool.QueryRow(ctx, `
+		UPDATE workflow_runs wr SET status='in_progress', started_at=NOW()
+		FROM workflows w, repos r
 		LEFT JOIN users u ON r.owner_type='user' AND r.owner_id=u.id
 		LEFT JOIN orgs o ON r.owner_type='org' AND r.owner_id=o.id
-		WHERE wr.status = 'queued'
-		ORDER BY wr.created_at LIMIT 5`)
+		WHERE wr.workflow_id = w.id AND wr.repo_id = r.id
+		  AND wr.id = (
+		    SELECT id FROM workflow_runs WHERE status='queued' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
+		  )
+		  AND wr.status = 'queued'
+		RETURNING wr.id, wr.head_sha, wr.head_branch, wr.event, w.content, COALESCE(u.username, o.name), r.name`,
+	).Scan(&runID, &sha, &branch, &event, &content, &owner, &repoName)
+	return runID, sha, branch, event, content, owner, repoName, err
+}
+
+func processRun(ctx context.Context, pool *pgxpool.Pool, k8s *kubernetes.Clientset, cfg config.Config, runID uuid.UUID, sha, branch, event, content, owner, repoName string) error {
+	wf, err := actions.ParseWorkflow(content)
 	if err != nil {
+		_, err := pool.Exec(ctx, `UPDATE workflow_runs SET status='completed', conclusion='failure', completed_at=NOW() WHERE id=$1`, runID)
 		return err
 	}
-	defer rs.Close()
 
-	for rs.Next() {
-		var runID uuid.UUID
-		var sha, branch, event, content, owner, repoName string
-		if err := rs.Scan(&runID, &sha, &branch, &event, &content, &owner, &repoName); err != nil {
-			continue
-		}
-		wf, err := actions.ParseWorkflow(content)
-		if err != nil {
-			pool.Exec(ctx, `UPDATE workflow_runs SET status='completed', conclusion='failure', completed_at=NOW() WHERE id=$1`, runID)
-			continue
-		}
-		pool.Exec(ctx, `UPDATE workflow_runs SET status='in_progress', started_at=NOW() WHERE id=$1`, runID)
-
-		jobOrder, err := wf.JobOrder()
-		if err != nil {
-			pool.Exec(ctx, `UPDATE workflow_runs SET status='completed', conclusion='failure', completed_at=NOW() WHERE id=$1`, runID)
-			continue
-		}
-
-		allSuccess := true
-		for _, jobID := range jobOrder {
-			job := wf.Jobs[jobID]
-			ctxMap := actions.GitHubContext(owner, repoName, sha, branch, event)
-			script := actions.WriteJobScript(job.Steps, ctxMap)
-			logDir := filepath.Join(cfg.ArtifactRoot, "logs", runID.String())
-			os.MkdirAll(logDir, 0o755)
-			logPath := filepath.Join(logDir, jobID+".log")
-
-			jobName := fmt.Sprintf("run-%s-%s", runID.String()[:8], sanitize(jobID))
-			_, err := k8s.BatchV1().Jobs(cfg.RunnerNS).Create(ctx, buildJob(cfg, jobName, script, logPath), metav1.CreateOptions{})
-			if err != nil {
-				log.Printf("create job %s: %v", jobName, err)
-				allSuccess = false
-				pool.Exec(ctx, `
-					INSERT INTO workflow_jobs (run_id, job_id, name, status, conclusion, log_path)
-					VALUES ($1,$2,$3,'completed','failure',$4)`, runID, jobID, jobID, logPath)
-				continue
-			}
-
-			pool.Exec(ctx, `
-				INSERT INTO workflow_jobs (run_id, job_id, name, status, log_path)
-				VALUES ($1,$2,$3,'in_progress',$4)`, runID, jobID, jobID, logPath)
-
-			conclusion := waitForJob(ctx, k8s, cfg.RunnerNS, jobName)
-			if conclusion != "success" {
-				allSuccess = false
-			}
-			pool.Exec(ctx, `UPDATE workflow_jobs SET status='completed', conclusion=$3, completed_at=NOW() WHERE run_id=$1 AND job_id=$2`,
-				runID, jobID, conclusion)
-		}
-
-		conclusion := "success"
-		if !allSuccess {
-			conclusion = "failure"
-		}
-		pool.Exec(ctx, `UPDATE workflow_runs SET status='completed', conclusion=$2, completed_at=NOW() WHERE id=$1`, runID, conclusion)
+	jobOrder, err := wf.JobOrder()
+	if err != nil {
+		_, err := pool.Exec(ctx, `UPDATE workflow_runs SET status='completed', conclusion='failure', completed_at=NOW() WHERE id=$1`, runID)
+		return err
 	}
-	return rs.Err()
+
+	allSuccess := true
+	for _, jobID := range jobOrder {
+		job := wf.Jobs[jobID]
+		ctxMap := actions.GitHubContext(owner, repoName, sha, branch, event)
+		script := actions.WriteJobScript(job.Steps, ctxMap)
+		logDir := filepath.Join(cfg.ArtifactRoot, "logs", runID.String())
+		os.MkdirAll(logDir, 0o755)
+		logPath := filepath.Join(logDir, jobID+".log")
+
+		jobName := fmt.Sprintf("run-%s-%s", runID.String()[:8], sanitize(jobID))
+		_, err := k8s.BatchV1().Jobs(cfg.RunnerNS).Create(ctx, buildJob(cfg, jobName, script, logPath), metav1.CreateOptions{})
+		if err != nil {
+			log.Printf("create job %s: %v", jobName, err)
+			allSuccess = false
+			if _, execErr := pool.Exec(ctx, `
+				INSERT INTO workflow_jobs (run_id, job_id, name, status, conclusion, log_path)
+				VALUES ($1,$2,$3,'completed','failure',$4)`, runID, jobID, jobID, logPath); execErr != nil {
+				log.Printf("record failed job %s: %v", jobID, execErr)
+			}
+			continue
+		}
+
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO workflow_jobs (run_id, job_id, name, status, log_path)
+			VALUES ($1,$2,$3,'in_progress',$4)`, runID, jobID, jobID, logPath); err != nil {
+			log.Printf("record job %s: %v", jobID, err)
+		}
+
+		conclusion := waitForJob(ctx, k8s, cfg.RunnerNS, jobName)
+		if conclusion != "success" {
+			allSuccess = false
+		}
+		if _, err := pool.Exec(ctx, `UPDATE workflow_jobs SET status='completed', conclusion=$3, completed_at=NOW() WHERE run_id=$1 AND job_id=$2`,
+			runID, jobID, conclusion); err != nil {
+			log.Printf("update job %s: %v", jobID, err)
+		}
+	}
+
+	conclusion := "success"
+	if !allSuccess {
+		conclusion = "failure"
+	}
+	_, err = pool.Exec(ctx, `UPDATE workflow_runs SET status='completed', conclusion=$2, completed_at=NOW() WHERE id=$1`, runID, conclusion)
+	return err
 }
 
 func buildJob(cfg config.Config, name, script, logPath string) *batchv1.Job {

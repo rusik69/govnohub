@@ -2,9 +2,11 @@ package org
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -61,6 +63,15 @@ func (s *Service) CreateTeam(ctx context.Context, orgID uuid.UUID, name, descrip
 func (s *Service) AddTeamMember(ctx context.Context, teamID, userID uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `INSERT INTO team_members (team_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, teamID, userID)
 	return err
+}
+
+func (s *Service) IsMember(ctx context.Context, orgID, userID uuid.UUID) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx, `SELECT true FROM org_members WHERE org_id=$1 AND user_id=$2`, orgID, userID).Scan(&ok)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return ok, err
 }
 
 func (s *Service) List(ctx context.Context) ([]Org, error) {

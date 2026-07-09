@@ -79,6 +79,7 @@ spec:
       containers:
         - name: frontend
           image: "{{ .Values.image.repository }}/frontend:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 80
 ---

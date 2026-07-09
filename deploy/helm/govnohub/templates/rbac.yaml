@@ -1,7 +1,13 @@
+{{- $services := list "api-server" "git-server" "webhook-service" "actions-controller" "search-indexer" -}}
+{{- range $services }}
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "govnohub.fullname" . }}-actions-controller
+  name: {{ include "govnohub.fullname" $ }}-{{ . }}
+  labels:
+    {{- include "govnohub.labels" $ | nindent 4 }}
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

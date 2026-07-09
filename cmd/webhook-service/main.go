@@ -91,12 +91,17 @@ func triggerWorkflows(ctx context.Context, pool *pgxpool.Pool, repoID uuid.UUID,
 			continue
 		}
 		var runNumber int
-		pool.QueryRow(ctx, `SELECT COALESCE(MAX(run_number),0)+1 FROM workflow_runs WHERE repo_id=$1`, repoID).Scan(&runNumber)
+		if err := pool.QueryRow(ctx, `SELECT COALESCE(MAX(run_number),0)+1 FROM workflow_runs WHERE repo_id=$1`, repoID).Scan(&runNumber); err != nil {
+			log.Printf("workflow run number: %v", err)
+			continue
+		}
 		var runID uuid.UUID
-		pool.QueryRow(ctx, `
+		if err := pool.QueryRow(ctx, `
 			INSERT INTO workflow_runs (repo_id, workflow_id, run_number, event, head_sha, head_branch, status)
 			VALUES ($1,$2,$3,$4,$5,$6,'queued') RETURNING id`,
-			repoID, wfID, runNumber, event, sha, branch).Scan(&runID)
+			repoID, wfID, runNumber, event, sha, branch).Scan(&runID); err != nil {
+			log.Printf("workflow run insert: %v", err)
+		}
 	}
 }
 

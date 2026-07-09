@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -67,7 +68,7 @@ func (s *Server) Router() http.Handler {
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 	}))
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -236,7 +237,11 @@ func (s *Server) handleListUserRepos(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateUserRepo(w http.ResponseWriter, r *http.Request) {
 	username := chi.URLParam(r, "user")
-	u, _ := s.auth.GetUser(r.Context(), userIDFrom(r.Context()))
+	u, err := s.auth.GetUser(r.Context(), userIDFrom(r.Context()))
+	if err != nil || u == nil {
+		jsonError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	if u.Username != username {
 		jsonError(w, http.StatusForbidden, "forbidden")
 		return
@@ -248,6 +253,15 @@ func (s *Server) handleCreateOrgRepo(w http.ResponseWriter, r *http.Request) {
 	ownerType, ownerID, err := s.repos.ResolveOwnerID(r.Context(), chi.URLParam(r, "org"))
 	if err != nil {
 		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if ownerType != "org" {
+		jsonError(w, http.StatusNotFound, "org not found")
+		return
+	}
+	member, err := s.org.IsMember(r.Context(), ownerID, userIDFrom(r.Context()))
+	if err != nil || !member {
+		jsonError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 	s.createRepo(w, r, ownerType, ownerID, chi.URLParam(r, "org"))
@@ -269,6 +283,7 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request, ownerType st
 		return
 	}
 	if err := s.git.Init(r.Context(), ownerName, req.Name); err != nil {
+		s.pool.Exec(r.Context(), `DELETE FROM repos WHERE id=$1`, repository.ID)
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -276,12 +291,20 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request, ownerType st
 }
 
 func (s *Server) getRepo(w http.ResponseWriter, r *http.Request) (*repo.Repository, bool) {
+	return s.getRepoPerm(w, r, "read")
+}
+
+func (s *Server) getRepoWrite(w http.ResponseWriter, r *http.Request) (*repo.Repository, bool) {
+	return s.getRepoPerm(w, r, "write")
+}
+
+func (s *Server) getRepoPerm(w http.ResponseWriter, r *http.Request, perm string) (*repo.Repository, bool) {
 	repository, err := s.repos.GetByFullName(r.Context(), chi.URLParam(r, "owner"), chi.URLParam(r, "repo"))
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "repo not found")
 		return nil, false
 	}
-	ok, _ := s.repos.CanAccess(r.Context(), repository.ID, userIDFrom(r.Context()), "read")
+	ok, _ := s.repos.CanAccess(r.Context(), repository.ID, userIDFrom(r.Context()), perm)
 	if !ok {
 		jsonError(w, http.StatusForbidden, "forbidden")
 		return nil, false
@@ -343,29 +366,39 @@ func (s *Server) handleGetCommits(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStar(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
-	s.repos.Star(r.Context(), repository.ID, userIDFrom(r.Context()))
+	if err := s.repos.Star(r.Context(), repository.ID, userIDFrom(r.Context())); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	jsonOK(w, map[string]string{"status": "starred"})
 }
 
 func (s *Server) handleWatch(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
-	s.repos.Watch(r.Context(), repository.ID, userIDFrom(r.Context()))
+	if err := s.repos.Watch(r.Context(), repository.ID, userIDFrom(r.Context())); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	jsonOK(w, map[string]string{"status": "watching"})
 }
 
 func (s *Server) handleFork(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
-	u, _ := s.auth.GetUser(r.Context(), userIDFrom(r.Context()))
+	u, err := s.auth.GetUser(r.Context(), userIDFrom(r.Context()))
+	if err != nil || u == nil {
+		jsonError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	fork, err := s.repos.Fork(r.Context(), repository, u.ID, u.Username)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
@@ -388,7 +421,7 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
@@ -410,7 +443,11 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	i, err := s.issues.Get(r.Context(), repository.ID, atoi(chi.URLParam(r, "number")))
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	i, err := s.issues.Get(r.Context(), repository.ID, num)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, err.Error())
 		return
@@ -419,11 +456,15 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddIssueComment(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
-	i, err := s.issues.Get(r.Context(), repository.ID, atoi(chi.URLParam(r, "number")))
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	i, err := s.issues.Get(r.Context(), repository.ID, num)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, err.Error())
 		return
@@ -439,17 +480,28 @@ func (s *Server) handleAddIssueComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCloseIssue(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
-	i, _ := s.issues.Get(r.Context(), repository.ID, atoi(chi.URLParam(r, "number")))
-	s.issues.Close(r.Context(), i.ID)
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	i, err := s.issues.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err := s.issues.Close(r.Context(), i.ID); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	jsonOK(w, map[string]string{"status": "closed"})
 }
 
 func (s *Server) handleCreateLabel(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
@@ -477,7 +529,7 @@ func (s *Server) handleListPRs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreatePR(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
@@ -485,7 +537,11 @@ func (s *Server) handleCreatePR(w http.ResponseWriter, r *http.Request) {
 		Title, Body, Head, Base string
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	headSHA, _ := s.git.UpdateHead(repository.OwnerName, repository.Name, req.Head)
+	headSHA, err := s.git.UpdateHead(repository.OwnerName, repository.Name, req.Head)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid head branch")
+		return
+	}
 	pr, err := s.pulls.Create(r.Context(), repository.ID, userIDFrom(r.Context()), req.Title, req.Body, req.Head, req.Base, headSHA)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
@@ -499,7 +555,11 @@ func (s *Server) handleGetPR(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pr, err := s.pulls.Get(r.Context(), repository.ID, atoi(chi.URLParam(r, "number")))
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	pr, err := s.pulls.Get(r.Context(), repository.ID, num)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, err.Error())
 		return
@@ -508,11 +568,19 @@ func (s *Server) handleGetPR(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddReview(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
-	pr, _ := s.pulls.Get(r.Context(), repository.ID, atoi(chi.URLParam(r, "number")))
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	pr, err := s.pulls.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
 	var req struct{ State, Body string }
 	json.NewDecoder(r.Body).Decode(&req)
 	review, err := s.pulls.AddReview(r.Context(), pr.ID, userIDFrom(r.Context()), req.State, req.Body)
@@ -524,11 +592,19 @@ func (s *Server) handleAddReview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMergePR(w http.ResponseWriter, r *http.Request) {
-	repository, ok := s.getRepo(w, r)
+	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
 		return
 	}
-	pr, _ := s.pulls.Get(r.Context(), repository.ID, atoi(chi.URLParam(r, "number")))
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	pr, err := s.pulls.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
 	var req struct{ Squash bool `json:"squash"` }
 	json.NewDecoder(r.Body).Decode(&req)
 	sha, err := s.git.Merge(repository.OwnerName, repository.Name, pr.BaseBranch, pr.HeadBranch, req.Squash)
@@ -536,8 +612,14 @@ func (s *Server) handleMergePR(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusConflict, err.Error())
 		return
 	}
-	s.pulls.Merge(r.Context(), pr.ID, sha)
-	s.repos.UpdateBranchHead(r.Context(), repository.ID, pr.BaseBranch, sha)
+	if err := s.pulls.Merge(r.Context(), pr.ID, sha); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := s.repos.UpdateBranchHead(r.Context(), repository.ID, pr.BaseBranch, sha); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	jsonOK(w, map[string]string{"merge_sha": sha})
 }
 
@@ -546,8 +628,20 @@ func (s *Server) handlePRDiff(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pr, _ := s.pulls.Get(r.Context(), repository.ID, atoi(chi.URLParam(r, "number")))
-	baseSHA, _ := s.git.UpdateHead(repository.OwnerName, repository.Name, pr.BaseBranch)
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	pr, err := s.pulls.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	baseSHA, err := s.git.UpdateHead(repository.OwnerName, repository.Name, pr.BaseBranch)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid base branch")
+		return
+	}
 	diff, err := s.git.Diff(repository.OwnerName, repository.Name, baseSHA, pr.HeadSHA)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
@@ -578,15 +672,13 @@ func jsonError(w http.ResponseWriter, code int, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-func atoi(s string) int {
-	var n int
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			continue
-		}
-		n = n*10 + int(c-'0')
+func parseNumber(w http.ResponseWriter, r *http.Request, param string) (int, bool) {
+	n, err := strconv.Atoi(chi.URLParam(r, param))
+	if err != nil || n <= 0 {
+		jsonError(w, http.StatusBadRequest, "invalid number")
+		return 0, false
 	}
-	return n
+	return n, true
 }
 
 // Workflow handlers are in actions_handlers.go

@@ -40,7 +40,10 @@ func (s *Server) handleCreateOrg(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.org.AddMember(r.Context(), o.ID, userIDFrom(r.Context()), "admin")
+	if err := s.org.AddMember(r.Context(), o.ID, userIDFrom(r.Context()), "admin"); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	jsonOK(w, o)
 }
 
@@ -55,7 +58,10 @@ func (s *Server) handleAddOrgMember(w http.ResponseWriter, r *http.Request) {
 		Role   string    `json:"role"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	s.org.AddMember(r.Context(), ownerID, req.UserID, req.Role)
+	if err := s.org.AddMember(r.Context(), ownerID, req.UserID, req.Role); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	jsonOK(w, map[string]string{"status": "added"})
 }
 
@@ -77,11 +83,17 @@ func (s *Server) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAddTeamMember(w http.ResponseWriter, r *http.Request) {
 	var teamID uuid.UUID
-	s.pool.QueryRow(r.Context(), `
+	if err := s.pool.QueryRow(r.Context(), `
 		SELECT t.id FROM teams t JOIN orgs o ON o.id=t.org_id
-		WHERE o.name=$1 AND t.name=$2`, chi.URLParam(r, "org"), chi.URLParam(r, "team")).Scan(&teamID)
+		WHERE o.name=$1 AND t.name=$2`, chi.URLParam(r, "org"), chi.URLParam(r, "team")).Scan(&teamID); err != nil {
+		jsonError(w, http.StatusNotFound, "team not found")
+		return
+	}
 	var req struct{ UserID uuid.UUID `json:"user_id"` }
 	json.NewDecoder(r.Body).Decode(&req)
-	s.org.AddTeamMember(r.Context(), teamID, req.UserID)
+	if err := s.org.AddTeamMember(r.Context(), teamID, req.UserID); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	jsonOK(w, map[string]string{"status": "added"})
 }

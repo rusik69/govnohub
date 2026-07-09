@@ -1,0 +1,29 @@
+# k3s / k3d local deployment overrides
+image:
+  repository: govnohub
+  tag: latest
+  pullPolicy: Never
+
+ingress:
+  enabled: true
+  className: traefik
+  host: govnohub.local
+  gitHost: git.govnohub.local
+
+postgresql:
+  storage: 2Gi
+
+opensearch:
+  storage: 2Gi
+
+git:
+  storage: 2Gi
+
+artifacts:
+  storage: 2Gi
+
+runner:
+  namespace: govnohub-runners
+  image: alpine:3.24
+
+jwtSecret: k3s-dev-secret

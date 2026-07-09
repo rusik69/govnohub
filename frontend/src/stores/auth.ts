@@ -22,8 +22,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchUser() {
     if (!token.value) return
-    const { data } = await authApi.me()
-    user.value = data
+    try {
+      const { data } = await authApi.me()
+      user.value = data
+    } catch {
+      logout()
+      throw new Error('session expired')
+    }
   }
 
   function logout() {

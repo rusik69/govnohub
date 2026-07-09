@@ -12,18 +12,26 @@ const issue = ref<any>(null)
 const comment = ref('')
 
 onMounted(async () => {
-  const { data } = await issueApi.get(owner.value, repo.value, number.value)
-  issue.value = data
+  try {
+    const { data } = await issueApi.get(owner.value, repo.value, number.value)
+    issue.value = data
+  } catch {
+    issue.value = null
+  }
 })
 
 async function addComment() {
-  await issueApi.comment(owner.value, repo.value, number.value, comment.value)
-  comment.value = ''
+  try {
+    await issueApi.comment(owner.value, repo.value, number.value, comment.value)
+    comment.value = ''
+  } catch { /* ignore */ }
 }
 
 async function close() {
-  await issueApi.close(owner.value, repo.value, number.value)
-  issue.value.state = 'closed'
+  try {
+    await issueApi.close(owner.value, repo.value, number.value)
+    issue.value.state = 'closed'
+  } catch { /* ignore */ }
 }
 </script>
 

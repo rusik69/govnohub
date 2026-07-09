@@ -31,6 +31,11 @@ func (s *Store) RepoPath(owner, name string) string {
 	return filepath.Join(s.root, owner, name+".git")
 }
 
+func (s *Store) Exists(owner, name string) bool {
+	_, err := os.Stat(s.RepoPath(owner, name))
+	return err == nil
+}
+
 func (s *Store) Init(ctx context.Context, owner, name string) error {
 	path := s.RepoPath(owner, name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -59,7 +64,31 @@ func (s *Store) runGit(owner, name, cmd string, r io.Reader, w io.Writer) error 
 	c.Stdin = r
 	c.Stdout = w
 	c.Stderr = os.Stderr
-	return c.Run()
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("git %s: %w", cmd, err)
+	}
+	return nil
+}
+
+func (s *Store) ListBranchSHAs(owner, name string) (map[string]string, error) {
+	path := s.RepoPath(owner, name)
+	cmd := exec.Command("git", "-C", path, "for-each-ref", "refs/heads", "--format=%(refname:short) %(objectname)")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	refs := make(map[string]string)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) != 2 {
+			continue
+		}
+		refs[parts[0]] = parts[1]
+	}
+	return refs, nil
 }
 
 type TreeEntry struct {
@@ -155,7 +184,7 @@ func (s *Store) GetCommits(owner, name, ref string, limit int) ([]CommitInfo, er
 	}
 	var commits []CommitInfo
 	count := 0
-	iter.ForEach(func(c *object.Commit) error {
+	err = iter.ForEach(func(c *object.Commit) error {
 		if count >= limit {
 			return fmt.Errorf("done")
 		}
@@ -168,6 +197,9 @@ func (s *Store) GetCommits(owner, name, ref string, limit int) ([]CommitInfo, er
 		count++
 		return nil
 	})
+	if err != nil && err.Error() != "done" {
+		return nil, err
+	}
 	return commits, nil
 }
 
@@ -211,26 +243,38 @@ func (s *Store) Diff(owner, name, baseSHA, headSHA string) (string, error) {
 
 func (s *Store) Merge(owner, name, baseBranch, headBranch string, squash bool) (string, error) {
 	path := s.RepoPath(owner, name)
-	args := []string{"merge", headBranch}
-	if squash {
-		args = append(args, "--squash")
-	}
-	cmd := exec.Command("git", append([]string{"-C", path, "checkout", baseBranch})...)
-	if err := cmd.Run(); err != nil {
+	wt, err := os.MkdirTemp("", "govnohub-merge-*")
+	if err != nil {
 		return "", err
 	}
-	cmd = exec.Command("git", append([]string{"-C", path}, args...)...)
+	defer os.RemoveAll(wt)
+
+	if err := exec.Command("git", "-C", path, "worktree", "add", "--detach", wt, baseBranch).Run(); err != nil {
+		return "", fmt.Errorf("worktree add: %w", err)
+	}
+	defer exec.Command("git", "-C", path, "worktree", "remove", "--force", wt).Run()
+
+	env := append(os.Environ(),
+		"GIT_AUTHOR_NAME=govnohub", "GIT_AUTHOR_EMAIL=govnohub@local",
+		"GIT_COMMITTER_NAME=govnohub", "GIT_COMMITTER_EMAIL=govnohub@local",
+	)
+	mergeArgs := []string{"-C", wt, "merge", headBranch}
+	if squash {
+		mergeArgs = append(mergeArgs, "--squash")
+	}
+	cmd := exec.Command("git", mergeArgs...)
+	cmd.Env = env
 	if err := cmd.Run(); err != nil {
-		return "", err
+		return "", fmt.Errorf("merge: %w", err)
 	}
 	if squash {
-		cmd = exec.Command("git", "-C", path, "commit", "-m", "Squash merge "+headBranch)
+		cmd = exec.Command("git", "-C", wt, "commit", "-m", "Squash merge "+headBranch)
+		cmd.Env = env
 		if err := cmd.Run(); err != nil {
-			return "", err
+			return "", fmt.Errorf("commit: %w", err)
 		}
 	}
-	cmd = exec.Command("git", "-C", path, "rev-parse", "HEAD")
-	out, err := cmd.Output()
+	out, err := exec.Command("git", "-C", wt, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "", err
 	}

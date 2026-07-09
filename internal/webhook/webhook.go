@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -69,7 +70,8 @@ func (s *Service) Dispatch(ctx context.Context, repoID uuid.UUID, event string, 
 			INSERT INTO webhook_deliveries (webhook_id, event, payload, status_code)
 			VALUES ($1,$2,$3,$4)`, id, event, body, status)
 		if err != nil {
-			return err
+			log.Printf("webhook delivery to %s: %v", url, err)
+			continue
 		}
 	}
 	return nil

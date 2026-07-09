@@ -14,21 +14,29 @@ const diff = ref('')
 const reviewBody = ref('')
 
 onMounted(async () => {
-  const [prRes, diffRes] = await Promise.all([
-    prApi.get(owner.value, repo.value, number.value),
-    prApi.diff(owner.value, repo.value, number.value),
-  ])
-  pr.value = prRes.data
-  diff.value = diffRes.data as string
+  try {
+    const [prRes, diffRes] = await Promise.all([
+      prApi.get(owner.value, repo.value, number.value),
+      prApi.diff(owner.value, repo.value, number.value),
+    ])
+    pr.value = prRes.data
+    diff.value = diffRes.data as string
+  } catch {
+    pr.value = null
+  }
 })
 
 async function review(state: string) {
-  await prApi.review(owner.value, repo.value, number.value, state, reviewBody.value)
+  try {
+    await prApi.review(owner.value, repo.value, number.value, state, reviewBody.value)
+  } catch { /* ignore */ }
 }
 
 async function merge() {
-  await prApi.merge(owner.value, repo.value, number.value)
-  pr.value.state = 'closed'
+  try {
+    await prApi.merge(owner.value, repo.value, number.value)
+    pr.value.state = 'closed'
+  } catch { /* ignore */ }
 }
 </script>
 
