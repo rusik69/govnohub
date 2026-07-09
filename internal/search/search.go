@@ -101,7 +101,7 @@ func (s *Service) Search(ctx context.Context, q string, limit int) ([]Hit, error
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, err
+		return []Hit{}, nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
@@ -116,7 +116,7 @@ func (s *Service) Search(ctx context.Context, q string, limit int) ([]Hit, error
 		} `json:"hits"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+		return []Hit{}, nil
 	}
 	var hits []Hit
 	for _, h := range result.Hits.Hits {
