@@ -34,6 +34,13 @@ runner:
 
 jwtSecret: change-me-in-production
 
+bootstrapAdmin:
+  username: admin
+  email: admin@govnohub.local
+  password: admin
+
+allowPublicRegistration: false
+
 aiReview:
   enabled: false
   apiKey: ""

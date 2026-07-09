@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/rusik69/govnohub/internal/testutil"
 )
 
@@ -77,4 +78,41 @@ func TestLoginInvalid(t *testing.T) {
 	if err != ErrInvalidCredentials {
 		t.Fatalf("expected invalid credentials, got %v", err)
 	}
+}
+
+func TestBootstrapAdminAndRoles(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	svc := NewService(pg.Pool, "test-secret")
+
+	if err := svc.BootstrapAdmin(ctx, "admin", "admin@test.local", "adminpass"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.BootstrapAdmin(ctx, "other", "other@test.local", "pass"); err != nil {
+		t.Fatal("bootstrap should be idempotent")
+	}
+
+	ok, err := svc.IsAdmin(ctx, mustLoginUserID(t, svc, "admin"))
+	if err != nil || !ok {
+		t.Fatalf("admin role: ok=%v err=%v", ok, err)
+	}
+
+	_, err = svc.CreateUser(ctx, "bob", "bob@test.local", "pass", RoleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	users, err := svc.ListUsers(ctx)
+	if err != nil || len(users) != 2 {
+		t.Fatalf("users: %v len=%d", err, len(users))
+	}
+}
+
+func mustLoginUserID(t *testing.T, svc *Service, username string) uuid.UUID {
+	t.Helper()
+	_, u, err := svc.Login(context.Background(), username, "adminpass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u.ID
 }

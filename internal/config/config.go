@@ -16,6 +16,10 @@ type Config struct {
 	WebhookURL     string
 	RegistryURL    string
 	AIReview       AIReviewConfig
+	BootstrapAdminUsername  string
+	BootstrapAdminEmail     string
+	BootstrapAdminPassword  string
+	AllowPublicRegistration bool
 }
 
 type AIReviewConfig struct {
@@ -46,6 +50,10 @@ func Load() Config {
 			Model:   getEnv("AI_REVIEW_MODEL", "deepseek-v4-flash"),
 			Auto:    getEnvBool("AI_REVIEW_AUTO", false),
 		},
+		BootstrapAdminUsername:  getEnv("BOOTSTRAP_ADMIN_USERNAME", "admin"),
+		BootstrapAdminEmail:     getEnv("BOOTSTRAP_ADMIN_EMAIL", "admin@govnohub.local"),
+		BootstrapAdminPassword:  getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin"),
+		AllowPublicRegistration: getEnvBool("ALLOW_PUBLIC_REGISTRATION", false),
 	}
 }
 

@@ -27,3 +27,10 @@ runner:
   image: alpine:3.24
 
 jwtSecret: k3s-dev-secret
+
+bootstrapAdmin:
+  username: admin
+  email: admin@govnohub.local
+  password: admin
+
+allowPublicRegistration: false

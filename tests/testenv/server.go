@@ -44,7 +44,7 @@ func New(t *testing.T) *Env {
 	os.MkdirAll(artifactRoot, 0o755)
 
 	srv := api.NewServer(
-		auth.NewService(pg.Pool, "test-secret"),
+		auth.NewService(pg.Pool, "test-secret", auth.Options{AllowPublicRegistration: true}),
 		repo.NewService(pg.Pool),
 		gitStore,
 		issue.NewService(pg.Pool),

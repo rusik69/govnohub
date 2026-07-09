@@ -5,6 +5,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', component: () => import('../views/Login.vue'), meta: { guest: true } },
+    { path: '/admin/users', component: () => import('../views/AdminUsers.vue'), meta: { admin: true } },
     { path: '/', component: () => import('../views/Dashboard.vue') },
     { path: '/search', component: () => import('../views/Search.vue') },
     { path: '/settings', component: () => import('../views/UserSettings.vue') },
@@ -31,6 +32,7 @@ router.beforeEach(async (to) => {
   }
   if (!auth.isLoggedIn && !to.meta.guest) return '/login'
   if (auth.isLoggedIn && to.meta.guest) return '/'
+  if (to.meta.admin && !auth.isAdmin) return '/'
 })
 
 export default router

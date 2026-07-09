@@ -39,6 +39,13 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 
+	authSvc := auth.NewService(pool, cfg.JWTSecret, auth.Options{
+		AllowPublicRegistration: cfg.AllowPublicRegistration,
+	})
+	if err := authSvc.BootstrapAdmin(ctx, cfg.BootstrapAdminUsername, cfg.BootstrapAdminEmail, cfg.BootstrapAdminPassword); err != nil {
+		log.Fatalf("bootstrap admin: %v", err)
+	}
+
 	gitStore, err := gitstore.NewStore(cfg.GitRoot)
 	if err != nil {
 		log.Fatalf("git store: %v", err)
@@ -48,7 +55,7 @@ func main() {
 	_ = searchSvc.EnsureIndex(ctx)
 
 	srv := api.NewServer(
-		auth.NewService(pool, cfg.JWTSecret),
+		authSvc,
 		repo.NewService(pool),
 		gitStore,
 		issue.NewService(pool),

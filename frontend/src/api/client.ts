@@ -12,6 +12,8 @@ export interface User {
   id: string
   username: string
   email: string
+  role: string
+  created_at?: string
 }
 
 export interface Repository {
@@ -31,6 +33,13 @@ export const authApi = {
   login: (username: string, password: string) =>
     api.post('/auth/login', { username, password }),
   me: () => api.get<User>('/user'),
+}
+
+export const adminApi = {
+  listUsers: () => api.get<User[]>('/admin/users'),
+  createUser: (data: { username: string; email: string; password: string; role: string }) =>
+    api.post<User>('/admin/users', data),
+  deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
 }
 
 export interface PATInfo {

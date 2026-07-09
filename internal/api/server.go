@@ -90,6 +90,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/user/repos", s.handleListUserRepos)
 		r.Get("/search", s.handleSearch)
 		s.registerOrgRoutes(r)
+		s.registerAdminRoutes(r)
 
 		r.Post("/orgs/{org}/repos", s.handleCreateOrgRepo)
 		r.Post("/users/{user}/repos", s.handleCreateUserRepo)
@@ -215,6 +216,10 @@ func userIDFrom(ctx context.Context) uuid.UUID {
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if !s.auth.AllowPublicRegistration() {
+		jsonError(w, http.StatusForbidden, "public registration is disabled")
+		return
+	}
 	var req struct {
 		Username string `json:"username"`
 		Email    string `json:"email"`

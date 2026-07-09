@@ -39,6 +39,8 @@ make run-api
 cd frontend && npm run dev
 ```
 
+Default admin (created on first startup when no users exist): `admin` / `admin`. Public self-registration is disabled; admins manage users at `/admin/users`.
+
 ## Kubernetes / k3s Deploy
 
 ```bash

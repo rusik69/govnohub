@@ -45,6 +45,14 @@ spec:
             - name: WEBHOOK_HTTP_ADDR
               value: ":8082"
             {{- if eq $name "api-server" }}
+            - name: BOOTSTRAP_ADMIN_USERNAME
+              value: {{ $root.Values.bootstrapAdmin.username | quote }}
+            - name: BOOTSTRAP_ADMIN_EMAIL
+              value: {{ $root.Values.bootstrapAdmin.email | quote }}
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              value: {{ $root.Values.bootstrapAdmin.password | quote }}
+            - name: ALLOW_PUBLIC_REGISTRATION
+              value: {{ $root.Values.allowPublicRegistration | quote }}
             - name: AI_REVIEW_ENABLED
               value: {{ $root.Values.aiReview.enabled | quote }}
             - name: AI_REVIEW_MODEL

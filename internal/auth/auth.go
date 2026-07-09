@@ -20,11 +20,15 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUnauthorized       = errors.New("unauthorized")
+	ErrForbidden          = errors.New("forbidden")
 	ErrUserExists         = errors.New("user already exists")
 	ErrInsufficientScope  = errors.New("insufficient token scope")
 )
 
 const (
+	RoleAdmin = "admin"
+	RoleUser  = "user"
+
 	ScopeRepo      = "repo"
 	ScopeRepoWrite = "repo:write"
 	ScopeWorkflow  = "workflow"
@@ -42,31 +46,56 @@ type User struct {
 	ID        uuid.UUID `json:"id"`
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
+	Role      string    `json:"role"`
 	AvatarURL string    `json:"avatar_url,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-type Service struct {
-	pool      *pgxpool.Pool
-	jwtSecret []byte
+type Options struct {
+	AllowPublicRegistration bool
 }
 
-func NewService(pool *pgxpool.Pool, jwtSecret string) *Service {
-	return &Service{pool: pool, jwtSecret: []byte(jwtSecret)}
+type Service struct {
+	pool                    *pgxpool.Pool
+	jwtSecret               []byte
+	allowPublicRegistration bool
+}
+
+func NewService(pool *pgxpool.Pool, jwtSecret string, opts ...Options) *Service {
+	o := Options{}
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	return &Service{pool: pool, jwtSecret: []byte(jwtSecret), allowPublicRegistration: o.AllowPublicRegistration}
+}
+
+func (s *Service) AllowPublicRegistration() bool {
+	return s.allowPublicRegistration
 }
 
 func (s *Service) Register(ctx context.Context, username, email, password string) (*User, error) {
+	return s.createUser(ctx, username, email, password, RoleUser)
+}
+
+func (s *Service) CreateUser(ctx context.Context, username, email, password, role string) (*User, error) {
+	if role != RoleAdmin && role != RoleUser {
+		role = RoleUser
+	}
+	return s.createUser(ctx, username, email, password, role)
+}
+
+func (s *Service) createUser(ctx context.Context, username, email, password, role string) (*User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
 	var u User
 	err = s.pool.QueryRow(ctx, `
-		INSERT INTO users (username, email, password_hash)
-		VALUES ($1, $2, $3)
-		RETURNING id, username, email, COALESCE(avatar_url,''), created_at`,
-		username, email, string(hash),
-	).Scan(&u.ID, &u.Username, &u.Email, &u.AvatarURL, &u.CreatedAt)
+		INSERT INTO users (username, email, password_hash, role)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, username, email, role, COALESCE(avatar_url,''), created_at`,
+		username, email, string(hash), role,
+	).Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.AvatarURL, &u.CreatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") {
 			return nil, ErrUserExists
@@ -80,9 +109,9 @@ func (s *Service) Login(ctx context.Context, username, password string) (string,
 	var u User
 	var hash string
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, username, email, COALESCE(avatar_url,''), password_hash, created_at
+		SELECT id, username, email, role, COALESCE(avatar_url,''), password_hash, created_at
 		FROM users WHERE username=$1 OR email=$1`, username,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.AvatarURL, &hash, &u.CreatedAt)
+	).Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.AvatarURL, &hash, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil, ErrInvalidCredentials
@@ -221,9 +250,9 @@ func (s *Service) RevokePAT(ctx context.Context, userID, patID uuid.UUID) error 
 func (s *Service) GetUserByUsername(ctx context.Context, username string) (*User, error) {
 	var u User
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, username, email, COALESCE(avatar_url,''), created_at
+		SELECT id, username, email, role, COALESCE(avatar_url,''), created_at
 		FROM users WHERE username=$1`, username,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.AvatarURL, &u.CreatedAt)
+	).Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.AvatarURL, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUnauthorized
@@ -236,9 +265,9 @@ func (s *Service) GetUserByUsername(ctx context.Context, username string) (*User
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
 	var u User
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, username, email, COALESCE(avatar_url,''), created_at
+		SELECT id, username, email, role, COALESCE(avatar_url,''), created_at
 		FROM users WHERE id=$1`, id,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.AvatarURL, &u.CreatedAt)
+	).Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.AvatarURL, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -256,4 +285,77 @@ func randomToken() (string, error) {
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+func (s *Service) IsAdmin(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var role string
+	err := s.pool.QueryRow(ctx, `SELECT role FROM users WHERE id=$1`, userID).Scan(&role)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrUnauthorized
+		}
+		return false, err
+	}
+	return role == RoleAdmin, nil
+}
+
+func (s *Service) BootstrapAdmin(ctx context.Context, username, email, password string) error {
+	var count int
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := s.createUser(ctx, username, email, password, RoleAdmin)
+	return err
+}
+
+func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, username, email, role, COALESCE(avatar_url,''), created_at
+		FROM users ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.AvatarURL, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) DeleteUser(ctx context.Context, actorID, targetID uuid.UUID) error {
+	if actorID == targetID {
+		return ErrForbidden
+	}
+	var targetRole string
+	if err := s.pool.QueryRow(ctx, `SELECT role FROM users WHERE id=$1`, targetID).Scan(&targetRole); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUnauthorized
+		}
+		return err
+	}
+	if targetRole == RoleAdmin {
+		var adminCount int
+		if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role=$1`, RoleAdmin).Scan(&adminCount); err != nil {
+			return err
+		}
+		if adminCount <= 1 {
+			return ErrForbidden
+		}
+	}
+	tag, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, targetID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUnauthorized
+	}
+	return nil
 }
