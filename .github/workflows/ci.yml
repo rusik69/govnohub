@@ -4,6 +4,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  KIND_CLUSTER_NAME: govnohub
+  K8S_NAMESPACE: govnohub
+  HELM_RELEASE: govnohub
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -40,19 +45,64 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-      - name: Install kind
-        run: |
-          curl -fsSL https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64 -o kind
-          chmod +x kind
-          sudo mv kind /usr/local/bin/kind
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.14.0
+        with:
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          config: deploy/kind/cluster.yaml
+          wait: 300s
+
       - uses: azure/setup-helm@v4
-      - name: Create cluster and deploy Govnohub
+
+      - name: Install ingress-nginx
         run: |
-          chmod +x scripts/k8s-gha-setup.sh
-          ./scripts/k8s-gha-setup.sh
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=available deployment/ingress-nginx-controller \
+            --timeout=300s
+
+      - name: Build container images
+        run: make docker-build CONTAINER_RUNTIME=docker
+
+      - name: Load images into kind
+        run: |
+          for svc in api-server git-server actions-controller webhook-service search-indexer; do
+            kind load docker-image "govnohub/${svc}:latest" --name "${KIND_CLUSTER_NAME}"
+          done
+
+      - name: Deploy Govnohub
+        run: |
+          kubectl create namespace "${K8S_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f deploy/crds/
+          helm upgrade --install "${HELM_RELEASE}" ./deploy/helm/govnohub \
+            -n "${K8S_NAMESPACE}" \
+            -f ./deploy/helm/govnohub/values-kind.yaml \
+            --set image.repository=govnohub \
+            --wait --timeout 10m
+          kubectl wait --for=condition=available deployment \
+            -l app.kubernetes.io/name=govnohub -n "${K8S_NAMESPACE}" --timeout=600s
+
+      - name: Configure local DNS
+        run: |
+          echo '127.0.0.1 govnohub.local git.govnohub.local' | sudo tee -a /etc/hosts
+
+      - name: Wait for ingress endpoints
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://govnohub.local/healthz >/dev/null && \
+               curl -fsS http://git.govnohub.local/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          kubectl get pods,ingress -n "${K8S_NAMESPACE}"
+          exit 1
+
       - name: K8s E2E tests
         run: make test-k8s-e2e
