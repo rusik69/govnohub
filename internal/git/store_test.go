@@ -2,6 +2,7 @@ package gitstore
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -33,7 +34,12 @@ func TestInitAndTree(t *testing.T) {
 
 func bareCommit(t *testing.T, repoPath, branch, msg string) {
 	t.Helper()
-	out, err := exec.Command("git", "--git-dir", repoPath, "commit-tree", "-m", msg, emptyTree).Output()
+	cmd := exec.Command("git", "--git-dir", repoPath, "commit-tree", "-m", msg, emptyTree)
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.local",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.local",
+	)
+	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("commit-tree: %v", err)
 	}
