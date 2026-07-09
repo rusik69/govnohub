@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  color: #1f2328;
+  background: #f6f8fa;
+}
+
+body { margin: 0; }
+
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.btn {
+  @apply inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-[#1f883d] text-white hover:bg-[#1a7f37];
+}
+
+.btn-secondary {
+  @apply inline-flex items-center px-4 py-2 rounded-md text-sm font-medium border border-[#d0d7de] bg-white hover:bg-[#f6f8fa];
+}
+
+.card {
+  @apply bg-white border border-[#d0d7de] rounded-md;
+}
+
+.input {
+  @apply w-full px-3 py-2 border border-[#d0d7de] rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#0969da];
+}
+
+.badge {
+  @apply inline-flex px-2 py-0.5 text-xs font-medium rounded-full;
+}
+
+.badge-open { @apply bg-[#dafbe1] text-[#1a7f37]; }
+.badge-closed { @apply bg-[#ffebe9] text-[#cf222e]; }

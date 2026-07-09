@@ -1,0 +1,28 @@
+openapi: 3.0.3
+info:
+  title: Govnohub API
+  version: 0.1.0
+paths:
+  /api/v1/auth/login:
+    post:
+      summary: Login
+  /api/v1/user/repos:
+    get:
+      summary: List user repositories
+  /api/v1/repos/{owner}/{repo}:
+    get:
+      summary: Get repository
+  /api/v1/repos/{owner}/{repo}/issues:
+    get:
+      summary: List issues
+    post:
+      summary: Create issue
+  /api/v1/repos/{owner}/{repo}/pulls:
+    get:
+      summary: List pull requests
+  /api/v1/repos/{owner}/{repo}/actions/runs:
+    get:
+      summary: List workflow runs
+  /api/v1/search:
+    get:
+      summary: Global search

@@ -1,0 +1,21 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: linux
+    steps:
+      - name: Test backend
+        run: go test ./...
+      - name: Build backend
+        run: go build ./...
+  frontend:
+    runs-on: linux
+    steps:
+      - name: Build frontend
+        run: cd frontend && npm ci && npm run build

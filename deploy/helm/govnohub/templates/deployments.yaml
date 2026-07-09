@@ -1,0 +1,123 @@
+{{- $root := . }}
+{{- range $name, $cfg := dict "api-server" .Values.services.apiServer "git-server" .Values.services.gitServer "webhook-service" .Values.services.webhookService "actions-controller" .Values.services.actionsController "search-indexer" .Values.services.searchIndexer }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "govnohub.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "govnohub.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  replicas: {{ $cfg.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "govnohub.fullname" $root }}-{{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "govnohub.fullname" $root }}-{{ $name }}
+    spec:
+      serviceAccountName: {{ include "govnohub.fullname" $root }}-{{ $name }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $root.Values.image.repository }}/{{ $name }}:{{ $root.Values.image.tag }}"
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          env:
+            - name: DATABASE_URL
+              value: {{ include "govnohub.databaseURL" $root | quote }}
+            - name: JWT_SECRET
+              value: {{ $root.Values.jwtSecret | quote }}
+            - name: GIT_ROOT
+              value: /data/git
+            - name: ARTIFACT_ROOT
+              value: /data/artifacts
+            - name: OPENSEARCH_URL
+              value: http://{{ include "govnohub.fullname" $root }}-opensearch:9200
+            - name: RUNNER_NAMESPACE
+              value: {{ $root.Values.runner.namespace | quote }}
+            - name: RUNNER_IMAGE
+              value: {{ $root.Values.runner.image | quote }}
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: GIT_HTTP_ADDR
+              value: ":8081"
+            - name: WEBHOOK_HTTP_ADDR
+              value: ":8082"
+          ports:
+            - containerPort: 8080
+            - containerPort: 8081
+            - containerPort: 8082
+          volumeMounts:
+            - name: git-data
+              mountPath: /data/git
+            - name: artifacts
+              mountPath: /data/artifacts
+      volumes:
+        - name: git-data
+          persistentVolumeClaim:
+            claimName: {{ include "govnohub.fullname" $root }}-git
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: {{ include "govnohub.fullname" $root }}-artifacts
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "govnohub.fullname" . }}-frontend
+spec:
+  replicas: {{ .Values.services.frontend.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "govnohub.fullname" . }}-frontend
+  template:
+    metadata:
+      labels:
+        app: {{ include "govnohub.fullname" . }}-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: "{{ .Values.image.repository }}/frontend:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-server
+spec:
+  selector:
+    app: {{ include "govnohub.fullname" . }}-api-server
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: git-server
+spec:
+  selector:
+    app: {{ include "govnohub.fullname" . }}-git-server
+  ports:
+    - port: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-service
+spec:
+  selector:
+    app: {{ include "govnohub.fullname" . }}-webhook-service
+  ports:
+    - port: 8082
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: {{ include "govnohub.fullname" . }}-frontend
+  ports:
+    - port: 80

@@ -1,0 +1,39 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: workflowruns.govnohub.io
+spec:
+  group: govnohub.io
+  names:
+    kind: WorkflowRun
+    plural: workflowruns
+    singular: workflowrun
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                workflowRef:
+                  type: string
+                event:
+                  type: string
+                headSha:
+                  type: string
+                headBranch:
+                  type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                conclusion:
+                  type: string
+      subresources:
+        status: {}

@@ -1,0 +1,53 @@
+image:
+  repository: govnohub
+  tag: latest
+  pullPolicy: IfNotPresent
+
+postgresql:
+  enabled: true
+  image: postgres:16-alpine
+  database: govnohub
+  username: govnohub
+  password: govnohub
+  storage: 10Gi
+
+opensearch:
+  enabled: true
+  image: opensearchproject/opensearch:2.11.0
+  storage: 10Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: govnohub.local
+  gitHost: git.govnohub.local
+
+git:
+  storage: 20Gi
+
+artifacts:
+  storage: 10Gi
+
+runner:
+  namespace: govnohub-runners
+  image: alpine:3.20
+
+jwtSecret: change-me-in-production
+
+services:
+  apiServer:
+    replicas: 1
+    port: 8080
+  gitServer:
+    replicas: 1
+    port: 8081
+  webhookService:
+    replicas: 1
+    port: 8082
+  actionsController:
+    replicas: 1
+  searchIndexer:
+    replicas: 1
+  frontend:
+    replicas: 1
+    port: 80
