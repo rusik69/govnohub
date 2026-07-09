@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -23,6 +24,20 @@ func (h *Handler) layout(r *http.Request, title string) LayoutData {
 		CSRF:         csrfFrom(r.Context()),
 		UnreadNotifs: unread,
 	}
+}
+
+func (h *Handler) repoPageCtx(ctx context.Context, repository *repo.Repository, tab string) (RepoHeaderData, RepoNavData) {
+	issues, _ := h.deps.Issues.List(ctx, repository.ID)
+	prs, _ := h.deps.Pulls.List(ctx, repository.ID)
+	return RepoHeaderData{Repository: repository},
+		RepoNavData{
+			Owner:      repository.OwnerName,
+			Repo:       repository.Name,
+			Tab:        tab,
+			FullName:   repository.FullName,
+			IssueCount: len(issues),
+			PullCount:  len(prs),
+		}
 }
 
 func render(w http.ResponseWriter, r *http.Request, c templ.Component) {

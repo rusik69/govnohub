@@ -295,10 +295,12 @@ func (h *Handler) handleRepo(w http.ResponseWriter, r *http.Request) {
 		ref = repository.DefaultBranch
 	}
 	entries, _ := h.deps.Git.GetTree(repository.OwnerName, repository.Name, ref, "")
+	header, nav := h.repoPageCtx(r.Context(), repository, "code")
+	header.CSRF = csrfFrom(r.Context())
 	render(w, r, RepoPage(RepoPageData{
 		Layout: h.layout(r, repository.FullName),
-		Nav:    repoNav(repository.OwnerName, repository.Name, "code"),
-		Repo:   repository, Ref: ref, Entries: entries,
+		Header: header, Nav: nav,
+		Repo: repository, Ref: ref, Entries: entries,
 	}))
 }
 
@@ -313,10 +315,12 @@ func (h *Handler) handleRepoTree(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
 	entries, _ := h.deps.Git.GetTree(repository.OwnerName, repository.Name, ref, path)
+	header, nav := h.repoPageCtx(r.Context(), repository, "code")
+	header.CSRF = csrfFrom(r.Context())
 	render(w, r, RepoPage(RepoPageData{
 		Layout: h.layout(r, repository.FullName),
-		Nav:    repoNav(repository.OwnerName, repository.Name, "code"),
-		Repo:   repository, Path: path, Ref: ref, Entries: entries,
+		Header: header, Nav: nav,
+		Repo: repository, Path: path, Ref: ref, Entries: entries,
 	}))
 }
 
@@ -335,10 +339,12 @@ func (h *Handler) handleRepoBlob(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		content = string(data)
 	}
+	header, nav := h.repoPageCtx(r.Context(), repository, "code")
+	header.CSRF = csrfFrom(r.Context())
 	render(w, r, RepoPage(RepoPageData{
 		Layout: h.layout(r, repository.FullName),
-		Nav:    repoNav(repository.OwnerName, repository.Name, "code"),
-		Repo:   repository, Path: path, Ref: ref, Content: content,
+		Header: header, Nav: nav,
+		Repo: repository, Path: path, Ref: ref, Content: content,
 	}))
 }
 
@@ -348,7 +354,10 @@ func (h *Handler) handleIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	issues, _ := h.deps.Issues.List(r.Context(), repository.ID)
-	render(w, r, IssuesPage(h.layout(r, "Issues"), repoNav(repository.OwnerName, repository.Name, "issues"), issues, csrfFrom(r.Context())))
+	state := r.URL.Query().Get("state")
+	header, nav := h.repoPageCtx(r.Context(), repository, "issues")
+	header.CSRF = csrfFrom(r.Context())
+	render(w, r, IssuesPage(h.layout(r, "Issues"), header, nav, issues, state, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
@@ -382,7 +391,9 @@ func (h *Handler) handleIssueDetail(w http.ResponseWriter, r *http.Request) {
 	labels, _ := h.deps.Issues.ListLabels(r.Context(), repository.ID)
 	milestones, _ := h.deps.Issues.ListMilestones(r.Context(), repository.ID)
 	users, _ := h.deps.Issues.ListRepoUsers(r.Context(), repository.ID)
-	render(w, r, IssueDetailPage(h.layout(r, iss.Title), repoNav(repository.OwnerName, repository.Name, "issues"), iss, comments, labels, milestones, users, csrfFrom(r.Context())))
+	header, nav := h.repoPageCtx(r.Context(), repository, "issues")
+	header.CSRF = csrfFrom(r.Context())
+	render(w, r, IssueDetailPage(h.layout(r, iss.Title), header, nav, iss, comments, labels, milestones, users, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleIssueComment(w http.ResponseWriter, r *http.Request) {
@@ -542,7 +553,10 @@ func (h *Handler) handlePulls(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prs, _ := h.deps.Pulls.List(r.Context(), repository.ID)
-	render(w, r, PullsPage(h.layout(r, "Pull requests"), repoNav(repository.OwnerName, repository.Name, "pulls"), prs, csrfFrom(r.Context())))
+	state := r.URL.Query().Get("state")
+	header, nav := h.repoPageCtx(r.Context(), repository, "pulls")
+	header.CSRF = csrfFrom(r.Context())
+	render(w, r, PullsPage(h.layout(r, "Pull requests"), header, nav, prs, state, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleCreatePR(w http.ResponseWriter, r *http.Request) {
@@ -587,8 +601,10 @@ func (h *Handler) handlePRDetail(w http.ResponseWriter, r *http.Request) {
 	baseSHA, _ := h.deps.Git.UpdateHead(repository.OwnerName, repository.Name, pr.BaseBranch)
 	diff, _ := h.deps.Git.Diff(repository.OwnerName, repository.Name, baseSHA, pr.HeadSHA)
 	files := ParseUnifiedDiff(diff)
+	header, nav := h.repoPageCtx(r.Context(), repository, "pulls")
+	header.CSRF = csrfFrom(r.Context())
 	render(w, r, PRDetailPage(h.layout(r, pr.Title), PRDetailData{
-		Nav: repoNav(repository.OwnerName, repository.Name, "pulls"),
+		Header: header, Nav: nav,
 		PR: pr, Reviews: reviews, Comments: comments, Files: files, CSRF: csrfFrom(r.Context()),
 	}))
 }
@@ -855,4 +871,47 @@ func (h *Handler) handleWikiSave(w http.ResponseWriter, r *http.Request) {
 	}
 	page, _ := h.deps.Wiki.Upsert(r.Context(), repository.ID, su.ID, slug, title, r.FormValue("content"))
 	http.Redirect(w, r, "/"+repository.FullName+"/wiki/"+page.Slug, http.StatusSeeOther)
+}
+
+func (h *Handler) handleStar(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	su := userFrom(r.Context())
+	_ = h.deps.Repos.Star(r.Context(), repository.ID, su.ID)
+	http.Redirect(w, r, "/"+repository.FullName, http.StatusSeeOther)
+}
+
+func (h *Handler) handleWatch(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	su := userFrom(r.Context())
+	_ = h.deps.Repos.Watch(r.Context(), repository.ID, su.ID)
+	http.Redirect(w, r, "/"+repository.FullName, http.StatusSeeOther)
+}
+
+func (h *Handler) handleFork(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	su := userFrom(r.Context())
+	fork, err := h.deps.Repos.Fork(r.Context(), repository, su.ID, su.Username)
+	if err != nil {
+		http.Redirect(w, r, "/"+repository.FullName, http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/"+fork.FullName, http.StatusSeeOther)
 }

@@ -1,29 +1,148 @@
 package web
 
+import (
+	"strconv"
+	"strings"
+
+	gitstore "github.com/rusik69/govnohub/internal/git"
+	"github.com/rusik69/govnohub/internal/issue"
+	"github.com/rusik69/govnohub/internal/pull"
+	"github.com/rusik69/govnohub/internal/repo"
+)
+
 type RepoNavData struct {
-	Owner    string
-	Repo     string
-	Tab      string
-	FullName string
+	Owner      string
+	Repo       string
+	Tab        string
+	FullName   string
+	IssueCount int
+	PullCount  int
+}
+
+type RepoHeaderData struct {
+	Repository *repo.Repository
+	CSRF       string
+	Starred    bool
+}
+
+templ Icon(name string, class string) {
+	<svg class={ "gh-icon " + class } aria-hidden="true">
+		<use href={ templ.SafeURL("/static/icons.svg#" + name) }></use>
+	</svg>
+}
+
+templ Avatar(username string, size string) {
+	<span class={ avatarClass(size) } style={ "background:" + avatarColor(username) }>{ avatarInitial(username) }</span>
+}
+
+func avatarClass(size string) string {
+	if size == "lg" {
+		return "gh-avatar gh-avatar-lg"
+	}
+	return "gh-avatar"
+}
+
+func avatarInitial(username string) string {
+	if username == "" {
+		return "?"
+	}
+	return strings.ToUpper(username[:1])
+}
+
+func avatarColor(name string) string {
+	colors := []string{"#bf3989", "#0969da", "#1a7f37", "#8250df", "#fb8500", "#cf222e", "#0550ae", "#6639ba"}
+	h := 0
+	for _, c := range name {
+		h += int(c)
+	}
+	return colors[h%len(colors)]
+}
+
+templ RepoHeader(data RepoHeaderData) {
+	<div class="gh-repo-band">
+		<div class="gh-repo-head">
+			<div>
+				<h1 class="gh-repo-title">
+					<a href={ templ.SafeURL("/" + data.Repository.OwnerName) } class="owner">{ data.Repository.OwnerName }</a>
+					<span class="sep">/</span>
+					<a href={ templ.SafeURL("/" + data.Repository.FullName) } class="repo-name">{ data.Repository.Name }</a>
+				</h1>
+				<div class="gh-repo-meta">
+					if data.Repository.Description != "" {
+						<span>{ data.Repository.Description }</span>
+					}
+					<span class="gh-visibility">
+						if data.Repository.IsPrivate {
+							Private
+						} else {
+							Public
+						}
+					</span>
+					if data.Repository.IsFork {
+						<span class="gh-visibility">Fork</span>
+					}
+				</div>
+			</div>
+			<div class="gh-btn-group">
+				<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/star") }>
+					@CSRFInput(data.CSRF)
+					<button type="submit" class="gh-btn-seg">
+						@Icon("star", "")
+						if data.Starred {
+							Starred
+						} else {
+							Star
+						}
+						<span class="gh-counter">{ strconv.Itoa(data.Repository.StarCount) }</span>
+					</button>
+				</form>
+				<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/watch") }>
+					@CSRFInput(data.CSRF)
+					<button type="submit" class="gh-btn-seg">
+						@Icon("eye", "")
+						Watch
+					</button>
+				</form>
+				<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/fork") }>
+					@CSRFInput(data.CSRF)
+					<button type="submit" class="gh-btn-seg">
+						@Icon("repo-forked", "")
+						Fork
+					</button>
+				</form>
+			</div>
+		</div>
+	</div>
 }
 
 templ RepoNav(data RepoNavData) {
-	<nav class="tab-nav">
-		@repoTab(data, "code", "/")
-		@repoTab(data, "issues", "/issues")
-		@repoTab(data, "pulls", "/pulls")
-		@repoTab(data, "actions", "/actions")
-		@repoTab(data, "releases", "/releases")
-		@repoTab(data, "packages", "/packages")
-		@repoTab(data, "wiki", "/wiki")
-		@repoTab(data, "settings", "/settings")
+	<nav class="gh-tab-nav">
+		@repoTab(data, "code", "/", "code", "Code", 0)
+		@repoTab(data, "issues", "/issues", "issue-opened", "Issues", data.IssueCount)
+		@repoTab(data, "pulls", "/pulls", "git-pull-request", "Pull requests", data.PullCount)
+		@repoTab(data, "actions", "/actions", "play", "Actions", 0)
+		@repoTab(data, "releases", "/releases", "tag", "Releases", 0)
+		@repoTab(data, "packages", "/packages", "package", "Packages", 0)
+		@repoTab(data, "wiki", "/wiki", "book", "Wiki", 0)
+		@repoTab(data, "settings", "/settings", "gear", "Settings", 0)
 	</nav>
 }
 
-templ repoTab(data RepoNavData, tab, suffix string) {
+templ repoTab(data RepoNavData, tab, suffix, icon, title string, count int) {
 	<a href={ templ.SafeURL("/" + data.Owner + "/" + data.Repo + suffix) } class={ tabClass(data.Tab, tab) }>
-		{ tabTitle(tab) }
+		@Icon(iconName(icon, tab), "")
+		{ title }
+		if count > 0 && (tab == "issues" || tab == "pulls") {
+			<span class="gh-counter">{ strconv.Itoa(count) }</span>
+		}
 	</a>
+}
+
+func iconName(icon, tab string) string {
+	if icon != "" {
+		return icon
+	}
+	return tab
 }
 
 func tabClass(active, tab string) string {
@@ -33,39 +152,186 @@ func tabClass(active, tab string) string {
 	return ""
 }
 
-func tabTitle(tab string) string {
-	switch tab {
-	case "code":
-		return "Code"
-	case "issues":
-		return "Issues"
-	case "pulls":
-		return "Pulls"
-	case "actions":
-		return "Actions"
-	case "releases":
-		return "Releases"
-	case "packages":
-		return "Packages"
-	case "wiki":
-		return "Wiki"
-	case "settings":
-		return "Settings"
-	default:
-		return tab
+templ IssueSubhead(nav RepoNavData, issues []issue.Issue, state string) {
+	<div class="gh-subhead">
+		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class={ subheadPillClass(state, "open") }>
+			@Icon("issue-opened", "")
+			{ strconv.Itoa(countIssuesByState(issues, "open")) } Open
+		</a>
+		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues?state=closed") } class={ subheadPillClass(state, "closed") }>
+			@Icon("issue-closed", "")
+			{ strconv.Itoa(countIssuesByState(issues, "closed")) } Closed
+		</a>
+	</div>
+}
+
+templ PRSubhead(nav RepoNavData, prs []pull.PullRequest, state string) {
+	<div class="gh-subhead">
+		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls") } class={ subheadPillClass(state, "open") }>
+			@Icon("git-pull-request", "")
+			{ strconv.Itoa(countPRsByState(prs, "open")) } Open
+		</a>
+		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls?state=closed") } class={ subheadPillClass(state, "closed") }>
+			@Icon("git-pull-request", "")
+			{ strconv.Itoa(countPRsByState(prs, "closed")) } Closed
+		</a>
+	</div>
+}
+
+func subheadPillClass(current, pill string) string {
+	if current == pill || (current == "" && pill == "open") {
+		return "gh-subhead-pill active"
 	}
+	return "gh-subhead-pill"
+}
+
+func countIssuesByState(issues []issue.Issue, state string) int {
+	n := 0
+	for _, i := range issues {
+		if i.State == state {
+			n++
+		}
+	}
+	return n
+}
+
+func countPRsByState(prs []pull.PullRequest, state string) int {
+	n := 0
+	for _, pr := range prs {
+		if pr.State == state {
+			n++
+		}
+	}
+	return n
+}
+
+templ IssueListItem(nav RepoNavData, i issue.Issue) {
+	<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(i.Number)) } class="gh-list-item">
+		<span class={ "gh-list-item-icon " + issueIconClass(i.State) }>
+			if i.State == "open" {
+				@Icon("issue-opened", "")
+			} else {
+				@Icon("issue-closed", "")
+			}
+		</span>
+		<div class="gh-list-item-body">
+			<div class="gh-list-item-title">{ i.Title }</div>
+			<div class="gh-list-item-meta">
+				#{ strconv.Itoa(i.Number) }
+				if i.Author != "" {
+					<span> opened by { i.Author }</span>
+				}
+			</div>
+		</div>
+	</a>
+}
+
+func issueIconClass(state string) string {
+	if state == "open" {
+		return "open"
+	}
+	return "closed"
+}
+
+templ PRListItem(nav RepoNavData, pr pull.PullRequest) {
+	<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls/" + strconv.Itoa(pr.Number)) } class="gh-list-item">
+		<span class={ "gh-list-item-icon " + prIconClass(pr) }>
+			@Icon(prIconName(pr), "")
+		</span>
+		<div class="gh-list-item-body">
+			<div class="gh-list-item-title">{ pr.Title }</div>
+			<div class="gh-list-item-meta">
+				#{ strconv.Itoa(pr.Number) } · { pr.HeadBranch } → { pr.BaseBranch }
+			</div>
+		</div>
+	</a>
+}
+
+func prIconClass(pr pull.PullRequest) string {
+	if pr.State == "open" {
+		return "open"
+	}
+	if pr.MergedAt != nil {
+		return "closed"
+	}
+	return "closed"
+}
+
+func prIconName(pr pull.PullRequest) string {
+	if pr.MergedAt != nil {
+		return "git-merge"
+	}
+	return "git-pull-request"
+}
+
+templ BranchBar(fullName, ref, path string) {
+	<div class="gh-branch-bar">
+		<span class="gh-branch-selector">
+			@Icon("git-branch", "")
+			{ ref }
+		</span>
+		if path != "" {
+			<span class="gh-breadcrumb">
+				<a href={ templ.SafeURL("/" + fullName + "?ref=" + ref) }>{ fullName }</a>
+				<span> / </span>
+				{ path }
+			</span>
+		}
+	</div>
+}
+
+templ FileTable(fullName, ref, basePath string, entries []gitstore.TreeEntry) {
+	<div class="gh-file-table">
+		for _, e := range entries {
+			<div class="gh-file-row">
+				if e.Type == "dir" {
+					@Icon("file-directory", "")
+				} else {
+					@Icon("file", "")
+				}
+				<a href={ templ.SafeURL(repoEntryURL(fullName, ref, basePath, e)) }>{ e.Path }</a>
+			</div>
+		}
+	</div>
+}
+
+templ CommentBox(author, action string, body templ.Component) {
+	<li class="gh-timeline-item">
+		<div class="gh-timeline-rail">
+			@Avatar(author, "")
+		</div>
+		<div class="gh-timeline-body">
+			<div class="gh-timeline-header">
+				<strong>{ author }</strong> { action }
+			</div>
+			<div class="gh-timeline-content">
+				@body
+			</div>
+		</div>
+	</li>
 }
 
 templ StateBadge(state string) {
 	if state == "open" {
-		<span class="badge badge-open">Open</span>
+		<span class="gh-state gh-state-open">
+			@Icon("issue-opened", "")
+			Open
+		</span>
+	} else if state == "merged" {
+		<span class="gh-state gh-state-merged">
+			@Icon("git-merge", "")
+			Merged
+		</span>
 	} else {
-		<span class="badge badge-closed">Closed</span>
+		<span class="gh-state gh-state-closed">
+			@Icon("issue-closed", "")
+			Closed
+		</span>
 	}
 }
 
 templ LabelBadge(name, color string) {
-	<span class="label-chip" style={ "background:" + labelColor(color) }>{ name }</span>
+	<span class="gh-label" style={ "background:" + labelColor(color) }>{ name }</span>
 }
 
 func labelColor(color string) string {

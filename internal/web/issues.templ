@@ -1,39 +1,50 @@
 package web
 
 import (
-	"strconv"
-
 	"github.com/rusik69/govnohub/internal/issue"
 )
 
-templ IssuesPage(layout LayoutData, nav RepoNavData, issues []issue.Issue, csrf string) {
+templ IssuesPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, issues []issue.Issue, state, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: IssuesContent(nav, issues, csrf),
+		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		Content: IssuesContent(header, nav, issues, state, csrf),
 	})
 }
 
-templ IssuesContent(nav RepoNavData, issues []issue.Issue, csrf string) {
-	<div class="flex justify-between items-center mb-4">
-		<h1 class="text-xl font-bold">Issues</h1>
+templ IssuesContent(header RepoHeaderData, nav RepoNavData, issues []issue.Issue, state, csrf string) {
+	<div class="max-w-7xl mx-auto">
+		@RepoHeader(header)
+		@RepoNav(nav)
+		<div class="flex justify-between items-center mb-4 gap-3 flex-wrap">
+			@IssueSubhead(nav, issues, state)
+			<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class="flex gap-2 flex-1" style="max-width:32rem">
+				@CSRFInput(csrf)
+				<input type="text" name="title" placeholder="Title" required class="input flex-1"/>
+				<button type="submit" class="btn">New issue</button>
+			</form>
+		</div>
+		if len(filterIssues(issues, state)) == 0 {
+			@EmptyState("No issues found")
+		} else {
+			<div class="gh-list">
+				for _, i := range filterIssues(issues, state) {
+					@IssueListItem(nav, i)
+				}
+			</div>
+		}
 	</div>
-	@RepoNav(nav)
-	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class="card p-4 mb-4 flex gap-3">
-		@CSRFInput(csrf)
-		<input type="text" name="title" placeholder="Issue title" required class="input flex-1"/>
-		<button type="submit" class="btn">New issue</button>
-	</form>
-	if len(issues) == 0 {
-		@EmptyState("No issues yet")
-	} else {
-		<ul class="card">
-			for _, i := range issues {
-				<li class="border-b px-4 py-3 flex items-center gap-3">
-					@StateBadge(i.State)
-					<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(i.Number)) } class="font-medium">{ i.Title }</a>
-					<span class="text-sm text-muted ml-auto">#{ i.Number }</span>
-				</li>
-			}
-		</ul>
+}
+
+func filterIssues(issues []issue.Issue, state string) []issue.Issue {
+	if state == "" || state == "open" {
+		state = "open"
 	}
+	var out []issue.Issue
+	for _, i := range issues {
+		if i.State == state {
+			out = append(out, i)
+		}
+	}
+	return out
 }

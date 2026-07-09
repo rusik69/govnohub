@@ -32,7 +32,14 @@ templ Layout(data LayoutData) {
 					const dark = !document.documentElement.classList.contains('dark');
 					document.documentElement.classList.toggle('dark', dark);
 					localStorage.setItem('theme', dark ? 'dark' : 'light');
+					updateThemeIcon();
 				}
+				function updateThemeIcon() {
+					const dark = document.documentElement.classList.contains('dark');
+					document.querySelectorAll('.theme-icon-sun').forEach(el => el.classList.toggle('hidden', dark));
+					document.querySelectorAll('.theme-icon-moon').forEach(el => el.classList.toggle('hidden', !dark));
+				}
+				document.addEventListener('DOMContentLoaded', updateThemeIcon);
 				document.addEventListener('htmx:configRequest', function(evt) {
 					const token = document.querySelector('meta[name="csrf-token"]');
 					if (token) evt.detail.headers['X-CSRF-Token'] = token.content;
@@ -41,46 +48,60 @@ templ Layout(data LayoutData) {
 		</head>
 		<body class="min-h-screen">
 			if !data.HideNav {
-				<header class="site-header">
-					<div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
-						<div class="flex items-center gap-4">
-							<a href="/" class="text-lg font-bold">Govnohub</a>
-							if data.User != nil {
-								<form action="/search" method="get" class="hidden md:block">
-									<input type="search" name="q" placeholder="Search..." class="input" style="width:16rem"/>
-								</form>
-							}
-						</div>
-						<div class="flex items-center gap-3">
-							<button type="button" class="theme-btn" onclick="toggleTheme()">Theme</button>
+				<header class="gh-header">
+					<div class="gh-header-inner">
+						<a href="/" class="gh-header-mark" aria-label="Govnohub home" title="Govnohub">
+							@Icon("mark-github", "")
+						</a>
+						if data.User != nil {
+							<form action="/search" method="get" class="gh-header-search">
+								@Icon("search", "")
+								<input type="search" name="q" placeholder="Search or jump to..."/>
+							</form>
+						}
+						<div class="gh-header-actions">
+							<button type="button" class="gh-header-btn" onclick="toggleTheme()" title="Toggle theme">
+								<span class="theme-icon-sun">
+									@Icon("sun", "")
+								</span>
+								<span class="theme-icon-moon hidden">
+									@Icon("moon", "")
+								</span>
+							</button>
 							if data.User != nil {
 								<div class="notif-bell">
 									<button
-										class="btn-secondary"
-										style="background:transparent;border-color:rgba(255,255,255,.3);color:#fff"
+										class="gh-header-btn"
 										hx-get="/notifications"
 										hx-target="#notif-panel"
 										hx-swap="innerHTML"
+										title="Notifications"
 									>
-										🔔
+										@Icon("bell", "")
 									</button>
 									if data.UnreadNotifs > 0 {
 										<span class="notif-count">{ unreadLabel(data.UnreadNotifs) }</span>
 									}
 									<div id="notif-panel" class="notif-dropdown card hidden"></div>
 								</div>
-								<div class="flex items-center gap-2">
-									<a href={ templ.SafeURL("/settings") }>{ data.User.Username }</a>
-									if data.User.User != nil && data.User.User.Role == auth.RoleAdmin {
-										<a href="/admin/users" class="text-sm">Admin</a>
-									}
-									<form action="/logout" method="post" class="inline">
-										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-										<button type="submit" class="btn-secondary" style="background:transparent;border-color:rgba(255,255,255,.3);color:#fff">Logout</button>
-									</form>
-								</div>
+								<details class="gh-user-menu">
+									<summary>
+										@Avatar(data.User.Username, "")
+										<span class="gh-header-link">{ data.User.Username }</span>
+									</summary>
+									<div class="gh-user-dropdown">
+										<a href="/settings">Settings</a>
+										if data.User.User != nil && data.User.User.Role == auth.RoleAdmin {
+											<a href="/admin/users">Admin</a>
+										}
+										<form action="/logout" method="post">
+											<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+											<button type="submit">Sign out</button>
+										</form>
+									</div>
+								</details>
 							} else {
-								<a href="/login">Sign in</a>
+								<a href="/login" class="gh-header-link">Sign in</a>
 							}
 						</div>
 					</div>

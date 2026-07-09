@@ -59,6 +59,9 @@ func (h *Handler) Routes() chi.Router {
 			r.Get("/", h.handleRepo)
 			r.Get("/tree/*", h.handleRepoTree)
 			r.Get("/blob/*", h.handleRepoBlob)
+			r.Post("/star", h.handleStar)
+			r.Post("/watch", h.handleWatch)
+			r.Post("/fork", h.handleFork)
 
 			r.Get("/issues", h.handleIssues)
 			r.Post("/issues", h.handleCreateIssue)

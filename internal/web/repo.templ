@@ -7,6 +7,7 @@ import (
 
 type RepoPageData struct {
 	Layout   LayoutData
+	Header   RepoHeaderData
 	Nav      RepoNavData
 	Repo     *repo.Repository
 	Path     string
@@ -26,50 +27,21 @@ templ RepoPage(data RepoPageData) {
 
 templ RepoContent(data RepoPageData) {
 	<div class="max-w-7xl mx-auto">
-		<h1 class="text-xl font-bold mb-2">
-			<a href={ templ.SafeURL("/" + data.Repo.FullName) }>{ data.Repo.FullName }</a>
-		</h1>
-		if data.Repo.Description != "" {
-			<p class="text-muted mb-4">{ data.Repo.Description }</p>
-		}
+		@RepoHeader(data.Header)
 		@RepoNav(data.Nav)
-		<div class="flex gap-4 max-md-flex-col">
-			<aside class="sidebar file-tree card p-3">
-				@fileTree(data.Repo.FullName, data.Ref, data.Path, data.Entries)
-			</aside>
-			<div class="flex-1">
-				if data.Content != "" {
-					<div class="card p-4">
-						<pre class="m-0 font-mono text-sm whitespace-pre-wrap overflow-auto">{ data.Content }</pre>
-					</div>
-				} else if len(data.Entries) > 0 {
-					<table class="card">
-						<tbody>
-							for _, e := range data.Entries {
-								<tr>
-									<td>
-										<a href={ templ.SafeURL(repoEntryURL(data.Repo.FullName, data.Ref, data.Path, e)) }>
-											{ entryIcon(e.Type) } { e.Path }
-										</a>
-									</td>
-								</tr>
-							}
-						</tbody>
-					</table>
-				} else {
-					@EmptyState("Empty repository")
-				}
+		@BranchBar(data.Repo.FullName, data.Ref, data.Path)
+		if data.Content != "" {
+			<div class="gh-code-block">
+				<pre class="font-mono whitespace-pre-wrap">{ data.Content }</pre>
 			</div>
-		</div>
+		} else if len(data.Entries) > 0 {
+			@FileTable(data.Repo.FullName, data.Ref, data.Path, data.Entries)
+		} else {
+			<div class="gh-file-table">
+				@EmptyState("This repository is empty")
+			</div>
+		}
 	</div>
-}
-
-templ fileTree(fullName, ref, path string, entries []gitstore.TreeEntry) {
-	for _, e := range entries {
-		<a href={ templ.SafeURL(repoEntryURL(fullName, ref, path, e)) }>
-			{ entryIcon(e.Type) } { e.Path }
-		</a>
-	}
 }
 
 func repoEntryURL(fullName, ref, basePath string, e gitstore.TreeEntry) string {
@@ -81,11 +53,4 @@ func repoEntryURL(fullName, ref, basePath string, e gitstore.TreeEntry) string {
 		return "/" + fullName + "/tree/" + p + "?ref=" + ref
 	}
 	return "/" + fullName + "/blob/" + p + "?ref=" + ref
-}
-
-func entryIcon(t string) string {
-	if t == "dir" {
-		return "📁"
-	}
-	return "📄"
 }

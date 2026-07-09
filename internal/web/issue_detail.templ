@@ -6,83 +6,94 @@ import (
 	"github.com/rusik69/govnohub/internal/issue"
 )
 
-templ IssueDetailPage(layout LayoutData, nav RepoNavData, iss *issue.Issue, comments []issue.Comment, labels []issue.Label, milestones []issue.Milestone, users []string, csrf string) {
+templ IssueDetailPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, iss *issue.Issue, comments []issue.Comment, labels []issue.Label, milestones []issue.Milestone, users []string, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: IssueDetailContent(nav, iss, comments, labels, milestones, users, csrf),
+		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		Content: IssueDetailContent(header, nav, iss, comments, labels, milestones, users, csrf),
 	})
 }
 
-templ IssueDetailContent(nav RepoNavData, iss *issue.Issue, comments []issue.Comment, labels []issue.Label, milestones []issue.Milestone, users []string, csrf string) {
-	@RepoNav(nav)
-	<div class="flex gap-4 max-md-flex-col">
-		<div class="flex-1">
-			<div class="flex items-center gap-2 mb-2">
-				@StateBadge(iss.State)
-				<h1 class="text-xl font-bold m-0">{ iss.Title } <span class="text-muted font-normal">#{ iss.Number }</span></h1>
-			</div>
-			<div class="card p-4 mb-4 markdown">
-				@templ.Raw(issueBodyHTML(iss.Body))
-			</div>
-			for _, c := range comments {
-				<div class="card p-4 mb-3">
-					<p class="text-sm text-muted m-0 mb-2"><strong>{ c.Author }</strong> commented</p>
-					<div class="markdown">@templ.Raw(issueBodyHTML(c.Body))</div>
+templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issue, comments []issue.Comment, labels []issue.Label, milestones []issue.Milestone, users []string, csrf string) {
+	<div class="max-w-7xl mx-auto">
+		@RepoHeader(header)
+		@RepoNav(nav)
+		<div class="flex gap-4 max-md-flex-col">
+			<div class="flex-1">
+				<div class="flex items-center gap-2 mb-3">
+					@StateBadge(iss.State)
+					<h1 class="gh-detail-title m-0">
+						{ iss.Title } <span class="num">#{ iss.Number }</span>
+					</h1>
 				</div>
-			}
-			<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/comment") } class="card p-4">
-				@CSRFInput(csrf)
-				<textarea name="body" class="input mb-3" rows="4" placeholder="Leave a comment"></textarea>
-				<button type="submit" class="btn">Comment</button>
-			</form>
-		</div>
-		<aside class="sidebar">
-			<div class="card p-4 mb-4">
-				<h3 class="text-sm font-semibold mb-2">Assignee</h3>
-				<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/assignee" } hx-swap="none">
+				<ul class="gh-timeline">
+					@CommentBox(iss.Author, "opened this issue", issueBodyComponent(iss.Body))
+					for _, c := range comments {
+						@CommentBox(c.Author, "commented", issueBodyComponent(c.Body))
+					}
+				</ul>
+				<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/comment") } class="mt-4">
 					@CSRFInput(csrf)
-					<select name="assignee" class="input" onchange="this.form.requestSubmit()">
-						<option value="">Unassigned</option>
-						for _, u := range users {
-							<option value={ u } selected?={ iss.Assignee == u }>{ u }</option>
-						}
-					</select>
+					<textarea name="body" class="input mb-3" rows="4" placeholder="Leave a comment"></textarea>
+					<button type="submit" class="btn">Comment</button>
 				</form>
 			</div>
-			<div class="card p-4 mb-4">
-				<h3 class="text-sm font-semibold mb-2">Milestone</h3>
-				<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/milestone" } hx-swap="none">
-					@CSRFInput(csrf)
-					<select name="milestone_id" class="input" onchange="this.form.requestSubmit()">
-						<option value="">No milestone</option>
-						for _, m := range milestones {
-							<option value={ m.ID.String() } selected?={ iss.MilestoneID != nil && iss.MilestoneID.String() == m.ID.String() }>{ m.Title }</option>
+			<aside class="sidebar">
+				<div class="gh-sidebar-panel">
+					<div class="gh-sidebar-section">
+						<div class="gh-sidebar-label">Assignees</div>
+						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/assignee" } hx-swap="none">
+							@CSRFInput(csrf)
+							<select name="assignee" class="input" onchange="this.form.requestSubmit()">
+								<option value="">No one assigned</option>
+								for _, u := range users {
+									<option value={ u } selected?={ iss.Assignee == u }>{ u }</option>
+								}
+							</select>
+						</form>
+					</div>
+					<div class="gh-sidebar-section">
+						<div class="gh-sidebar-label">Milestone</div>
+						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/milestone" } hx-swap="none">
+							@CSRFInput(csrf)
+							<select name="milestone_id" class="input" onchange="this.form.requestSubmit()">
+								<option value="">No milestone</option>
+								for _, m := range milestones {
+									<option value={ m.ID.String() } selected?={ iss.MilestoneID != nil && iss.MilestoneID.String() == m.ID.String() }>{ m.Title }</option>
+								}
+							</select>
+						</form>
+					</div>
+					<div class="gh-sidebar-section">
+						<div class="gh-sidebar-label">Labels</div>
+						<div class="flex flex-wrap gap-2 mb-3">
+							for _, l := range iss.Labels {
+								@LabelBadge(l.Name, l.Color)
+							}
+						</div>
+						for _, l := range labels {
+							<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/labels/" + l.ID.String()) } class="inline mr-2">
+								@CSRFInput(csrf)
+								<button type="submit" class="btn-secondary text-xs">+ { l.Name }</button>
+							</form>
 						}
-					</select>
-				</form>
-			</div>
-			<div class="card p-4 mb-4">
-				<h3 class="text-sm font-semibold mb-2">Labels</h3>
-				<div class="flex flex-wrap gap-2 mb-3">
-					for _, l := range iss.Labels {
-						@LabelBadge(l.Name, l.Color)
+					</div>
+					if iss.State == "open" {
+						<div class="gh-sidebar-section">
+							<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/close") }>
+								@CSRFInput(csrf)
+								<button type="submit" class="btn-secondary w-full">Close issue</button>
+							</form>
+						</div>
 					}
 				</div>
-				for _, l := range labels {
-					<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/labels/" + l.ID.String()) } class="inline mr-2">
-						@CSRFInput(csrf)
-						<button type="submit" class="btn-secondary text-xs">+ { l.Name }</button>
-					</form>
-				}
-			</div>
-			if iss.State == "open" {
-				<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/close") }>
-					@CSRFInput(csrf)
-					<button type="submit" class="btn-secondary w-full">Close issue</button>
-				</form>
-			}
-		</aside>
+			</aside>
+		</div>
 	</div>
+}
+
+templ issueBodyComponent(body string) {
+	<div class="markdown">@templ.Raw(issueBodyHTML(body))</div>
 }
 
 func issueBodyHTML(body string) string {
