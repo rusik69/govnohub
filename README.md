@@ -48,6 +48,15 @@ echo "127.0.0.1 govnohub.local git.govnohub.local" | sudo tee -a /etc/hosts
 open http://govnohub.local
 ```
 
+## Podman + kind (local K8s without Docker)
+
+```bash
+brew install kind    # once
+make deploy-podman-k8s
+echo "127.0.0.1 govnohub.local git.govnohub.local" | sudo tee -a /etc/hosts
+open http://govnohub.local
+```
+
 ## Services
 
 | Service | Port | Description |

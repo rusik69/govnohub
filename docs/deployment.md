@@ -87,6 +87,7 @@ Override with `INSTALL_INGRESS_HOST` and `INSTALL_GIT_HOST` if needed.
 | `podman-k8s-create` | Create kind cluster using Podman + ingress-nginx |
 | `podman-k8s-delete` | Delete kind cluster |
 | `deploy-podman-k8s` | Create cluster and full deploy |
+| `k3d-create` | Create k3d cluster named `govnohub` |
 | `k3d-delete` | Delete k3d cluster |
 | `k3s-install` | Install k3s (Linux only) |
 | `k3s-uninstall` | Remove k3s |
@@ -100,6 +101,7 @@ Override with `INSTALL_INGRESS_HOST` and `INSTALL_GIT_HOST` if needed.
 
 - Default: `deploy/helm/govnohub/values.yaml` (nginx ingress, 10Gi PVCs)
 - k3s local: `deploy/helm/govnohub/values-k3s.yaml` (traefik, `imagePullPolicy: Never`, smaller PVCs)
+- kind/podman local: `deploy/helm/govnohub/values-kind.yaml` (nginx ingress, `localhost/govnohub` images, RWO PVCs)
 
 ```bash
 helm upgrade --install govnohub ./deploy/helm/govnohub \

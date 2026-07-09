@@ -1,6 +1,6 @@
 # kind + podman local deployment overrides
 image:
-  repository: govnohub
+  repository: localhost/govnohub
   tag: latest
   pullPolicy: Never
 
@@ -18,9 +18,11 @@ opensearch:
 
 git:
   storage: 2Gi
+  accessMode: ReadWriteOnce
 
 artifacts:
   storage: 2Gi
+  accessMode: ReadWriteOnce
 
 runner:
   namespace: govnohub-runners

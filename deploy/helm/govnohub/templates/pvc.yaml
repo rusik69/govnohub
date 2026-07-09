@@ -3,7 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ include "govnohub.fullname" . }}-git
 spec:
-  accessModes: [ReadWriteMany]
+  accessModes: [{{ .Values.git.accessMode | default "ReadWriteMany" }}]
   resources:
     requests:
       storage: {{ .Values.git.storage }}
@@ -13,7 +13,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ include "govnohub.fullname" . }}-artifacts
 spec:
-  accessModes: [ReadWriteMany]
+  accessModes: [{{ .Values.artifacts.accessMode | default "ReadWriteMany" }}]
   resources:
     requests:
       storage: {{ .Values.artifacts.storage }}
