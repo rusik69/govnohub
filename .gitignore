@@ -1,0 +1,62 @@
+# Environment and secrets
+.env
+.env.*
+
+# Go build outputs
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+*.coverprofile
+*.prof
+
+# Root-level Go binaries (from `go build` without -o)
+/api-server
+/git-server
+/govnohub
+/actions-controller
+/webhook-service
+/search-indexer
+
+# Frontend
+node_modules/
+dist/
+frontend/dist/
+frontend/node_modules/
+
+# Runtime data
+backend/volumes/
+data/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.*.sw?
+*.bak
+*.orig
+
+# Logs and process files
+*.log
+*.pid
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
