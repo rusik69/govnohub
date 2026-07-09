@@ -38,6 +38,9 @@ func (s *Store) Exists(owner, name string) bool {
 }
 
 func (s *Store) Init(ctx context.Context, owner, name string) error {
+	if s.Exists(owner, name) {
+		return nil
+	}
 	path := s.RepoPath(owner, name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

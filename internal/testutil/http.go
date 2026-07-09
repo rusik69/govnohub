@@ -51,11 +51,15 @@ func doRequest(t *testing.T, method, url, token string, body io.Reader, contentT
 
 func RegisterAndLogin(t *testing.T, baseURL, username string) string {
 	t.Helper()
-	_, _ = DoJSON(t, http.MethodPost, baseURL+"/api/v1/users", "", map[string]string{
+	resp, _ := DoJSON(t, http.MethodPost, baseURL+"/api/v1/users", "", map[string]string{
 		"username": username,
 		"email":    username + "@test.local",
 		"password": "password123",
 	})
+	if resp.StatusCode == http.StatusForbidden {
+		adminToken := Login(t, baseURL, "admin", "admin")
+		AdminCreateUser(t, baseURL, adminToken, username)
+	}
 	return Login(t, baseURL, username, "password123")
 }
 

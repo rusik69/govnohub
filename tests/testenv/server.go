@@ -1,6 +1,7 @@
 package testenv
 
 import (
+	"context"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -48,8 +49,13 @@ func New(t *testing.T) *Env {
 	}
 	os.MkdirAll(artifactRoot, 0o755)
 
+	authSvc := auth.NewService(pg.Pool, "test-secret", auth.Options{AllowPublicRegistration: false})
+	if err := authSvc.BootstrapAdmin(context.Background(), "admin", "admin@test.local", "admin"); err != nil {
+		t.Fatalf("bootstrap admin: %v", err)
+	}
+
 	srv := api.NewServer(
-		auth.NewService(pg.Pool, "test-secret", auth.Options{AllowPublicRegistration: true}),
+		authSvc,
 		repo.NewService(pg.Pool),
 		gitStore,
 		issue.NewService(pg.Pool),

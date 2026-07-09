@@ -21,7 +21,7 @@ func TestAdminUserManagement(t *testing.T) {
 	}
 	resp, out := testutil.DoJSON(t, http.MethodPost, env.URL+"/api/v1/auth/login", "", map[string]string{
 		"username": "admin",
-		"password": "adminpass",
+		"password": "admin",
 	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("admin login status=%d", resp.StatusCode)
