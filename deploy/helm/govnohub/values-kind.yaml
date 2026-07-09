@@ -36,3 +36,7 @@ bootstrapAdmin:
   password: admin
 
 allowPublicRegistration: false
+
+services:
+  gitServer:
+    hostPort: 2222

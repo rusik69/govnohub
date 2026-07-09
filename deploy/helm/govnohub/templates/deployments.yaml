@@ -42,6 +42,12 @@ spec:
               value: ":8080"
             - name: GIT_HTTP_ADDR
               value: ":8081"
+            {{- if eq $name "git-server" }}
+            - name: GIT_SSH_ADDR
+              value: ":{{ $root.Values.services.gitServer.sshPort }}"
+            - name: GIT_SSH_HOST_KEY
+              value: /data/git/.ssh_host_key
+            {{- end }}
             - name: WEBHOOK_HTTP_ADDR
               value: ":8082"
             {{- if eq $name "api-server" }}
@@ -69,6 +75,12 @@ spec:
           ports:
             - containerPort: 8080
             - containerPort: 8081
+            {{- if eq $name "git-server" }}
+            - containerPort: {{ $root.Values.services.gitServer.sshPort }}
+              {{- if $cfg.hostPort }}
+              hostPort: {{ $cfg.hostPort }}
+              {{- end }}
+            {{- end }}
             - containerPort: 8082
           volumeMounts:
             - name: git-data
@@ -123,7 +135,10 @@ spec:
   selector:
     app: {{ include "govnohub.fullname" . }}-git-server
   ports:
-    - port: 8081
+    - name: http
+      port: 8081
+    - name: ssh
+      port: {{ .Values.services.gitServer.sshPort }}
 ---
 apiVersion: v1
 kind: Service

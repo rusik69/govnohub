@@ -107,17 +107,30 @@ func (s *Store) Open(owner, name string) (*git.Repository, error) {
 	return git.PlainOpen(s.RepoPath(owner, name))
 }
 
+func (s *Store) UploadPackSSH(owner, name string, r io.Reader, w io.Writer) error {
+	return s.runGit(owner, name, "upload-pack", false, r, w)
+}
+
+func (s *Store) ReceivePackSSH(owner, name string, r io.Reader, w io.Writer) error {
+	return s.runGit(owner, name, "receive-pack", false, r, w)
+}
+
 func (s *Store) ReceivePack(owner, name string, r io.Reader, w io.Writer) error {
-	return s.runGit(owner, name, "receive-pack", r, w)
+	return s.runGit(owner, name, "receive-pack", true, r, w)
 }
 
 func (s *Store) UploadPack(owner, name string, r io.Reader, w io.Writer) error {
-	return s.runGit(owner, name, "upload-pack", r, w)
+	return s.runGit(owner, name, "upload-pack", true, r, w)
 }
 
-func (s *Store) runGit(owner, name, cmd string, r io.Reader, w io.Writer) error {
+func (s *Store) runGit(owner, name, cmd string, stateless bool, r io.Reader, w io.Writer) error {
 	path := s.RepoPath(owner, name)
-	c := exec.Command("git", cmd, "--stateless-rpc", path)
+	args := []string{cmd}
+	if stateless {
+		args = append(args, "--stateless-rpc")
+	}
+	args = append(args, path)
+	c := exec.Command("git", args...)
 	c.Dir = path
 	c.Stdin = r
 	c.Stdout = w

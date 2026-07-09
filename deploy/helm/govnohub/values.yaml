@@ -55,6 +55,7 @@ services:
   gitServer:
     replicas: 1
     port: 8081
+    sshPort: 2222
   webhookService:
     replicas: 1
     port: 8082

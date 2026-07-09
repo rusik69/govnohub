@@ -55,20 +55,27 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleGit)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	})
 
 	addr := getEnv("GIT_HTTP_ADDR", ":8081")
-	server := &http.Server{Addr: addr, Handler: mux}
+	httpServer := &http.Server{Addr: addr, Handler: mux}
 	go func() {
-		log.Printf("git-server listening on %s", addr)
-		server.ListenAndServe()
+		log.Printf("git-server http listening on %s", addr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("http: %v", err)
+		}
 	}()
+
+	s.startSSH(getEnv("GIT_SSH_ADDR", ":2222"), getEnv("GIT_SSH_HOST_KEY", ""))
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server.Shutdown(shutdownCtx)
+	httpServer.Shutdown(shutdownCtx)
 }
 
 func (s *server) handleGit(w http.ResponseWriter, r *http.Request) {
