@@ -16,6 +16,8 @@ spec:
   template:
     metadata:
       labels:
+        {{- include "govnohub.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
         app: {{ include "govnohub.fullname" $root }}-{{ $name }}
     spec:
       serviceAccountName: {{ include "govnohub.fullname" $root }}-{{ $name }}

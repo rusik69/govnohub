@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -61,8 +62,8 @@ func TestGovnohubDeployed(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Minute)
 	for time.Now().Before(deadline) {
 		out, err := exec.Command("kubectl", "get", "pods", "-n", ns,
-			"-l", "app.kubernetes.io/name=govnohub", "-o", "jsonpath={.items[*].status.phase}").CombinedOutput()
-		if err == nil && string(out) != "" {
+			"-l", "app.kubernetes.io/name=govnohub", "--field-selector=status.phase=Running").CombinedOutput()
+		if err == nil && strings.TrimSpace(string(out)) != "" {
 			return
 		}
 		time.Sleep(5 * time.Second)
