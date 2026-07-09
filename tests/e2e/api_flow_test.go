@@ -70,6 +70,22 @@ jobs:
 		t.Fatalf("star: %d", resp.StatusCode)
 	}
 
+	other := "e2ecollab"
+	testutil.RegisterAndLogin(t, base, other)
+	resp, _ = testutil.DoJSON(t, http.MethodPut, base+"/api/v1/repos/"+user+"/app/collaborators/"+other, token, map[string]string{
+		"permission": "read",
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("add collaborator: %d", resp.StatusCode)
+	}
+
+	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+user+"/app/protected-branches", token, map[string]any{
+		"branch": "main", "required_checks": []string{}, "require_reviews": 0,
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("protect branch: %d", resp.StatusCode)
+	}
+
 	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+user+"/app/issues/"+itoa(int(issueNum))+"/close", token, nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("close issue: %d", resp.StatusCode)

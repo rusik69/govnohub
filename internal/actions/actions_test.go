@@ -80,6 +80,21 @@ jobs:
 	}
 }
 
+func TestBuildUsesScript(t *testing.T) {
+	script := BuildUsesScript(Step{Uses: "actions/checkout@v4"}, GitHubContext("o", "r", "sha", "main", "push"))
+	if !contains(script, "Checking out") {
+		t.Fatalf("checkout script=%s", script)
+	}
+	script = BuildUsesScript(Step{Uses: "actions/setup-go@v5"}, nil)
+	if !contains(script, "Go") {
+		t.Fatalf("setup-go script=%s", script)
+	}
+	script = BuildUsesScript(Step{Uses: "actions/unknown@v1"}, nil)
+	if !contains(script, "warning") {
+		t.Fatalf("unknown script=%s", script)
+	}
+}
+
 func TestWriteJobScript(t *testing.T) {
 	script := WriteJobScript([]Step{{Name: "hi", Run: "echo hello"}}, GitHubContext("o", "r", "sha", "main", "push"))
 	if script == "" || !contains(script, "echo hello") {

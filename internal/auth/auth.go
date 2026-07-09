@@ -21,7 +21,22 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUnauthorized       = errors.New("unauthorized")
 	ErrUserExists         = errors.New("user already exists")
+	ErrInsufficientScope  = errors.New("insufficient token scope")
 )
+
+const (
+	ScopeRepo      = "repo"
+	ScopeRepoWrite = "repo:write"
+	ScopeWorkflow  = "workflow"
+	ScopeReadUser  = "read:user"
+)
+
+type PATInfo struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Scopes    []string  `json:"scopes"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
 type User struct {
 	ID        uuid.UUID `json:"id"`
@@ -133,20 +148,89 @@ func (s *Service) CreatePAT(ctx context.Context, userID uuid.UUID, name string, 
 }
 
 func (s *Service) ValidatePAT(ctx context.Context, token string) (uuid.UUID, error) {
+	userID, _, err := s.ValidatePATWithScopes(ctx, token)
+	return userID, err
+}
+
+func (s *Service) ValidatePATWithScopes(ctx context.Context, token string) (uuid.UUID, []string, error) {
 	token = strings.TrimPrefix(token, "ghp_")
 	hash := hashToken(token)
 	var userID uuid.UUID
+	var scopes []string
 	err := s.pool.QueryRow(ctx, `
-		SELECT user_id FROM personal_access_tokens
+		SELECT user_id, scopes FROM personal_access_tokens
 		WHERE token_hash=$1 AND (expires_at IS NULL OR expires_at > NOW())`, hash,
-	).Scan(&userID)
+	).Scan(&userID, &scopes)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, ErrUnauthorized
+			return uuid.Nil, nil, ErrUnauthorized
 		}
-		return uuid.Nil, err
+		return uuid.Nil, nil, err
 	}
-	return userID, nil
+	return userID, scopes, nil
+}
+
+func HasScope(scopes []string, required string) bool {
+	if len(scopes) == 0 {
+		return true
+	}
+	for _, s := range scopes {
+		if s == required {
+			return true
+		}
+		if required == ScopeRepo && (s == ScopeRepoWrite || s == ScopeWorkflow) {
+			return true
+		}
+		if required == ScopeRepoWrite && s == ScopeRepoWrite {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) ListPATs(ctx context.Context, userID uuid.UUID) ([]PATInfo, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, name, scopes, created_at FROM personal_access_tokens
+		WHERE user_id=$1 ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PATInfo
+	for rows.Next() {
+		var p PATInfo
+		if err := rows.Scan(&p.ID, &p.Name, &p.Scopes, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) RevokePAT(ctx context.Context, userID, patID uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM personal_access_tokens WHERE id=$1 AND user_id=$2`, patID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUnauthorized
+	}
+	return nil
+}
+
+func (s *Service) GetUserByUsername(ctx context.Context, username string) (*User, error) {
+	var u User
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, username, email, COALESCE(avatar_url,''), created_at
+		FROM users WHERE username=$1`, username,
+	).Scan(&u.ID, &u.Username, &u.Email, &u.AvatarURL, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUnauthorized
+		}
+		return nil, err
+	}
+	return &u, nil
 }
 
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {

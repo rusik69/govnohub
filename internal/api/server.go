@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/rusik69/govnohub/internal/actions"
+	"github.com/rusik69/govnohub/internal/aireview"
 	"github.com/rusik69/govnohub/internal/auth"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
@@ -38,6 +39,7 @@ type Server struct {
 	search   *search.Service
 	pool     *pgxpool.Pool
 	org      *org.Service
+	aiReview *aireview.Service
 }
 
 func NewServer(
@@ -52,12 +54,13 @@ func NewServer(
 	searchSvc *search.Service,
 	pool *pgxpool.Pool,
 	orgSvc *org.Service,
+	aiReviewSvc *aireview.Service,
 ) *Server {
 	return &Server{
 		auth: authSvc, repos: repoSvc, git: gitStore,
 		issues: issueSvc, pulls: pullSvc, releases: releaseSvc,
 		packages: pkgSvc, webhooks: webhookSvc, search: searchSvc,
-		pool: pool, org: orgSvc,
+		pool: pool, org: orgSvc, aiReview: aiReviewSvc,
 	}
 }
 
@@ -82,6 +85,8 @@ func (s *Server) Router() http.Handler {
 		r.Use(s.authenticate)
 		r.Get("/user", s.handleCurrentUser)
 		r.Post("/user/tokens", s.handleCreatePAT)
+		r.Get("/user/tokens", s.handleListPATs)
+		r.Delete("/user/tokens/{tokenID}", s.handleRevokePAT)
 		r.Get("/user/repos", s.handleListUserRepos)
 		r.Get("/search", s.handleSearch)
 		s.registerOrgRoutes(r)
@@ -110,6 +115,9 @@ func (s *Server) Router() http.Handler {
 			r.Post("/pulls/{number}/reviews", s.handleAddReview)
 			r.Post("/pulls/{number}/merge", s.handleMergePR)
 			r.Get("/pulls/{number}/diff", s.handlePRDiff)
+			r.Get("/pulls/{number}/ai-reviews", s.handleListAIReviews)
+			r.Post("/pulls/{number}/ai-reviews", s.handleCreateAIReview)
+			r.Get("/ai-review/config", s.handleAIReviewConfig)
 
 			r.Get("/actions/workflows", s.handleListWorkflows)
 			r.Post("/actions/workflows", s.handleUpsertWorkflow)
@@ -129,7 +137,12 @@ func (s *Server) Router() http.Handler {
 			r.Post("/webhooks", s.handleCreateWebhook)
 
 			r.Post("/branches", s.handleCreateBranch)
+			r.Get("/protected-branches", s.handleListProtectedBranches)
 			r.Post("/protected-branches", s.handleProtectBranch)
+
+			r.Get("/collaborators", s.handleListCollaborators)
+			r.Put("/collaborators/{username}", s.handleAddCollaborator)
+			r.Delete("/collaborators/{username}", s.handleRemoveCollaborator)
 		})
 	})
 	return r
@@ -137,7 +150,11 @@ func (s *Server) Router() http.Handler {
 
 type ctxKey string
 
-const userIDKey ctxKey = "userID"
+const (
+	userIDKey  ctxKey = "userID"
+	scopesKey  ctxKey = "scopes"
+	isPATKey   ctxKey = "isPAT"
+)
 
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -149,8 +166,16 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		token := strings.TrimPrefix(h, "Bearer ")
 		var userID uuid.UUID
 		var err error
+		ctx := r.Context()
 		if strings.HasPrefix(token, "ghp_") {
-			userID, err = s.auth.ValidatePAT(r.Context(), token)
+			var scopes []string
+			userID, scopes, err = s.auth.ValidatePATWithScopes(ctx, token)
+			if err != nil {
+				jsonError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+			ctx = context.WithValue(ctx, scopesKey, scopes)
+			ctx = context.WithValue(ctx, isPATKey, true)
 		} else {
 			userID, _, err = s.auth.ValidateToken(token)
 		}
@@ -158,9 +183,30 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			jsonError(w, http.StatusUnauthorized, "invalid token")
 			return
 		}
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
+		ctx = context.WithValue(ctx, userIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func isPATAuth(ctx context.Context) bool {
+	v, _ := ctx.Value(isPATKey).(bool)
+	return v
+}
+
+func scopesFrom(ctx context.Context) []string {
+	scopes, _ := ctx.Value(scopesKey).([]string)
+	return scopes
+}
+
+func (s *Server) requireScope(w http.ResponseWriter, r *http.Request, scope string) bool {
+	if !isPATAuth(r.Context()) {
+		return true
+	}
+	if !auth.HasScope(scopesFrom(r.Context()), scope) {
+		jsonError(w, http.StatusForbidden, "insufficient token scope")
+		return false
+	}
+	return true
 }
 
 func userIDFrom(ctx context.Context) uuid.UUID {
@@ -204,6 +250,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCurrentUser(w http.ResponseWriter, r *http.Request) {
+	if isPATAuth(r.Context()) {
+		scopes := scopesFrom(r.Context())
+		if !auth.HasScope(scopes, auth.ScopeReadUser) && !auth.HasScope(scopes, auth.ScopeRepo) {
+			jsonError(w, http.StatusForbidden, "insufficient token scope")
+			return
+		}
+	}
 	u, err := s.auth.GetUser(r.Context(), userIDFrom(r.Context()))
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "user not found")
@@ -226,6 +279,31 @@ func (s *Server) handleCreatePAT(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"token": token})
 }
 
+func (s *Server) handleListPATs(w http.ResponseWriter, r *http.Request) {
+	tokens, err := s.auth.ListPATs(r.Context(), userIDFrom(r.Context()))
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if tokens == nil {
+		tokens = []auth.PATInfo{}
+	}
+	jsonOK(w, tokens)
+}
+
+func (s *Server) handleRevokePAT(w http.ResponseWriter, r *http.Request) {
+	patID, err := uuid.Parse(chi.URLParam(r, "tokenID"))
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid token id")
+		return
+	}
+	if err := s.auth.RevokePAT(r.Context(), userIDFrom(r.Context()), patID); err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"status": "revoked"})
+}
+
 func (s *Server) handleListUserRepos(w http.ResponseWriter, r *http.Request) {
 	repos, err := s.repos.ListForUser(r.Context(), userIDFrom(r.Context()))
 	if err != nil {
@@ -236,6 +314,9 @@ func (s *Server) handleListUserRepos(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateUserRepo(w http.ResponseWriter, r *http.Request) {
+	if !s.requireScope(w, r, auth.ScopeRepoWrite) {
+		return
+	}
 	username := chi.URLParam(r, "user")
 	u, err := s.auth.GetUser(r.Context(), userIDFrom(r.Context()))
 	if err != nil || u == nil {
@@ -303,6 +384,15 @@ func (s *Server) getRepoPerm(w http.ResponseWriter, r *http.Request, perm string
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "repo not found")
 		return nil, false
+	}
+	if isPATAuth(r.Context()) {
+		scope := auth.ScopeRepo
+		if perm == "write" {
+			scope = auth.ScopeRepoWrite
+		}
+		if !s.requireScope(w, r, scope) {
+			return nil, false
+		}
 	}
 	ok, _ := s.repos.CanAccess(r.Context(), repository.ID, userIDFrom(r.Context()), perm)
 	if !ok {
@@ -547,6 +637,7 @@ func (s *Server) handleCreatePR(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.runAutoAIReview(repository.OwnerName, repository.Name, pr.Number)
 	jsonOK(w, pr)
 }
 
@@ -603,6 +694,11 @@ func (s *Server) handleMergePR(w http.ResponseWriter, r *http.Request) {
 	pr, err := s.pulls.Get(r.Context(), repository.ID, num)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	approved, _ := s.pulls.ReviewCount(r.Context(), pr.ID, "approved")
+	if err := s.repos.ValidateMergeProtection(r.Context(), repository.ID, pr.BaseBranch, pr.HeadSHA, approved); err != nil {
+		jsonError(w, http.StatusForbidden, err.Error())
 		return
 	}
 	var req struct{ Squash bool `json:"squash"` }

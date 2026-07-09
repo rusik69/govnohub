@@ -99,7 +99,7 @@ func (wf *Workflow) JobOrder() ([]string, error) {
 		}
 		visited[id] = true
 		job := wf.Jobs[id]
-		for _, dep := range normalizeNeeds(job.Needs) {
+		for _, dep := range NormalizeNeeds(job.Needs) {
 			if err := visit(dep); err != nil {
 				return err
 			}
@@ -115,7 +115,7 @@ func (wf *Workflow) JobOrder() ([]string, error) {
 	return order, nil
 }
 
-func normalizeNeeds(v interface{}) []string {
+func NormalizeNeeds(v interface{}) []string {
 	switch n := v.(type) {
 	case string:
 		return []string{n}
@@ -157,7 +157,7 @@ func BuildStepScript(step Step, ctx map[string]string) string {
 		return EvalExpression(step.Run, ctx)
 	}
 	if step.Uses != "" {
-		return fmt.Sprintf("echo 'action %s not fully supported yet'", step.Uses)
+		return BuildUsesScript(step, ctx)
 	}
 	return "true"
 }

@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"github.com/rusik69/govnohub/internal/actions"
+	"github.com/rusik69/govnohub/internal/auth"
 )
 
 func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +102,9 @@ func (s *Server) handleListRuns(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTriggerRun(w http.ResponseWriter, r *http.Request) {
 	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
+		return
+	}
+	if !s.requireScope(w, r, auth.ScopeWorkflow) {
 		return
 	}
 	var req struct {

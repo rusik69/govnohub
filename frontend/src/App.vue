@@ -14,6 +14,7 @@ const auth = useAuthStore()
       <RouterLink to="/search" class="text-sm text-white/80 hover:text-white hover:no-underline">Search</RouterLink>
       <div class="flex-1" />
       <template v-if="auth.isLoggedIn">
+        <RouterLink to="/settings" class="text-sm text-white/80 hover:text-white hover:no-underline">Settings</RouterLink>
         <span class="text-sm">{{ auth.user?.username }}</span>
         <button class="text-sm text-white/80 hover:text-white" @click="auth.logout()">Sign out</button>
       </template>

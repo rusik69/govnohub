@@ -83,7 +83,7 @@ func (s *server) handleGit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, username, authed := s.authenticate(r)
+	userID, username, scopes, isPAT, authed := s.authenticate(r)
 	if !authed {
 		w.Header().Set("WWW-Authenticate", `Basic realm="govnohub"`)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -100,6 +100,10 @@ func (s *server) handleGit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	if isPAT && !auth.HasScope(scopes, auth.ScopeRepo) {
+		http.Error(w, "forbidden: insufficient token scope", http.StatusForbidden)
+		return
+	}
 	if !s.git.Exists(owner, name) {
 		http.NotFound(w, r)
 		return
@@ -114,6 +118,10 @@ func (s *server) handleGit(w http.ResponseWriter, r *http.Request) {
 		canWrite, _ := s.repos.CanAccess(r.Context(), repository.ID, userID, "write")
 		if !canWrite {
 			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if isPAT && !auth.HasScope(scopes, auth.ScopeRepoWrite) {
+			http.Error(w, "forbidden: insufficient token scope", http.StatusForbidden)
 			return
 		}
 		before, err := s.git.ListBranchSHAs(owner, name)
@@ -226,42 +234,42 @@ func parseGitPath(path string) (owner, name, service string, ok bool) {
 	return
 }
 
-func (s *server) authenticate(r *http.Request) (uuid.UUID, string, bool) {
+func (s *server) authenticate(r *http.Request) (uuid.UUID, string, []string, bool, bool) {
 	if u, p, ok := r.BasicAuth(); ok {
 		if _, user, err := s.auth.Login(r.Context(), u, p); err == nil {
-			return user.ID, user.Username, true
+			return user.ID, user.Username, nil, false, true
 		}
 		token := p
 		if token == "" {
 			token = u
 		}
 		if strings.HasPrefix(token, "ghp_") {
-			if id, err := s.auth.ValidatePAT(r.Context(), token); err == nil {
+			if id, scopes, err := s.auth.ValidatePATWithScopes(r.Context(), token); err == nil {
 				user, _ := s.auth.GetUser(r.Context(), id)
 				name := u
 				if user != nil {
 					name = user.Username
 				}
-				return id, name, true
+				return id, name, scopes, true, true
 			}
 		}
 	}
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		token := strings.TrimPrefix(h, "Bearer ")
 		if strings.HasPrefix(token, "ghp_") {
-			if id, err := s.auth.ValidatePAT(r.Context(), token); err == nil {
+			if id, scopes, err := s.auth.ValidatePATWithScopes(r.Context(), token); err == nil {
 				user, _ := s.auth.GetUser(r.Context(), id)
 				if user != nil {
-					return id, user.Username, true
+					return id, user.Username, scopes, true, true
 				}
-				return id, "", true
+				return id, "", scopes, true, true
 			}
 		}
 		if id, username, err := s.auth.ValidateToken(token); err == nil {
-			return id, username, true
+			return id, username, nil, false, true
 		}
 	}
-	return uuid.Nil, "", false
+	return uuid.Nil, "", nil, false, false
 }
 
 func getEnv(key, fallback string) string {

@@ -38,6 +38,37 @@ func TestRegisterLoginPAT(t *testing.T) {
 	}
 }
 
+func TestPATScopes(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	svc := NewService(pg.Pool, "test-secret")
+
+	u, _ := svc.Register(ctx, "scopeuser", "scope@test.local", "pass")
+	readPAT, _ := svc.CreatePAT(ctx, u.ID, "read-only", []string{"repo"})
+	writePAT, _ := svc.CreatePAT(ctx, u.ID, "write", []string{"repo:write"})
+
+	_, scopes, err := svc.ValidatePATWithScopes(ctx, readPAT)
+	if err != nil || !HasScope(scopes, ScopeRepo) || HasScope(scopes, ScopeRepoWrite) {
+		t.Fatalf("read PAT scopes: %v %v", scopes, err)
+	}
+	_, scopes, err = svc.ValidatePATWithScopes(ctx, writePAT)
+	if err != nil || !HasScope(scopes, ScopeRepoWrite) {
+		t.Fatalf("write PAT scopes: %v %v", scopes, err)
+	}
+
+	emptyPAT, _ := svc.CreatePAT(ctx, u.ID, "legacy", []string{})
+	_, scopes, err = svc.ValidatePATWithScopes(ctx, emptyPAT)
+	if err != nil || !HasScope(scopes, ScopeRepoWrite) {
+		t.Fatal("empty scopes should grant full access for backward compat")
+	}
+
+	tokens, err := svc.ListPATs(ctx, u.ID)
+	if err != nil || len(tokens) < 3 {
+		t.Fatalf("list pats: %v len=%d", err, len(tokens))
+	}
+}
+
 func TestLoginInvalid(t *testing.T) {
 	pg := testutil.NewPostgres(t)
 	defer pg.Cleanup()

@@ -52,6 +52,9 @@ func main() {
 			return
 		case <-ticker.C:
 			if err := processQueuedRuns(ctx, pool, k8s, cfg); err != nil {
+				log.Printf("dispatch error: %v", err)
+			}
+			if err := reconcileInProgressRuns(ctx, pool, k8s, cfg); err != nil {
 				log.Printf("reconcile error: %v", err)
 			}
 		}
@@ -67,8 +70,12 @@ func processQueuedRuns(ctx context.Context, pool *pgxpool.Pool, k8s *kubernetes.
 		if err != nil {
 			return err
 		}
-		if err := processRun(ctx, pool, k8s, cfg, runID, sha, branch, event, content, owner, repoName); err != nil {
-			log.Printf("process run %s: %v", runID, err)
+		if err := startRun(ctx, pool, runID, content); err != nil {
+			log.Printf("start run %s: %v", runID, err)
+			continue
+		}
+		if err := dispatchReadyJobs(ctx, pool, k8s, cfg, runID, content, sha, branch, event, owner, repoName); err != nil {
+			log.Printf("dispatch run %s: %v", runID, err)
 		}
 	}
 }
@@ -91,63 +98,222 @@ func claimQueuedRun(ctx context.Context, pool *pgxpool.Pool) (uuid.UUID, string,
 	return runID, sha, branch, event, content, owner, repoName, err
 }
 
-func processRun(ctx context.Context, pool *pgxpool.Pool, k8s *kubernetes.Clientset, cfg config.Config, runID uuid.UUID, sha, branch, event, content, owner, repoName string) error {
+func startRun(ctx context.Context, pool *pgxpool.Pool, runID uuid.UUID, content string) error {
 	wf, err := actions.ParseWorkflow(content)
 	if err != nil {
 		_, err := pool.Exec(ctx, `UPDATE workflow_runs SET status='completed', conclusion='failure', completed_at=NOW() WHERE id=$1`, runID)
 		return err
 	}
-
 	jobOrder, err := wf.JobOrder()
 	if err != nil {
 		_, err := pool.Exec(ctx, `UPDATE workflow_runs SET status='completed', conclusion='failure', completed_at=NOW() WHERE id=$1`, runID)
 		return err
 	}
-
-	allSuccess := true
 	for _, jobID := range jobOrder {
-		job := wf.Jobs[jobID]
-		ctxMap := actions.GitHubContext(owner, repoName, sha, branch, event)
-		script := actions.WriteJobScript(job.Steps, ctxMap)
-		logDir := filepath.Join(cfg.ArtifactRoot, "logs", runID.String())
-		os.MkdirAll(logDir, 0o755)
-		logPath := filepath.Join(logDir, jobID+".log")
-
-		jobName := fmt.Sprintf("run-%s-%s", runID.String()[:8], sanitize(jobID))
-		_, err := k8s.BatchV1().Jobs(cfg.RunnerNS).Create(ctx, buildJob(cfg, jobName, script, logPath), metav1.CreateOptions{})
+		_, err := pool.Exec(ctx, `
+			INSERT INTO workflow_jobs (run_id, job_id, name, status)
+			VALUES ($1,$2,$3,'queued')
+			ON CONFLICT (run_id, job_id) DO NOTHING`, runID, jobID, jobID)
 		if err != nil {
-			log.Printf("create job %s: %v", jobName, err)
-			allSuccess = false
-			if _, execErr := pool.Exec(ctx, `
-				INSERT INTO workflow_jobs (run_id, job_id, name, status, conclusion, log_path)
-				VALUES ($1,$2,$3,'completed','failure',$4)`, runID, jobID, jobID, logPath); execErr != nil {
-				log.Printf("record failed job %s: %v", jobID, execErr)
-			}
+			return err
+		}
+	}
+	return nil
+}
+
+func dispatchReadyJobs(ctx context.Context, pool *pgxpool.Pool, k8s *kubernetes.Clientset, cfg config.Config, runID uuid.UUID, content, sha, branch, event, owner, repoName string) error {
+	wf, err := actions.ParseWorkflow(content)
+	if err != nil {
+		return err
+	}
+	completed, err := completedJobs(ctx, pool, runID)
+	if err != nil {
+		return err
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT job_id FROM workflow_jobs WHERE run_id=$1 AND status='queued'`, runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var jobID string
+		if err := rows.Scan(&jobID); err != nil {
+			return err
+		}
+		job, ok := wf.Jobs[jobID]
+		if !ok {
 			continue
 		}
-
-		if _, err := pool.Exec(ctx, `
-			INSERT INTO workflow_jobs (run_id, job_id, name, status, log_path)
-			VALUES ($1,$2,$3,'in_progress',$4)`, runID, jobID, jobID, logPath); err != nil {
-			log.Printf("record job %s: %v", jobID, err)
+		if !needsSatisfied(job.Needs, completed) {
+			continue
 		}
-
-		conclusion := waitForJob(ctx, k8s, cfg.RunnerNS, jobName)
-		if conclusion != "success" {
-			allSuccess = false
+		if err := dispatchJob(ctx, pool, k8s, cfg, runID, jobID, job, sha, branch, event, owner, repoName); err != nil {
+			log.Printf("dispatch job %s: %v", jobID, err)
 		}
-		if _, err := pool.Exec(ctx, `UPDATE workflow_jobs SET status='completed', conclusion=$3, completed_at=NOW() WHERE run_id=$1 AND job_id=$2`,
-			runID, jobID, conclusion); err != nil {
-			log.Printf("update job %s: %v", jobID, err)
+	}
+	return rows.Err()
+}
+
+func needsSatisfied(needs interface{}, completed map[string]string) bool {
+	for _, dep := range actions.NormalizeNeeds(needs) {
+		if completed[dep] != "success" {
+			return false
+		}
+	}
+	return true
+}
+
+func completedJobs(ctx context.Context, pool *pgxpool.Pool, runID uuid.UUID) (map[string]string, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT job_id, conclusion FROM workflow_jobs
+		WHERE run_id=$1 AND status='completed'`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var jobID string
+		var conclusion *string
+		if err := rows.Scan(&jobID, &conclusion); err != nil {
+			return nil, err
+		}
+		if conclusion != nil {
+			out[jobID] = *conclusion
+		}
+	}
+	return out, rows.Err()
+}
+
+func dispatchJob(ctx context.Context, pool *pgxpool.Pool, k8s *kubernetes.Clientset, cfg config.Config, runID uuid.UUID, jobID string, job actions.Job, sha, branch, event, owner, repoName string) error {
+	ctxMap := actions.GitHubContext(owner, repoName, sha, branch, event)
+	script := actions.WriteJobScript(job.Steps, ctxMap)
+	logDir := filepath.Join(cfg.ArtifactRoot, "logs", runID.String())
+	os.MkdirAll(logDir, 0o755)
+	logPath := filepath.Join(logDir, jobID+".log")
+	jobName := fmt.Sprintf("run-%s-%s", runID.String()[:8], sanitize(jobID))
+
+	_, err := k8s.BatchV1().Jobs(cfg.RunnerNS).Create(ctx, buildJob(cfg, jobName, script, logPath), metav1.CreateOptions{})
+	if err != nil {
+		_, execErr := pool.Exec(ctx, `
+			UPDATE workflow_jobs SET status='completed', conclusion='failure', log_path=$3, completed_at=NOW()
+			WHERE run_id=$1 AND job_id=$2`, runID, jobID, logPath)
+		return execErr
+	}
+	_, err = pool.Exec(ctx, `
+		UPDATE workflow_jobs SET status='in_progress', k8s_job_name=$3, log_path=$4, started_at=NOW()
+		WHERE run_id=$1 AND job_id=$2 AND status='queued'`, runID, jobID, jobName, logPath)
+	return err
+}
+
+func reconcileInProgressRuns(ctx context.Context, pool *pgxpool.Pool, k8s *kubernetes.Clientset, cfg config.Config) error {
+	rows, err := pool.Query(ctx, `SELECT id FROM workflow_runs WHERE status='in_progress'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var runID uuid.UUID
+		if err := rows.Scan(&runID); err != nil {
+			return err
+		}
+		if err := reconcileRun(ctx, pool, k8s, cfg, runID); err != nil {
+			log.Printf("reconcile run %s: %v", runID, err)
+		}
+	}
+	return rows.Err()
+}
+
+func reconcileRun(ctx context.Context, pool *pgxpool.Pool, k8s *kubernetes.Clientset, cfg config.Config, runID uuid.UUID) error {
+	var content, sha, branch, event, owner, repoName string
+	err := pool.QueryRow(ctx, `
+		SELECT w.content, wr.head_sha, wr.head_branch, wr.event, COALESCE(u.username, o.name), r.name
+		FROM workflow_runs wr
+		JOIN workflows w ON wr.workflow_id = w.id
+		JOIN repos r ON wr.repo_id = r.id
+		LEFT JOIN users u ON r.owner_type='user' AND r.owner_id=u.id
+		LEFT JOIN orgs o ON r.owner_type='org' AND r.owner_id=o.id
+		WHERE wr.id=$1`, runID).Scan(&content, &sha, &branch, &event, &owner, &repoName)
+	if err != nil {
+		return err
+	}
+
+	jobRows, err := pool.Query(ctx, `
+		SELECT job_id, status, k8s_job_name FROM workflow_jobs WHERE run_id=$1`, runID)
+	if err != nil {
+		return err
+	}
+	type jobState struct {
+		status     string
+		k8sJobName *string
+	}
+	states := map[string]jobState{}
+	for jobRows.Next() {
+		var jobID, status string
+		var k8sName *string
+		if err := jobRows.Scan(&jobID, &status, &k8sName); err != nil {
+			jobRows.Close()
+			return err
+		}
+		states[jobID] = jobState{status: status, k8sJobName: k8sName}
+	}
+	jobRows.Close()
+
+	for jobID, st := range states {
+		if st.status != "in_progress" || st.k8sJobName == nil {
+			continue
+		}
+		conclusion := pollJob(ctx, k8s, cfg.RunnerNS, *st.k8sJobName)
+		if conclusion == "" {
+			continue
+		}
+		_, err := pool.Exec(ctx, `
+			UPDATE workflow_jobs SET status='completed', conclusion=$3, completed_at=NOW()
+			WHERE run_id=$1 AND job_id=$2`, runID, jobID, conclusion)
+		if err != nil {
+			return err
 		}
 	}
 
+	if err := dispatchReadyJobs(ctx, pool, k8s, cfg, runID, content, sha, branch, event, owner, repoName); err != nil {
+		return err
+	}
+
+	var total, done int
+	var failed bool
+	err = pool.QueryRow(ctx, `
+		SELECT COUNT(*), COUNT(*) FILTER (WHERE status='completed'),
+		       BOOL_OR(conclusion='failure')
+		FROM workflow_jobs WHERE run_id=$1`, runID).Scan(&total, &done, &failed)
+	if err != nil {
+		return err
+	}
+	if total == 0 || done < total {
+		return nil
+	}
 	conclusion := "success"
-	if !allSuccess {
+	if failed {
 		conclusion = "failure"
 	}
-	_, err = pool.Exec(ctx, `UPDATE workflow_runs SET status='completed', conclusion=$2, completed_at=NOW() WHERE id=$1`, runID, conclusion)
+	_, err = pool.Exec(ctx, `
+		UPDATE workflow_runs SET status='completed', conclusion=$2, completed_at=NOW()
+		WHERE id=$1 AND status='in_progress'`, runID, conclusion)
 	return err
+}
+
+func pollJob(ctx context.Context, k8s *kubernetes.Clientset, ns, name string) string {
+	job, err := k8s.BatchV1().Jobs(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+	if job.Status.Succeeded > 0 {
+		return "success"
+	}
+	if job.Status.Failed > 0 {
+		return "failure"
+	}
+	return ""
 }
 
 func buildJob(cfg config.Config, name, script, logPath string) *batchv1.Job {
@@ -176,24 +342,6 @@ func buildJob(cfg config.Config, name, script, logPath string) *batchv1.Job {
 			},
 		},
 	}
-}
-
-func waitForJob(ctx context.Context, k8s *kubernetes.Clientset, ns, name string) string {
-	for i := 0; i < 60; i++ {
-		job, err := k8s.BatchV1().Jobs(ns).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			time.Sleep(2 * time.Second)
-			continue
-		}
-		if job.Status.Succeeded > 0 {
-			return "success"
-		}
-		if job.Status.Failed > 0 {
-			return "failure"
-		}
-		time.Sleep(2 * time.Second)
-	}
-	return "failure"
 }
 
 func newK8sClient() (*kubernetes.Clientset, error) {

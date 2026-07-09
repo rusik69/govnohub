@@ -20,6 +20,14 @@ paths:
   /api/v1/repos/{owner}/{repo}/pulls:
     get:
       summary: List pull requests
+  /api/v1/repos/{owner}/{repo}/pulls/{number}/ai-reviews:
+    get:
+      summary: List AI code reviews for a pull request
+    post:
+      summary: Run AI code review on a pull request
+  /api/v1/repos/{owner}/{repo}/ai-review/config:
+    get:
+      summary: Get AI review configuration
   /api/v1/repos/{owner}/{repo}/actions/runs:
     get:
       summary: List workflow runs

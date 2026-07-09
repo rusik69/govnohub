@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rusik69/govnohub/internal/api"
+	"github.com/rusik69/govnohub/internal/aireview"
 	"github.com/rusik69/govnohub/internal/auth"
 	"github.com/rusik69/govnohub/internal/config"
 	"github.com/rusik69/govnohub/internal/db"
@@ -58,6 +59,13 @@ func main() {
 		searchSvc,
 		pool,
 		org.NewService(pool),
+		aireview.NewService(pool, aireview.NewClient(aireview.Config{
+			Enabled: cfg.AIReview.Enabled,
+			APIKey:  cfg.AIReview.APIKey,
+			BaseURL: cfg.AIReview.BaseURL,
+			Model:   cfg.AIReview.Model,
+			Auto:    cfg.AIReview.Auto,
+		})),
 	)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: srv.Router()}

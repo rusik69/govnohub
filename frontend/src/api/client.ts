@@ -33,6 +33,45 @@ export const authApi = {
   me: () => api.get<User>('/user'),
 }
 
+export interface PATInfo {
+  id: string
+  name: string
+  scopes: string[]
+  created_at: string
+}
+
+export const tokenApi = {
+  create: (name: string, scopes: string[]) => api.post<{ token: string }>('/user/tokens', { name, scopes }),
+  list: () => api.get<PATInfo[]>('/user/tokens'),
+  revoke: (id: string) => api.delete(`/user/tokens/${id}`),
+}
+
+export interface ProtectedBranch {
+  branch_name: string
+  required_checks: string[]
+  require_reviews: number
+}
+
+export const protectedBranchApi = {
+  list: (owner: string, repo: string) => api.get<ProtectedBranch[]>(`/repos/${owner}/${repo}/protected-branches`),
+  protect: (owner: string, repo: string, data: { branch: string; required_checks: string[]; require_reviews: number }) =>
+    api.post(`/repos/${owner}/${repo}/protected-branches`, data),
+}
+
+export interface Collaborator {
+  user_id: string
+  username: string
+  permission: string
+}
+
+export const collaboratorApi = {
+  list: (owner: string, repo: string) => api.get<Collaborator[]>(`/repos/${owner}/${repo}/collaborators`),
+  add: (owner: string, repo: string, username: string, permission: string) =>
+    api.put(`/repos/${owner}/${repo}/collaborators/${username}`, { permission }),
+  remove: (owner: string, repo: string, username: string) =>
+    api.delete(`/repos/${owner}/${repo}/collaborators/${username}`),
+}
+
 export const repoApi = {
   list: () => api.get<Repository[]>('/user/repos'),
   get: (owner: string, repo: string) => api.get<Repository>(`/repos/${owner}/${repo}`),
@@ -70,6 +109,20 @@ export const prApi = {
     api.post(`/repos/${owner}/${repo}/pulls/${number}/merge`, { squash }),
   diff: (owner: string, repo: string, number: number) =>
     api.get(`/repos/${owner}/${repo}/pulls/${number}/diff`, { responseType: 'text' }),
+  aiReviewConfig: (owner: string, repo: string) =>
+    api.get<{ enabled: boolean; model?: string; auto?: boolean }>(`/repos/${owner}/${repo}/ai-review/config`),
+  aiReviews: (owner: string, repo: string, number: number) =>
+    api.get<AIReview[]>(`/repos/${owner}/${repo}/pulls/${number}/ai-reviews`),
+  requestAIReview: (owner: string, repo: string, number: number) =>
+    api.post<AIReview>(`/repos/${owner}/${repo}/pulls/${number}/ai-reviews`),
+}
+
+export interface AIReview {
+  id: string
+  pr_id: string
+  model: string
+  body: string
+  created_at: string
 }
 
 export const actionsApi = {

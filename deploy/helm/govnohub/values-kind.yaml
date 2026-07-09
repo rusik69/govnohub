@@ -1,0 +1,29 @@
+# kind + podman local deployment overrides
+image:
+  repository: govnohub
+  tag: latest
+  pullPolicy: Never
+
+ingress:
+  enabled: true
+  className: nginx
+  host: govnohub.local
+  gitHost: git.govnohub.local
+
+postgresql:
+  storage: 2Gi
+
+opensearch:
+  storage: 2Gi
+
+git:
+  storage: 2Gi
+
+artifacts:
+  storage: 2Gi
+
+runner:
+  namespace: govnohub-runners
+  image: alpine:3.24
+
+jwtSecret: kind-dev-secret

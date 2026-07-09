@@ -7,6 +7,7 @@ const router = createRouter({
     { path: '/login', component: () => import('../views/Login.vue'), meta: { guest: true } },
     { path: '/', component: () => import('../views/Dashboard.vue') },
     { path: '/search', component: () => import('../views/Search.vue') },
+    { path: '/settings', component: () => import('../views/UserSettings.vue') },
     { path: '/:owner/:repo', component: () => import('../views/Repo.vue') },
     { path: '/:owner/:repo/issues', component: () => import('../views/Issues.vue') },
     { path: '/:owner/:repo/issues/:number', component: () => import('../views/IssueDetail.vue') },

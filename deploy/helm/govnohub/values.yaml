@@ -34,6 +34,13 @@ runner:
 
 jwtSecret: change-me-in-production
 
+aiReview:
+  enabled: false
+  apiKey: ""
+  model: deepseek-v4-flash
+  baseURL: https://opencode.ai/zen/go/v1
+  auto: false
+
 services:
   apiServer:
     replicas: 1

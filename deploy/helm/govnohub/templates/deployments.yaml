@@ -44,6 +44,20 @@ spec:
               value: ":8081"
             - name: WEBHOOK_HTTP_ADDR
               value: ":8082"
+            {{- if eq $name "api-server" }}
+            - name: AI_REVIEW_ENABLED
+              value: {{ $root.Values.aiReview.enabled | quote }}
+            - name: AI_REVIEW_MODEL
+              value: {{ $root.Values.aiReview.model | quote }}
+            - name: AI_REVIEW_BASE_URL
+              value: {{ $root.Values.aiReview.baseURL | quote }}
+            - name: AI_REVIEW_AUTO
+              value: {{ $root.Values.aiReview.auto | quote }}
+            {{- if $root.Values.aiReview.apiKey }}
+            - name: OPENCODE_API_KEY
+              value: {{ $root.Values.aiReview.apiKey | quote }}
+            {{- end }}
+            {{- end }}
           ports:
             - containerPort: 8080
             - containerPort: 8081

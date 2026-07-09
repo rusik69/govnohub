@@ -14,7 +14,9 @@ INSTALL_SSH_KEY ?=
 .PHONY: build build-cli test test-unit test-integration test-e2e test-k8s test-all test-frontend \
         run-api run-git docker-build helm-install install \
         k3s-install k3s-uninstall k3s-status k3s-wait k3d-create k3d-delete \
-        k3s-import-images deploy-k3s undeploy-k3s redeploy-k3s docs
+        podman-k8s-create podman-k8s-delete deploy-k3s deploy-podman-k8s undeploy-k3s redeploy-k3s docs
+
+CONTAINER_RUNTIME ?= $(shell if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then echo docker; elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then echo podman; else echo docker; fi)
 
 build:
 	go build -o bin/api-server ./cmd/api-server
@@ -31,7 +33,8 @@ build-cli:
 test: test-unit
 
 test-unit:
-	go test -race -count=1 ./internal/... -short
+	go test -race -count=1 -coverprofile=coverage.out ./internal/... -short
+	go tool cover -func=coverage.out | tail -1
 
 test-integration:
 	go test -race -count=1 ./tests/integration/... -tags=integration
@@ -64,10 +67,16 @@ install:
 
 docker-build:
 	@for svc in api-server git-server actions-controller webhook-service search-indexer; do \
-		echo "building govnohub/$$svc:latest"; \
-		docker build -f deploy/docker/Dockerfile --build-arg SERVICE=$$svc -t govnohub/$$svc:latest .; \
+		echo "building govnohub/$$svc:latest ($(CONTAINER_RUNTIME))"; \
+		$(CONTAINER_RUNTIME) build -f deploy/docker/Dockerfile --build-arg SERVICE=$$svc -t govnohub/$$svc:latest .; \
+		if [ "$(CONTAINER_RUNTIME)" = podman ]; then \
+			$(CONTAINER_RUNTIME) tag "localhost/govnohub/$$svc:latest" "govnohub/$$svc:latest" 2>/dev/null || true; \
+		fi; \
 	done
-	docker build -f deploy/docker/Dockerfile.frontend -t govnohub/frontend:latest .
+	$(CONTAINER_RUNTIME) build -f deploy/docker/Dockerfile.frontend -t govnohub/frontend:latest .
+	@if [ "$(CONTAINER_RUNTIME)" = podman ]; then \
+		podman tag "localhost/govnohub/frontend:latest" "govnohub/frontend:latest" 2>/dev/null || true; \
+	fi
 
 k3s-install:
 	@if command -v k3s >/dev/null 2>&1; then \
@@ -102,17 +111,44 @@ k3d-delete:
 	@k3d cluster delete $(K3D_CLUSTER) || true
 
 k3s-import-images: docker-build
-	@if k3d cluster list 2>/dev/null | grep -q $(K3D_CLUSTER); then \
+	@export KIND_EXPERIMENTAL_PROVIDER=podman; \
+	if command -v kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -qx $(KIND_CLUSTER); then \
+		for img in $(foreach s,$(IMAGES),govnohub/$(s):latest); do \
+			echo importing $$img to kind; \
+			if [ "$(CONTAINER_RUNTIME)" = podman ]; then \
+				src=$$img; \
+				podman image exists localhost/$$img 2>/dev/null && src=localhost/$$img; \
+				archive=$$(mktemp /tmp/govnohub-img.XXXXXX.tar); \
+				podman save -q $$src -o $$archive; \
+				kind load image-archive $$archive --name $(KIND_CLUSTER); \
+				rm -f $$archive; \
+			else \
+				kind load docker-image $$img --name $(KIND_CLUSTER); \
+			fi; \
+		done; \
+	elif k3d cluster list 2>/dev/null | grep -q $(K3D_CLUSTER); then \
 		for img in $(foreach s,$(IMAGES),govnohub/$(s):latest); do \
 			echo importing $$img to k3d; k3d image import $$img -c $(K3D_CLUSTER); \
 		done; \
 	elif command -v k3s >/dev/null 2>&1; then \
 		for img in $(foreach s,$(IMAGES),govnohub/$(s):latest); do \
-			echo importing $$img to k3s; docker save $$img | sudo k3s ctr images import -; \
+			echo importing $$img to k3s; $(CONTAINER_RUNTIME) save $$img | sudo k3s ctr images import -; \
 		done; \
 	else \
-		echo "no k3s/k3d cluster found"; exit 1; \
+		echo "no k3s/k3d/kind cluster found — run: make podman-k8s-create"; exit 1; \
 	fi
+
+KIND_CLUSTER ?= govnohub
+
+podman-k8s-create:
+	@chmod +x scripts/podman-k8s-create.sh
+	@./scripts/podman-k8s-create.sh
+
+podman-k8s-delete:
+	@chmod +x scripts/podman-k8s-delete.sh
+	@./scripts/podman-k8s-delete.sh
+
+deploy-podman-k8s: podman-k8s-create deploy-k3s
 
 deploy-k3s: k3s-import-images
 	@chmod +x scripts/deploy-k3s.sh

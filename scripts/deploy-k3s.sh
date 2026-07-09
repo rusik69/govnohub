@@ -4,13 +4,28 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NAMESPACE="${NAMESPACE:-govnohub}"
 RELEASE="${RELEASE:-govnohub}"
-CLUSTER="${K3D_CLUSTER:-govnohub}"
-VALUES="${ROOT}/deploy/helm/govnohub/values-k3s.yaml"
+K3D_CLUSTER="${K3D_CLUSTER:-govnohub}"
+KIND_CLUSTER="${KIND_CLUSTER:-govnohub}"
+VALUES_K3S="${ROOT}/deploy/helm/govnohub/values-k3s.yaml"
+VALUES_KIND="${ROOT}/deploy/helm/govnohub/values-kind.yaml"
 
 log() { echo "==> $*"; }
 
+container_runtime() {
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    echo docker
+  elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
+    echo podman
+  else
+    echo none
+  fi
+}
+
 detect_runtime() {
-  if command -v k3d >/dev/null 2>&1 && k3d cluster list 2>/dev/null | grep -q "$CLUSTER"; then
+  export KIND_EXPERIMENTAL_PROVIDER=podman
+  if command -v kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -qx "$KIND_CLUSTER"; then
+    echo kind
+  elif command -v k3d >/dev/null 2>&1 && k3d cluster list 2>/dev/null | grep -q "$K3D_CLUSTER"; then
     echo k3d
   elif command -v k3s >/dev/null 2>&1 && k3s kubectl get nodes >/dev/null 2>&1; then
     echo k3s
@@ -21,8 +36,18 @@ detect_runtime() {
   fi
 }
 
+helm_values() {
+  local runtime="$1"
+  case "$runtime" in
+    kind) echo "$VALUES_KIND" ;;
+    *) echo "$VALUES_K3S" ;;
+  esac
+}
+
 import_images() {
   local runtime="$1"
+  local ctr
+  ctr="$(container_runtime)"
   local images=(
     govnohub/api-server:latest
     govnohub/git-server:latest
@@ -32,16 +57,36 @@ import_images() {
     govnohub/frontend:latest
   )
   for img in "${images[@]}"; do
-    log "importing $img"
+    log "importing $img into $runtime"
     case "$runtime" in
+      kind)
+        export KIND_EXPERIMENTAL_PROVIDER=podman
+        local src="$img"
+        if [ "$ctr" = podman ] && podman image exists "localhost/$img" 2>/dev/null; then
+          src="localhost/$img"
+        fi
+        if [ "$ctr" = podman ]; then
+          local archive
+          archive="$(mktemp /tmp/govnohub-img.XXXXXX.tar)"
+          podman save -q "$src" -o "$archive"
+          kind load image-archive "$archive" --name "$KIND_CLUSTER"
+          rm -f "$archive"
+        else
+          kind load docker-image "$img" --name "$KIND_CLUSTER"
+        fi
+        ;;
       k3d)
-        k3d image import "$img" -c "$CLUSTER"
+        k3d image import "$img" -c "$K3D_CLUSTER"
         ;;
       k3s)
-        docker save "$img" | sudo k3s ctr images import -
+        if [ "$ctr" = podman ]; then
+          podman save "$img" | sudo k3s ctr images import -
+        else
+          docker save "$img" | sudo k3s ctr images import -
+        fi
         ;;
       *)
-        log "no k3s/k3d runtime; skipping image import"
+        log "no k8s runtime; skipping image import"
         ;;
     esac
   done
@@ -56,13 +101,17 @@ wait_ready() {
 case "${1:-deploy}" in
   deploy)
     runtime="$(detect_runtime)"
-    log "runtime=$runtime"
+    log "runtime=$runtime container=$(container_runtime)"
+    if [ "$runtime" = none ]; then
+      log "no local cluster found — run: make podman-k8s-create"
+      exit 1
+    fi
     make -C "$ROOT" docker-build
     import_images "$runtime"
     kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
     kubectl apply -f "$ROOT/deploy/crds/"
     helm upgrade --install "$RELEASE" "$ROOT/deploy/helm/govnohub" \
-      -n "$NAMESPACE" -f "$VALUES" --wait --timeout 5m
+      -n "$NAMESPACE" -f "$(helm_values "$runtime")" --wait --timeout 5m
     wait_ready
     log "deployed. add to /etc/hosts: 127.0.0.1 govnohub.local git.govnohub.local"
     ;;

@@ -1,6 +1,34 @@
 # Deployment
 
-## k3d (recommended for macOS)
+## Podman + kind (recommended when using Podman)
+
+Uses [kind](https://kind.sigs.k8s.io/) with Podman as the container runtime (no Docker required).
+
+```bash
+brew install kind   # if not installed
+make podman-k8s-create   # kind cluster + ingress-nginx
+make deploy-k3s          # build (podman), load images, helm deploy
+
+echo "127.0.0.1 govnohub.local git.govnohub.local" | sudo tee -a /etc/hosts
+make k3s-status
+```
+
+One-shot:
+
+```bash
+make deploy-podman-k8s
+```
+
+Teardown:
+
+```bash
+make undeploy-k3s
+make podman-k8s-delete
+```
+
+Helm values: `deploy/helm/govnohub/values-kind.yaml` (nginx ingress, `imagePullPolicy: Never`).
+
+## k3d (Docker on macOS)
 
 k3d runs k3s inside Docker and is the easiest local Kubernetes option on macOS.
 
@@ -56,7 +84,9 @@ Override with `INSTALL_INGRESS_HOST` and `INSTALL_GIT_HOST` if needed.
 | Target | Description |
 |--------|-------------|
 | `install` | Install k3s + govnohub on remote Linux VM over SSH |
-| `k3d-create` | Create k3d cluster named `govnohub` |
+| `podman-k8s-create` | Create kind cluster using Podman + ingress-nginx |
+| `podman-k8s-delete` | Delete kind cluster |
+| `deploy-podman-k8s` | Create cluster and full deploy |
 | `k3d-delete` | Delete k3d cluster |
 | `k3s-install` | Install k3s (Linux only) |
 | `k3s-uninstall` | Remove k3s |
