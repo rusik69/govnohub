@@ -318,6 +318,9 @@ func (s *Server) handleListUserRepos(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if repos == nil {
+		repos = []repo.Repository{}
+	}
 	jsonOK(w, repos)
 }
 

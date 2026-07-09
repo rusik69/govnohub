@@ -193,6 +193,9 @@ func scanRepos(rows pgx.Rows) ([]Repository, error) {
 		r.FullName = r.OwnerName + "/" + r.Name
 		repos = append(repos, r)
 	}
+	if repos == nil {
+		repos = []Repository{}
+	}
 	return repos, rows.Err()
 }
 
