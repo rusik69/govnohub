@@ -325,6 +325,7 @@ func testGitPush(t *testing.T, gitBase, owner, repo, user, password string) {
 	}
 	runGit(t, repoDir, "add", "README.md")
 	runGit(t, repoDir, "commit", "-m", "e2e commit")
+	runGit(t, repoDir, "branch", "-M", "main")
 	runGit(t, repoDir, "push", "origin", "main")
 }
 
