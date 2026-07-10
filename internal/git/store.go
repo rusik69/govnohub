@@ -103,6 +103,10 @@ func (s *Store) SeedMainBranch(owner, repoName, branch string) (string, error) {
 	if err := repo.Storer.SetReference(ref); err != nil {
 		return "", err
 	}
+	head := plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.NewBranchReferenceName(branch))
+	if err := repo.Storer.SetReference(head); err != nil {
+		return "", err
+	}
 	return commitHash.String(), nil
 }
 

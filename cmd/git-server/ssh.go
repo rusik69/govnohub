@@ -116,7 +116,7 @@ func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, u
 		return
 	}
 	service := m[1]
-	repoPath := strings.TrimSuffix(m[2], ".git")
+	repoPath := strings.Trim(strings.TrimSuffix(m[2], ".git"), "/")
 	parts := strings.SplitN(repoPath, "/", 2)
 	if len(parts) != 2 {
 		fmt.Fprintf(w, "err: invalid repository path\n")

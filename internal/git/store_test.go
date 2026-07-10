@@ -87,6 +87,28 @@ func TestRepoPath(t *testing.T) {
 	}
 }
 
+func TestSeedMainBranchSetsHEAD(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := store.Init(ctx, "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SeedMainBranch("alice", "demo", "main"); err != nil {
+		t.Fatal(err)
+	}
+	path := store.RepoPath("alice", "demo")
+	head, err := exec.Command("git", "--git-dir", path, "symbolic-ref", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("symbolic-ref HEAD: %v", err)
+	}
+	if strings.TrimSpace(string(head)) != "refs/heads/main" {
+		t.Fatalf("HEAD=%q", head)
+	}
+}
+
 func TestMergeUpdatesBareRef(t *testing.T) {
 	tmp := t.TempDir()
 	store, err := NewStore(tmp)
