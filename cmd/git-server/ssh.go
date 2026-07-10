@@ -5,20 +5,18 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/binary"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh"
 )
-
-var gitSSHCmd = regexp.MustCompile(`^git-(upload-pack|receive-pack) ["']?([^"']+)["']?$`)
 
 func (s *server) startSSH(addr, hostKeyPath string) {
 	if addr == "" {
@@ -104,10 +102,43 @@ func (s *server) handleSSHSession(channel ssh.Channel, requests <-chan *ssh.Requ
 		if req.WantReply {
 			req.Reply(true, nil)
 		}
+		// Drain remaining session requests while git runs; Git 2.54+ may send
+		// env/pty requests that block the channel if left unread.
+		go func() {
+			for r := range requests {
+				if r.WantReply {
+					r.Reply(false, nil)
+				}
+			}
+		}()
 		status := s.execGitSSH(context.Background(), cmd, userID, username, channel, channel)
-		_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{status}))
+		sendExitStatus(channel, status)
 		return
 	}
+}
+
+func sendExitStatus(ch ssh.Channel, status uint32) {
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], status)
+	_, _ = ch.SendRequest("exit-status", false, buf[:])
+}
+
+func parseGitSSHCommand(cmd string) (service, repoPath string, ok bool) {
+	cmd = strings.TrimSpace(cmd)
+	switch {
+	case strings.HasPrefix(cmd, "git-upload-pack"):
+		service = "upload-pack"
+	case strings.HasPrefix(cmd, "git-receive-pack"):
+		service = "receive-pack"
+	default:
+		return "", "", false
+	}
+	i := strings.LastIndex(cmd, " ")
+	if i < 0 {
+		return "", "", false
+	}
+	repoPath = strings.Trim(strings.TrimSuffix(strings.Trim(cmd[i+1:], `"'`), ".git"), "/")
+	return service, repoPath, repoPath != ""
 }
 
 func parseExecCommand(payload []byte) string {
@@ -122,16 +153,14 @@ func parseExecCommand(payload []byte) string {
 }
 
 func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, username string, r io.Reader, w io.Writer) uint32 {
-	m := gitSSHCmd.FindStringSubmatch(cmd)
-	if len(m) != 3 {
+	service, repoPath, ok := parseGitSSHCommand(cmd)
+	if !ok {
 		log.Printf("ssh: unknown command %q", cmd)
 		return 127
 	}
-	service := m[1]
-	repoPath := strings.Trim(strings.TrimSuffix(m[2], ".git"), "/")
 	parts := strings.SplitN(repoPath, "/", 2)
 	if len(parts) != 2 {
-		log.Printf("ssh: invalid repository path %q", repoPath)
+		log.Printf("ssh: invalid repository path %q from %q", repoPath, cmd)
 		return 1
 	}
 	owner, name := parts[0], parts[1]
