@@ -18,7 +18,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-var gitSSHCmd = regexp.MustCompile(`^git-(upload-pack|receive-pack) '?([^']+)'?$`)
+var gitSSHCmd = regexp.MustCompile(`^git-(upload-pack|receive-pack) ["']?([^"']+)["']?$`)
 
 func (s *server) startSSH(addr, hostKeyPath string) {
 	if addr == "" {

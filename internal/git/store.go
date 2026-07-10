@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -115,11 +116,11 @@ func (s *Store) Open(owner, name string) (*git.Repository, error) {
 }
 
 func (s *Store) UploadPackSSH(owner, name string, r io.Reader, w io.Writer) error {
-	return s.runGit(owner, name, "upload-pack", false, r, w)
+	return s.runGitBidirectional(owner, name, "upload-pack", r, w)
 }
 
 func (s *Store) ReceivePackSSH(owner, name string, r io.Reader, w io.Writer) error {
-	return s.runGit(owner, name, "receive-pack", false, r, w)
+	return s.runGitBidirectional(owner, name, "receive-pack", r, w)
 }
 
 func (s *Store) ReceivePack(owner, name string, r io.Reader, w io.Writer) error {
@@ -143,6 +144,45 @@ func (s *Store) runGit(owner, name, cmd string, stateless bool, r io.Reader, w i
 	c.Stdout = w
 	c.Stderr = os.Stderr
 	if err := c.Run(); err != nil {
+		return fmt.Errorf("git %s: %w", cmd, err)
+	}
+	return nil
+}
+
+// runGitBidirectional runs git upload/receive-pack with separate copy goroutines.
+// Required when stdin and stdout are the same SSH channel to avoid deadlocks.
+func (s *Store) runGitBidirectional(owner, name, cmd string, in io.Reader, out io.Writer) error {
+	path := s.RepoPath(owner, name)
+	c := exec.Command("git", cmd, path)
+	c.Dir = path
+	c.Stderr = os.Stderr
+
+	stdin, err := c.StdinPipe()
+	if err != nil {
+		return err
+	}
+	stdout, err := c.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := c.Start(); err != nil {
+		return fmt.Errorf("git %s start: %w", cmd, err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		io.Copy(stdin, in)
+		stdin.Close()
+	}()
+	go func() {
+		defer wg.Done()
+		io.Copy(out, stdout)
+	}()
+	wg.Wait()
+
+	if err := c.Wait(); err != nil {
 		return fmt.Errorf("git %s: %w", cmd, err)
 	}
 	return nil
