@@ -100,68 +100,84 @@ func (s *server) handleSSHSession(channel ssh.Channel, requests <-chan *ssh.Requ
 			}
 			continue
 		}
-		cmd := strings.TrimSpace(string(req.Payload[4:]))
+		cmd := parseExecCommand(req.Payload)
 		if req.WantReply {
 			req.Reply(true, nil)
 		}
-		s.execGitSSH(context.Background(), cmd, userID, username, channel, channel)
+		status := s.execGitSSH(context.Background(), cmd, userID, username, channel, channel)
+		_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{status}))
 		return
 	}
 }
 
-func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, username string, r io.Reader, w io.Writer) {
+func parseExecCommand(payload []byte) string {
+	var cmd string
+	if err := ssh.Unmarshal(payload, &cmd); err == nil {
+		return strings.TrimSpace(cmd)
+	}
+	if len(payload) > 4 {
+		return strings.TrimSpace(string(payload[4:]))
+	}
+	return strings.TrimSpace(string(payload))
+}
+
+func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, username string, r io.Reader, w io.Writer) uint32 {
 	m := gitSSHCmd.FindStringSubmatch(cmd)
 	if len(m) != 3 {
-		fmt.Fprintf(w, "err: unknown git command\n")
-		return
+		log.Printf("ssh: unknown command %q", cmd)
+		return 127
 	}
 	service := m[1]
 	repoPath := strings.Trim(strings.TrimSuffix(m[2], ".git"), "/")
 	parts := strings.SplitN(repoPath, "/", 2)
 	if len(parts) != 2 {
-		fmt.Fprintf(w, "err: invalid repository path\n")
-		return
+		log.Printf("ssh: invalid repository path %q", repoPath)
+		return 1
 	}
 	owner, name := parts[0], parts[1]
 
 	repository, err := s.repos.GetByFullName(ctx, owner, name)
 	if err != nil {
-		fmt.Fprintf(w, "err: repository not found\n")
-		return
+		log.Printf("ssh: repository not found %s/%s", owner, name)
+		return 1
 	}
 	okAccess, _ := s.repos.CanAccess(ctx, repository.ID, userID, "read")
 	if !okAccess {
-		fmt.Fprintf(w, "err: forbidden\n")
-		return
+		log.Printf("ssh: forbidden read %s/%s", owner, name)
+		return 1
 	}
 	if !s.git.Exists(owner, name) {
-		fmt.Fprintf(w, "err: repository not found\n")
-		return
+		log.Printf("ssh: repository missing on disk %s/%s", owner, name)
+		return 1
 	}
 
 	switch service {
 	case "upload-pack":
 		if err := s.git.UploadPackSSH(owner, name, r, w); err != nil {
 			log.Printf("ssh upload-pack %s/%s: %v", owner, name, err)
+			return 1
 		}
+		return 0
 	case "receive-pack":
 		canWrite, _ := s.repos.CanAccess(ctx, repository.ID, userID, "write")
 		if !canWrite {
-			fmt.Fprintf(w, "err: forbidden\n")
-			return
+			log.Printf("ssh: forbidden write %s/%s", owner, name)
+			return 1
 		}
 		before, err := s.git.ListBranchSHAs(owner, name)
 		if err != nil {
 			log.Printf("ssh list branches before push %s/%s: %v", owner, name, err)
-			return
+			return 1
 		}
 		if err := s.git.ReceivePackSSH(owner, name, r, w); err != nil {
 			log.Printf("ssh receive-pack %s/%s: %v", owner, name, err)
-			return
+			return 1
 		}
 		s.afterPush(ctx, repository, owner, name, username, before)
+		return 0
 	default:
-		fmt.Fprintf(w, "err: unknown service\n")
+		log.Printf("ssh: unknown service %q", service)
+		return 1
 	}
 }
 

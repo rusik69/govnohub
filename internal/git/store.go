@@ -133,7 +133,7 @@ func (s *Store) UploadPack(owner, name string, r io.Reader, w io.Writer) error {
 
 func (s *Store) runGit(owner, name, cmd string, stateless bool, r io.Reader, w io.Writer) error {
 	path := s.RepoPath(owner, name)
-	args := []string{cmd}
+	args := []string{"-c", "safe.directory=" + path, cmd}
 	if stateless {
 		args = append(args, "--stateless-rpc")
 	}
@@ -153,7 +153,7 @@ func (s *Store) runGit(owner, name, cmd string, stateless bool, r io.Reader, w i
 // Required when stdin and stdout are the same SSH channel to avoid deadlocks.
 func (s *Store) runGitBidirectional(owner, name, cmd string, in io.Reader, out io.Writer) error {
 	path := s.RepoPath(owner, name)
-	c := exec.Command("git", cmd, path)
+	c := exec.Command("git", "-c", "safe.directory="+path, cmd, path)
 	c.Dir = path
 	c.Stderr = os.Stderr
 
