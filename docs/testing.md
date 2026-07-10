@@ -45,9 +45,35 @@ Located alongside packages in `internal/*/`:
 
 ## E2E Tests
 
-`tests/e2e/api_flow_test.go` (build tag `e2e`):
+### `-tags=e2e` (CI, `make test-e2e`)
 
-Full journey: register → create repo → issue → PR → workflow → release → star → close issue
+Uses `testenv.New` — httptest API server + testcontainers PostgreSQL.
+
+| File | Tests |
+|------|-------|
+| `api_flow_test.go` | `TestFullUserJourney` — smoke: repo, issue, PR, workflow, release, star, collaborator, protection |
+| `auth_flow_test.go` | PAT create/list/revoke; SSH key create/list/delete |
+| `issue_flow_test.go` | Issue comments, labels, milestones, patch, close |
+| `pr_flow_test.go` | PR review + merge with branch protection; PR comments and diff |
+| `actions_flow_test.go` | Workflow upsert, trigger run, list runs, fetch logs |
+| `release_package_test.go` | Release asset upload/download; package publish/download |
+| `repo_extra_test.go` | Wiki CRUD, webhooks, repo contents/commits, star, watch, fork, search |
+| `org_collab_test.go` | Org members/teams/repos; collaborator add/remove |
+| `notifications_test.go` | Issue comment triggers notification; mark read |
+
+Shared helpers in `helpers.go` (`e2e \|\| deploy` build tag).
+
+### `-tags=deploy` (`make test-deploy-e2e`)
+
+Uses `testenv.NewLocalDeploy` — real api-server + git-server processes.
+
+| File | Tests |
+|------|-------|
+| `deploy_flow_test.go` | Local deploy health; full journey smoke (git push, PAT, actions, packages, orgs, search) |
+| `git_flow_test.go` | Git push updates commits and contents API |
+| `deploy_admin_test.go` | Admin audit log |
+
+Optional cluster test: set `GOVNOHUB_DEPLOY_E2E=1` and `GOVNOHUB_BASE_URL` for `TestDeployedClusterFullJourney`.
 
 ## K8s Smoke Tests
 
