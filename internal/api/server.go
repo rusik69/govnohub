@@ -125,8 +125,12 @@ func (s *Server) Router() http.Handler {
 			r.Get("/contents/*", s.handleGetContents)
 			r.Get("/commits", s.handleGetCommits)
 			r.Post("/star", s.handleStar)
+			r.Delete("/star", s.handleUnstar)
 			r.Post("/watch", s.handleWatch)
+			r.Delete("/watch", s.handleUnwatch)
 			r.Post("/fork", s.handleFork)
+
+			r.Get("/branches", s.handleListBranches)
 
 			r.Get("/issues", s.handleListIssues)
 			r.Post("/issues", s.handleCreateIssue)
@@ -531,6 +535,18 @@ func (s *Server) handleStar(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"status": "starred"})
 }
 
+func (s *Server) handleUnstar(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepoWrite(w, r)
+	if !ok {
+		return
+	}
+	if err := s.repos.Unstar(r.Context(), repository.ID, userIDFrom(r.Context())); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"status": "unstarred"})
+}
+
 func (s *Server) handleWatch(w http.ResponseWriter, r *http.Request) {
 	repository, ok := s.getRepoWrite(w, r)
 	if !ok {
@@ -541,6 +557,31 @@ func (s *Server) handleWatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, map[string]string{"status": "watching"})
+}
+
+func (s *Server) handleUnwatch(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepoWrite(w, r)
+	if !ok {
+		return
+	}
+	if err := s.repos.Unwatch(r.Context(), repository.ID, userIDFrom(r.Context())); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"status": "unwatched"})
+}
+
+func (s *Server) handleListBranches(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	branches, err := s.repos.ListBranches(r.Context(), repository.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, branches)
 }
 
 func (s *Server) handleFork(w http.ResponseWriter, r *http.Request) {

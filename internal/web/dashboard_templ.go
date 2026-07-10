@@ -13,7 +13,7 @@ import (
 	"github.com/rusik69/govnohub/internal/repo"
 )
 
-func DashboardPage(layout LayoutData, repos []repo.Repository, orgs []org.Org) templ.Component {
+func DashboardPage(layout LayoutData, repos []repo.Repository, orgs []org.Org, csrf string, errMsg string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -37,7 +37,7 @@ func DashboardPage(layout LayoutData, repos []repo.Repository, orgs []org.Org) t
 		templ_7745c5c3_Err = Layout(LayoutData{
 			Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
 			UnreadNotifs: layout.UnreadNotifs, ActiveNav: "dashboard",
-			Content: DashboardContent(repos, orgs),
+			Content: DashboardContent(repos, orgs, csrf, errMsg),
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -46,7 +46,7 @@ func DashboardPage(layout LayoutData, repos []repo.Repository, orgs []org.Org) t
 	})
 }
 
-func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
+func DashboardContent(repos []repo.Repository, orgs []org.Org, csrf string, errMsg string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -67,9 +67,15 @@ func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = PageHeader("Dashboard", DashboardActions(orgs)).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = PageHeader("Dashboard", DashboardActions(orgs, csrf)).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
+		}
+		if errMsg != "" {
+			templ_7745c5c3_Err = ErrorAlert(errMsg).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"grid grid-cols-2 gap-6\"><section><h2 class=\"text-lg font-semibold mb-3\">Your repositories</h2>")
 		if templ_7745c5c3_Err != nil {
@@ -93,7 +99,7 @@ func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
 				var templ_7745c5c3_Var3 templ.SafeURL
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/" + r.FullName))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 26, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 29, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -114,7 +120,7 @@ func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(r.FullName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 31, Col: 52}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 34, Col: 52}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -143,7 +149,7 @@ func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
 					var templ_7745c5c3_Var5 string
 					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(r.Description)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 39, Col: 35}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 42, Col: 35}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 					if templ_7745c5c3_Err != nil {
@@ -161,7 +167,7 @@ func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(r.UpdatedAt.Format("Jan 2, 2006"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 41, Col: 62}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 44, Col: 62}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -199,7 +205,7 @@ func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
 				var templ_7745c5c3_Var7 templ.SafeURL
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/orgs/" + o.Name))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 56, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 59, Col: 48}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -220,7 +226,7 @@ func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(o.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 61, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 64, Col: 48}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -238,7 +244,7 @@ func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(o.Description)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 63, Col: 55}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 66, Col: 55}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 					if templ_7745c5c3_Err != nil {
@@ -267,7 +273,7 @@ func DashboardContent(repos []repo.Repository, orgs []org.Org) templ.Component {
 	})
 }
 
-func DashboardActions(orgs []org.Org) templ.Component {
+func DashboardActions(orgs []org.Org, csrf string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -288,33 +294,48 @@ func DashboardActions(orgs []org.Org) templ.Component {
 			templ_7745c5c3_Var10 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<a href=\"/orgs\" class=\"btn-secondary\">Browse orgs</a> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<details class=\"collapsible-form\"><summary class=\"btn\">New repository</summary><form method=\"post\" action=\"/repos/create\" class=\"card p-4 mt-2 flex flex-col gap-3\" style=\"min-width:16rem\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = CSRFInput(csrf).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = FormField("Name", "repo-name", "text", "name", "", true).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = FormField("Description", "repo-desc", "text", "description", "", false).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<button type=\"submit\" class=\"btn self-start\">Create</button></form></details> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(orgs) > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var11 templ.SafeURL
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/orgs/" + orgs[0].Name))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 78, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/dashboard.templ`, Line: 89, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\" class=\"btn\">New repository</a>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "\" class=\"btn-secondary\">Create in org</a> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<a href=\"/orgs\" class=\"btn\">New repository</a>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<a href=\"/orgs\" class=\"btn-secondary\">Browse orgs</a>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
 		}
 		return nil
 	})

@@ -5,10 +5,11 @@
 | Suite | Command | Description |
 |-------|---------|-------------|
 | Unit | `make test-unit` | All `internal/` packages with testcontainers PostgreSQL |
-| Integration | `make test-integration` | API handlers via httptest (`-tags=integration`) |
+| Integration | `make test-integration` | API + web handlers via httptest (`-tags=integration`) |
 | E2E | `make test-e2e` | Full user journey (`-tags=e2e`) |
+| Deploy E2E | `make test-deploy-e2e` | Real api-server + git-server (`-tags=deploy`) |
 | K8s smoke | `make test-k8s` | Helm template + optional cluster check (`-tags=k8s`) |
-| All | `make test-all` | Runs all of the above |
+| All | `make test-all` | Unit + integration + e2e + deploy-e2e |
 
 ## Requirements
 
@@ -29,19 +30,26 @@ make test-all
 Located alongside packages in `internal/*/`:
 
 - `auth` — register, login, JWT, PAT, SSH keys
-- `repo` — create, access, star, fork
+- `repo` — create, access, star, unstar, watch, unwatch, fork
 - `git` — init repo, commits
 - `issue`, `pull`, `release`, `package`, `org`
 - `actions` — YAML parser, triggers, job ordering
 - `webhook`, `search`, `config`, `db`
+- `web` — `isBinaryContent`, `redirectReferer`
+- `cmd/git-server` — SSH command/env parsing
 
 ## Integration Tests
 
-`tests/integration/api_test.go` (build tag `integration`):
+`tests/integration/` (build tag `integration`):
 
-- Health check
-- Register/login/me flow
-- Create repo and issue
+| File | Coverage |
+|------|----------|
+| `api_test.go` | Health, register/login/me, create repo and issue |
+| `protection_test.go` | Branch protection merge gate, collaborators |
+| `admin_test.go` | Admin create user, forbid public register |
+| `extras_test.go` | Release assets, webhooks |
+| `branches_test.go` | List repo branches API |
+| `web_handlers_test.go` | Repo branch picker, issue create form |
 
 ## E2E Tests
 
@@ -57,11 +65,11 @@ Uses `testenv.New` — httptest API server + testcontainers PostgreSQL.
 | `pr_flow_test.go` | PR review + merge with branch protection; PR comments and diff |
 | `actions_flow_test.go` | Workflow upsert, trigger run, list runs, fetch logs |
 | `release_package_test.go` | Release asset upload/download; package publish/download |
-| `repo_extra_test.go` | Wiki CRUD, webhooks, repo contents/commits, star, watch, fork, search |
+| `repo_extra_test.go` | Wiki CRUD, webhooks, repo contents/commits, star/unstar, watch/unwatch, branches, fork, search |
 | `org_collab_test.go` | Org members/teams/repos; collaborator add/remove |
 | `notifications_test.go` | Issue comment triggers notification; mark read |
 
-Shared helpers in `helpers.go` (`e2e \|\| deploy` build tag).
+Shared helpers in `helpers.go` (`e2e || deploy` build tag).
 
 ### `-tags=deploy` (`make test-deploy-e2e`)
 
@@ -87,10 +95,11 @@ Optional cluster test: set `GOVNOHUB_DEPLOY_E2E=1` and `GOVNOHUB_BASE_URL` for `
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 
-1. `make test-unit`
-2. `make test-integration`
-3. `make test-e2e`
-4. `make generate && go build ./...`
+**`backend` job:** `make generate` → `make test-unit` → `make test-integration` → `make test-e2e` → `make test-deploy-e2e` → `make build`
+
+**`helm` job:** `helm template` validation
+
+**`k8s-e2e` job:** kind cluster deploy + `make test-k8s-e2e`
 
 ## Writing New Tests
 

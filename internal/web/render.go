@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"net/http"
 	"strconv"
 
@@ -34,6 +35,7 @@ func (h *Handler) repoPageCtx(r *http.Request, repository *repo.Repository, tab 
 	}
 	if su := userFrom(r.Context()); su != nil {
 		header.Starred, _ = h.deps.Repos.IsStarred(r.Context(), repository.ID, su.ID)
+		header.Watched, _ = h.deps.Repos.IsWatched(r.Context(), repository.ID, su.ID)
 	}
 	return header, RepoNavData{
 		Owner:      repository.OwnerName,
@@ -50,6 +52,29 @@ func render(w http.ResponseWriter, r *http.Request, c templ.Component) {
 	if err := c.Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (h *Handler) repoBranches(r *http.Request, repository *repo.Repository) []RepoBranchOption {
+	branches, err := h.deps.Repos.ListBranches(r.Context(), repository.ID)
+	if err != nil || len(branches) == 0 {
+		return []RepoBranchOption{{Name: repository.DefaultBranch}}
+	}
+	out := make([]RepoBranchOption, len(branches))
+	for i, b := range branches {
+		out[i] = RepoBranchOption{Name: b.Name}
+	}
+	return out
+}
+
+func isBinaryContent(data []byte) bool {
+	return bytes.IndexByte(data, 0) >= 0
+}
+
+func redirectReferer(r *http.Request, fallback string) string {
+	if ref := r.Header.Get("Referer"); ref != "" {
+		return ref
+	}
+	return fallback
 }
 
 func (h *Handler) getRepo(w http.ResponseWriter, r *http.Request, perm string) (*repo.Repository, bool) {

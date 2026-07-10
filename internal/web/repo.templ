@@ -12,9 +12,12 @@ type RepoPageData struct {
 	Repo     *repo.Repository
 	Path     string
 	Ref      string
+	Branches []RepoBranchOption
 	Entries  []gitstore.TreeEntry
 	Content  string
 	IsBinary bool
+	Flash    string
+	FlashErr bool
 }
 
 templ RepoPage(data RepoPageData) {
@@ -28,8 +31,20 @@ templ RepoPage(data RepoPageData) {
 templ RepoContent(data RepoPageData) {
 	@RepoPageShell(data.Header, data.Nav)
 	<div class="max-w-7xl mx-auto">
-		@BranchBar(data.Repo.FullName, data.Ref, data.Path)
-		if data.Content != "" {
+		if data.Flash != "" {
+			if data.FlashErr {
+				@ErrorAlert(data.Flash)
+			} else {
+				@Toast(data.Flash, "success")
+			}
+		}
+		@BranchBar(data.Repo.FullName, data.Ref, data.Path, data.Branches)
+		if data.IsBinary {
+			<div class="card p-4">
+				<p class="m-0 text-sm">Binary file not shown.</p>
+				<a href={ templ.SafeURL("/api/v1/repos/" + data.Repo.FullName + "/contents/" + data.Path + "?ref=" + data.Ref) } class="btn-secondary mt-3 inline-flex">Download</a>
+			</div>
+		} else if data.Content != "" {
 			<div class="gh-code-block">
 				<pre class="font-mono whitespace-pre-wrap">{ data.Content }</pre>
 			</div>

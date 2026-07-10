@@ -44,6 +44,23 @@ func TestParseExecCommand(t *testing.T) {
 	}
 }
 
+func TestParseEnvRequest(t *testing.T) {
+	payload := ssh.Marshal(struct {
+		Name  string
+		Value string
+	}{Name: "GIT_PROTOCOL", Value: "version=2"})
+	var envReq struct {
+		Name  string
+		Value string
+	}
+	if err := ssh.Unmarshal(payload, &envReq); err != nil {
+		t.Fatal(err)
+	}
+	if kv, ok := acceptSSHEnv(envReq.Name, envReq.Value); !ok || kv != "GIT_PROTOCOL=version=2" {
+		t.Fatalf("kv=%q ok=%v", kv, ok)
+	}
+}
+
 func TestAcceptSSHEnv(t *testing.T) {
 	if kv, ok := acceptSSHEnv("GIT_PROTOCOL", "version=2"); !ok || kv != "GIT_PROTOCOL=version=2" {
 		t.Fatalf("GIT_PROTOCOL: kv=%q ok=%v", kv, ok)

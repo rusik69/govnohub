@@ -157,7 +157,15 @@ func IssueCreateForm(nav RepoNavData, csrf string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<input type=\"text\" name=\"title\" placeholder=\"Title\" required class=\"input\"> <button type=\"submit\" class=\"btn self-start\">Create issue</button></form>")
+		templ_7745c5c3_Err = FormField("Title", "issue-title", "text", "title", "", true).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = FormField("Description", "issue-body", "textarea", "body", "", false).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<button type=\"submit\" class=\"btn self-start\">Create issue</button></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

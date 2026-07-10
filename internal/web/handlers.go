@@ -53,7 +53,33 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	su := userFrom(r.Context())
 	repos, _ := h.deps.Repos.ListForUser(r.Context(), su.ID)
 	orgs, _ := h.deps.Org.ListForUser(r.Context(), su.ID)
-	render(w, r, DashboardPage(h.layout(r, "Dashboard"), repos, orgs))
+	render(w, r, DashboardPage(h.layout(r, "Dashboard"), repos, orgs, csrfFrom(r.Context()), ""))
+}
+
+func (h *Handler) handleCreateUserRepo(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	su := userFrom(r.Context())
+	name := strings.TrimSpace(r.FormValue("name"))
+	desc := r.FormValue("description")
+	_, err := h.deps.Repos.Create(r.Context(), "user", su.ID, su.Username, name, desc, false)
+	repos, _ := h.deps.Repos.ListForUser(r.Context(), su.ID)
+	orgs, _ := h.deps.Org.ListForUser(r.Context(), su.ID)
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	} else if name != "" {
+		if err := h.deps.Git.Init(r.Context(), su.Username, name); err != nil {
+			errMsg = err.Error()
+		} else if _, err := h.deps.Git.SeedMainBranch(su.Username, name, "main"); err != nil {
+			errMsg = err.Error()
+		} else {
+			http.Redirect(w, r, "/"+su.Username+"/"+name, http.StatusSeeOther)
+			return
+		}
+	}
+	render(w, r, DashboardPage(h.layout(r, "Dashboard"), repos, orgs, csrfFrom(r.Context()), errMsg))
 }
 
 func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -320,6 +346,7 @@ func (h *Handler) handleRepo(w http.ResponseWriter, r *http.Request) {
 		Layout: h.layout(r, repository.FullName),
 		Header: header, Nav: nav,
 		Repo: repository, Ref: ref, Entries: entries,
+		Branches: h.repoBranches(r, repository),
 	}))
 }
 
@@ -339,6 +366,7 @@ func (h *Handler) handleRepoTree(w http.ResponseWriter, r *http.Request) {
 		Layout: h.layout(r, repository.FullName),
 		Header: header, Nav: nav,
 		Repo: repository, Path: path, Ref: ref, Entries: entries,
+		Branches: h.repoBranches(r, repository),
 	}))
 }
 
@@ -354,14 +382,19 @@ func (h *Handler) handleRepoBlob(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
 	data, err := h.deps.Git.GetBlob(repository.OwnerName, repository.Name, ref, path)
 	content := ""
+	isBinary := false
 	if err == nil {
-		content = string(data)
+		isBinary = isBinaryContent(data)
+		if !isBinary {
+			content = string(data)
+		}
 	}
 	header, nav := h.repoPageCtx(r, repository, "code")
 	render(w, r, RepoPage(RepoPageData{
 		Layout: h.layout(r, repository.FullName),
 		Header: header, Nav: nav,
-		Repo: repository, Path: path, Ref: ref, Content: content,
+		Repo: repository, Path: path, Ref: ref, Content: content, IsBinary: isBinary,
+		Branches: h.repoBranches(r, repository),
 	}))
 }
 
@@ -725,6 +758,24 @@ func (h *Handler) handleActions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	wfRows, err := h.deps.Pool.Query(r.Context(), `
+		SELECT id, name, path, active FROM workflows WHERE repo_id=$1 ORDER BY name`, repository.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer wfRows.Close()
+	var workflows []WorkflowInfo
+	for wfRows.Next() {
+		var wf WorkflowInfo
+		var id uuid.UUID
+		if err := wfRows.Scan(&id, &wf.Name, &wf.Path, &wf.Active); err != nil {
+			continue
+		}
+		wf.ID = id.String()
+		workflows = append(workflows, wf)
+	}
+
 	rows, err := h.deps.Pool.Query(r.Context(), `
 		SELECT id, run_number, event, head_branch, status, COALESCE(conclusion,''), created_at
 		FROM workflow_runs WHERE repo_id=$1 ORDER BY run_number DESC LIMIT 50`, repository.ID)
@@ -744,7 +795,45 @@ func (h *Handler) handleActions(w http.ResponseWriter, r *http.Request) {
 		runs = append(runs, run)
 	}
 	header, nav := h.repoPageCtx(r, repository, "actions")
-	render(w, r, ActionsPage(h.layout(r, "Actions"), header, nav, runs))
+	render(w, r, ActionsPage(h.layout(r, "Actions"), header, nav, workflows, runs, csrfFrom(r.Context())))
+}
+
+func (h *Handler) handleTriggerAction(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	workflowID, err := uuid.Parse(r.FormValue("workflow_id"))
+	if err != nil {
+		http.Redirect(w, r, "/"+repository.FullName+"/actions", http.StatusSeeOther)
+		return
+	}
+	branch := r.FormValue("branch")
+	if branch == "" {
+		branch = repository.DefaultBranch
+	}
+	sha, err := h.deps.Git.UpdateHead(repository.OwnerName, repository.Name, branch)
+	if err != nil {
+		http.Redirect(w, r, "/"+repository.FullName+"/actions", http.StatusSeeOther)
+		return
+	}
+	var runNumber int
+	if err := h.deps.Pool.QueryRow(r.Context(), `SELECT COALESCE(MAX(run_number),0)+1 FROM workflow_runs WHERE repo_id=$1`, repository.ID).Scan(&runNumber); err != nil {
+		http.Redirect(w, r, "/"+repository.FullName+"/actions", http.StatusSeeOther)
+		return
+	}
+	_, err = h.deps.Pool.Exec(r.Context(), `
+		INSERT INTO workflow_runs (repo_id, workflow_id, run_number, event, head_sha, head_branch, status)
+		VALUES ($1,$2,$3,'workflow_dispatch',$4,$5,'queued')`,
+		repository.ID, workflowID, runNumber, sha, branch)
+	if err != nil {
+		http.Redirect(w, r, "/"+repository.FullName+"/actions", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/"+repository.FullName+"/actions", http.StatusSeeOther)
 }
 
 func (h *Handler) handleActionLogs(w http.ResponseWriter, r *http.Request) {
@@ -944,7 +1033,20 @@ func (h *Handler) handleStar(w http.ResponseWriter, r *http.Request) {
 	}
 	su := userFrom(r.Context())
 	_ = h.deps.Repos.Star(r.Context(), repository.ID, su.ID)
-	http.Redirect(w, r, "/"+repository.FullName, http.StatusSeeOther)
+	http.Redirect(w, r, redirectReferer(r, "/"+repository.FullName), http.StatusSeeOther)
+}
+
+func (h *Handler) handleUnstar(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	su := userFrom(r.Context())
+	_ = h.deps.Repos.Unstar(r.Context(), repository.ID, su.ID)
+	http.Redirect(w, r, redirectReferer(r, "/"+repository.FullName), http.StatusSeeOther)
 }
 
 func (h *Handler) handleWatch(w http.ResponseWriter, r *http.Request) {
@@ -957,7 +1059,20 @@ func (h *Handler) handleWatch(w http.ResponseWriter, r *http.Request) {
 	}
 	su := userFrom(r.Context())
 	_ = h.deps.Repos.Watch(r.Context(), repository.ID, su.ID)
-	http.Redirect(w, r, "/"+repository.FullName, http.StatusSeeOther)
+	http.Redirect(w, r, redirectReferer(r, "/"+repository.FullName), http.StatusSeeOther)
+}
+
+func (h *Handler) handleUnwatch(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	su := userFrom(r.Context())
+	_ = h.deps.Repos.Unwatch(r.Context(), repository.ID, su.ID)
+	http.Redirect(w, r, redirectReferer(r, "/"+repository.FullName), http.StatusSeeOther)
 }
 
 func (h *Handler) handleFork(w http.ResponseWriter, r *http.Request) {
@@ -971,7 +1086,19 @@ func (h *Handler) handleFork(w http.ResponseWriter, r *http.Request) {
 	su := userFrom(r.Context())
 	fork, err := h.deps.Repos.Fork(r.Context(), repository, su.ID, su.Username)
 	if err != nil {
-		http.Redirect(w, r, "/"+repository.FullName, http.StatusSeeOther)
+		ref := r.URL.Query().Get("ref")
+		if ref == "" {
+			ref = repository.DefaultBranch
+		}
+		entries, _ := h.deps.Git.GetTree(repository.OwnerName, repository.Name, ref, "")
+		header, nav := h.repoPageCtx(r, repository, "code")
+		render(w, r, RepoPage(RepoPageData{
+			Layout: h.layout(r, repository.FullName),
+			Header: header, Nav: nav,
+			Repo: repository, Ref: ref, Entries: entries,
+			Branches: h.repoBranches(r, repository),
+			Flash: err.Error(), FlashErr: true,
+		}))
 		return
 	}
 	http.Redirect(w, r, "/"+fork.FullName, http.StatusSeeOther)
@@ -1163,6 +1290,10 @@ func (h *Handler) handleCreateOrgRepo(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/orgs/"+o.Name, http.StatusSeeOther)
 		return
 	}
-	_ = h.deps.Git.Init(r.Context(), repo.OwnerName, repo.Name)
+	if err := h.deps.Git.Init(r.Context(), repo.OwnerName, repo.Name); err != nil {
+		http.Redirect(w, r, "/orgs/"+o.Name, http.StatusSeeOther)
+		return
+	}
+	_, _ = h.deps.Git.SeedMainBranch(repo.OwnerName, repo.Name, repo.DefaultBranch)
 	http.Redirect(w, r, "/"+repo.FullName, http.StatusSeeOther)
 }

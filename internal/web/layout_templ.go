@@ -72,7 +72,7 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " · Govnohub</title><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script>\n\t\t\t\t(function() {\n\t\t\t\t\tconst stored = localStorage.getItem('theme');\n\t\t\t\t\tif (stored) {\n\t\t\t\t\t\tdocument.documentElement.classList.toggle('dark', stored === 'dark');\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdocument.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t\tfunction toggleTheme() {\n\t\t\t\t\tconst dark = !document.documentElement.classList.contains('dark');\n\t\t\t\t\tdocument.documentElement.classList.toggle('dark', dark);\n\t\t\t\t\tlocalStorage.setItem('theme', dark ? 'dark' : 'light');\n\t\t\t\t\tupdateThemeIcon();\n\t\t\t\t}\n\t\t\t\tfunction updateThemeIcon() {\n\t\t\t\t\tconst dark = document.documentElement.classList.contains('dark');\n\t\t\t\t\tdocument.querySelectorAll('.theme-icon-sun').forEach(el => el.classList.toggle('hidden', dark));\n\t\t\t\t\tdocument.querySelectorAll('.theme-icon-moon').forEach(el => el.classList.toggle('hidden', !dark));\n\t\t\t\t}\n\t\t\t\tfunction toggleNotifications(btn) {\n\t\t\t\t\tconst panel = document.getElementById('notif-panel');\n\t\t\t\t\tif (!panel) return;\n\t\t\t\t\tpanel.classList.toggle('hidden');\n\t\t\t\t\tconst isOpen = !panel.classList.contains('hidden');\n\t\t\t\t\tbtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');\n\t\t\t\t\tif (isOpen && panel.innerHTML.trim() === '') {\n\t\t\t\t\t\thtmx.ajax('GET', '/notifications', {target: '#notif-panel', swap: 'innerHTML'});\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tdocument.addEventListener('DOMContentLoaded', updateThemeIcon);\n\t\t\t\tdocument.addEventListener('click', function(e) {\n\t\t\t\t\tconst panel = document.getElementById('notif-panel');\n\t\t\t\t\tconst bell = document.querySelector('.notif-bell');\n\t\t\t\t\tif (!panel || panel.classList.contains('hidden')) return;\n\t\t\t\t\tif (bell && !bell.contains(e.target)) {\n\t\t\t\t\t\tpanel.classList.add('hidden');\n\t\t\t\t\t\tconst btn = bell.querySelector('button');\n\t\t\t\t\t\tif (btn) btn.setAttribute('aria-expanded', 'false');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\tdocument.addEventListener('htmx:configRequest', function(evt) {\n\t\t\t\t\tconst token = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\tif (token) evt.detail.headers['X-CSRF-Token'] = token.content;\n\t\t\t\t});\n\t\t\t</script></head><body class=\"min-h-screen\"><a href=\"#main-content\" class=\"skip-link\">Skip to main content</a> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " · Govnohub</title><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script>\n\t\t\t\t(function() {\n\t\t\t\t\tconst stored = localStorage.getItem('theme');\n\t\t\t\t\tif (stored) {\n\t\t\t\t\t\tdocument.documentElement.classList.toggle('dark', stored === 'dark');\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdocument.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t\tfunction toggleTheme() {\n\t\t\t\t\tconst dark = !document.documentElement.classList.contains('dark');\n\t\t\t\t\tdocument.documentElement.classList.toggle('dark', dark);\n\t\t\t\t\tlocalStorage.setItem('theme', dark ? 'dark' : 'light');\n\t\t\t\t\tupdateThemeIcon();\n\t\t\t\t}\n\t\t\t\tfunction updateThemeIcon() {\n\t\t\t\t\tconst dark = document.documentElement.classList.contains('dark');\n\t\t\t\t\tdocument.querySelectorAll('.theme-icon-sun').forEach(el => el.classList.toggle('hidden', dark));\n\t\t\t\t\tdocument.querySelectorAll('.theme-icon-moon').forEach(el => el.classList.toggle('hidden', !dark));\n\t\t\t\t\tconst btn = document.getElementById('theme-toggle');\n\t\t\t\t\tif (btn) btn.setAttribute('aria-pressed', dark ? 'true' : 'false');\n\t\t\t\t}\n\t\t\t\tfunction toggleNotifications(btn) {\n\t\t\t\t\tconst panel = document.getElementById('notif-panel');\n\t\t\t\t\tif (!panel) return;\n\t\t\t\t\tpanel.classList.toggle('hidden');\n\t\t\t\t\tconst isOpen = !panel.classList.contains('hidden');\n\t\t\t\t\tbtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');\n\t\t\t\t\tif (isOpen && panel.innerHTML.trim() === '') {\n\t\t\t\t\t\thtmx.ajax('GET', '/notifications', {target: '#notif-panel', swap: 'innerHTML'});\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tdocument.addEventListener('DOMContentLoaded', updateThemeIcon);\n\t\t\t\tdocument.addEventListener('click', function(e) {\n\t\t\t\t\tconst panel = document.getElementById('notif-panel');\n\t\t\t\t\tconst bell = document.querySelector('.notif-bell');\n\t\t\t\t\tif (!panel || panel.classList.contains('hidden')) return;\n\t\t\t\t\tif (bell && !bell.contains(e.target)) {\n\t\t\t\t\t\tpanel.classList.add('hidden');\n\t\t\t\t\t\tconst btn = bell.querySelector('button');\n\t\t\t\t\t\tif (btn) btn.setAttribute('aria-expanded', 'false');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\tdocument.addEventListener('htmx:configRequest', function(evt) {\n\t\t\t\t\tconst token = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\tif (token) evt.detail.headers['X-CSRF-Token'] = token.content;\n\t\t\t\t});\n\t\t\t</script></head><body class=\"min-h-screen\"><a href=\"#main-content\" class=\"skip-link\">Skip to main content</a> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -164,7 +164,7 @@ func Layout(data LayoutData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<input type=\"search\" name=\"q\" placeholder=\"Search or jump to...\"></form>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<input type=\"search\" name=\"q\" placeholder=\"Search or jump to...\" aria-label=\"Search\"></form>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -187,7 +187,7 @@ func Layout(data LayoutData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<button type=\"button\" class=\"gh-header-btn\" onclick=\"toggleTheme()\" aria-label=\"Toggle theme\"><span class=\"theme-icon-sun\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<button type=\"button\" class=\"gh-header-btn\" onclick=\"toggleTheme()\" aria-label=\"Toggle theme\" aria-pressed=\"false\" id=\"theme-toggle\"><span class=\"theme-icon-sun\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -228,7 +228,7 @@ func Layout(data LayoutData) templ.Component {
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(unreadLabel(data.UnreadNotifs))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 123, Col: 68}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 125, Col: 68}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
@@ -254,7 +254,7 @@ func Layout(data LayoutData) templ.Component {
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(data.User.Username)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 130, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 132, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -277,7 +277,7 @@ func Layout(data LayoutData) templ.Component {
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.CSRF)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 138, Col: 67}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 140, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 				if templ_7745c5c3_Err != nil {

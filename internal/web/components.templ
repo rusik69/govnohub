@@ -24,6 +24,11 @@ type RepoHeaderData struct {
 	Repository *repo.Repository
 	CSRF       string
 	Starred    bool
+	Watched    bool
+}
+
+type RepoBranchOption struct {
+	Name string
 }
 
 templ Icon(name string, class string) {
@@ -127,25 +132,42 @@ templ RepoHeader(data RepoHeaderData) {
 				</div>
 			</div>
 			<div class="gh-btn-group">
-				<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/star") }>
-					@CSRFInput(data.CSRF)
-					<button type="submit" class="gh-btn-seg">
-						@Icon("star", "")
-						if data.Starred {
+				if data.Starred {
+					<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/unstar") }>
+						@CSRFInput(data.CSRF)
+						<button type="submit" class="gh-btn-seg">
+							@Icon("star", "")
 							Starred
-						} else {
+							<span class="gh-counter">{ strconv.Itoa(data.Repository.StarCount) }</span>
+						</button>
+					</form>
+				} else {
+					<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/star") }>
+						@CSRFInput(data.CSRF)
+						<button type="submit" class="gh-btn-seg">
+							@Icon("star", "")
 							Star
-						}
-						<span class="gh-counter">{ strconv.Itoa(data.Repository.StarCount) }</span>
-					</button>
-				</form>
-				<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/watch") }>
-					@CSRFInput(data.CSRF)
-					<button type="submit" class="gh-btn-seg">
-						@Icon("eye", "")
-						Watch
-					</button>
-				</form>
+							<span class="gh-counter">{ strconv.Itoa(data.Repository.StarCount) }</span>
+						</button>
+					</form>
+				}
+				if data.Watched {
+					<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/unwatch") }>
+						@CSRFInput(data.CSRF)
+						<button type="submit" class="gh-btn-seg">
+							@Icon("eye", "")
+							Unwatch
+						</button>
+					</form>
+				} else {
+					<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/watch") }>
+						@CSRFInput(data.CSRF)
+						<button type="submit" class="gh-btn-seg">
+							@Icon("eye", "")
+							Watch
+						</button>
+					</form>
+				}
 				<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/fork") }>
 					@CSRFInput(data.CSRF)
 					<button type="submit" class="gh-btn-seg">
@@ -322,12 +344,21 @@ func prIconName(pr pull.PullRequest) string {
 	return "git-pull-request"
 }
 
-templ BranchBar(fullName, ref, path string) {
+templ BranchBar(fullName, ref, path string, branches []RepoBranchOption) {
 	<div class="gh-branch-bar">
-		<span class="gh-branch-selector">
-			@Icon("git-branch", "")
-			{ ref }
-		</span>
+		<label class="sr-only" for="branch-select">Branch</label>
+		<select
+			id="branch-select"
+			class="gh-branch-selector input"
+			onchange="window.location=window.location.pathname.split('?')[0]+'?ref='+encodeURIComponent(this.value)"
+		>
+			for _, b := range branches {
+				<option value={ b.Name } selected?={ b.Name == ref }>{ b.Name }</option>
+			}
+			if len(branches) == 0 {
+				<option value={ ref } selected>{ ref }</option>
+			}
+		</select>
 		if path != "" {
 			<span class="gh-breadcrumb">
 				<a href={ templ.SafeURL("/" + fullName + "?ref=" + ref) }>{ fullName }</a>

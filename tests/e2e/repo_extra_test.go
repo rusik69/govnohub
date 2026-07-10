@@ -98,8 +98,20 @@ func TestRepoMetadata(t *testing.T) {
 	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+repo+"/star", token, nil)
 	requireStatus(t, resp, http.StatusOK, "star repo")
 
+	resp, _ = testutil.DoJSON(t, http.MethodDelete, base+"/api/v1/repos/"+repo+"/star", token, nil)
+	requireStatus(t, resp, http.StatusOK, "unstar repo")
+
 	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+repo+"/watch", token, nil)
 	requireStatus(t, resp, http.StatusOK, "watch repo")
+
+	resp, _ = testutil.DoJSON(t, http.MethodDelete, base+"/api/v1/repos/"+repo+"/watch", token, nil)
+	requireStatus(t, resp, http.StatusOK, "unwatch repo")
+
+	resp, branches := doJSONArray(t, http.MethodGet, base+"/api/v1/repos/"+repo+"/branches", token, nil)
+	requireStatus(t, resp, http.StatusOK, "list branches")
+	if len(branches) == 0 {
+		t.Fatal("expected branches")
+	}
 
 	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+repo+"/fork", token, nil)
 	requireStatus(t, resp, http.StatusOK, "fork repo")

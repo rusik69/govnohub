@@ -182,6 +182,24 @@ func (s *Service) Star(ctx context.Context, repoID, userID uuid.UUID) error {
 	return tx.Commit(ctx)
 }
 
+func (s *Service) Unstar(ctx context.Context, repoID, userID uuid.UUID) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `DELETE FROM repo_stars WHERE repo_id=$1 AND user_id=$2`, repoID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() > 0 {
+		if _, err := tx.Exec(ctx, `UPDATE repos SET star_count = GREATEST(star_count - 1, 0) WHERE id=$1`, repoID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *Service) IsStarred(ctx context.Context, repoID, userID uuid.UUID) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM repo_stars WHERE repo_id=$1 AND user_id=$2)`, repoID, userID).Scan(&exists)
@@ -191,6 +209,42 @@ func (s *Service) IsStarred(ctx context.Context, repoID, userID uuid.UUID) (bool
 func (s *Service) Watch(ctx context.Context, repoID, userID uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `INSERT INTO repo_watchers (repo_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, repoID, userID)
 	return err
+}
+
+func (s *Service) Unwatch(ctx context.Context, repoID, userID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM repo_watchers WHERE repo_id=$1 AND user_id=$2`, repoID, userID)
+	return err
+}
+
+func (s *Service) IsWatched(ctx context.Context, repoID, userID uuid.UUID) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM repo_watchers WHERE repo_id=$1 AND user_id=$2)`, repoID, userID).Scan(&exists)
+	return exists, err
+}
+
+type BranchInfo struct {
+	Name    string `json:"name"`
+	HeadSHA string `json:"head_sha"`
+}
+
+func (s *Service) ListBranches(ctx context.Context, repoID uuid.UUID) ([]BranchInfo, error) {
+	rows, err := s.pool.Query(ctx, `SELECT name, head_sha FROM branches WHERE repo_id=$1 ORDER BY name`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var branches []BranchInfo
+	for rows.Next() {
+		var b BranchInfo
+		if err := rows.Scan(&b.Name, &b.HeadSHA); err != nil {
+			return nil, err
+		}
+		branches = append(branches, b)
+	}
+	if branches == nil {
+		branches = []BranchInfo{}
+	}
+	return branches, rows.Err()
 }
 
 func permRank(p string) int {

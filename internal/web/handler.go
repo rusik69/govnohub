@@ -29,6 +29,7 @@ func (h *Handler) Routes() chi.Router {
 	r.Group(func(r chi.Router) {
 		r.Use(h.optionalAuth, h.requireAuth)
 		r.Get("/", h.handleDashboard)
+		r.Post("/repos/create", h.handleCreateUserRepo)
 		r.Get("/search", h.handleSearch)
 		r.Get("/settings", h.handleSettings)
 		r.Post("/settings/pat", h.handleCreatePAT)
@@ -61,10 +62,14 @@ func (h *Handler) Routes() chi.Router {
 			r.Get("/tree/*", h.handleRepoTree)
 			r.Get("/blob/*", h.handleRepoBlob)
 			r.Post("/star", h.handleStar)
+			r.Post("/unstar", h.handleUnstar)
 			r.Post("/watch", h.handleWatch)
+			r.Post("/unwatch", h.handleUnwatch)
 			r.Post("/fork", h.handleFork)
 
-			r.Get("/issues", h.handleIssues)
+			r.Get("/actions", h.handleActions)
+			r.Post("/actions/trigger", h.handleTriggerAction)
+			r.Get("/actions/runs/{runID}/logs", h.handleActionLogs)
 			r.Post("/issues", h.handleCreateIssue)
 			r.Get("/issues/{number}", h.handleIssueDetail)
 			r.Post("/issues/{number}/comment", h.handleIssueComment)
@@ -85,10 +90,7 @@ func (h *Handler) Routes() chi.Router {
 			r.Post("/pulls/{number}/review", h.handlePRReview)
 			r.Post("/pulls/{number}/merge", h.handlePRMerge)
 
-			r.Get("/actions", h.handleActions)
-			r.Get("/actions/runs/{runID}/logs", h.handleActionLogs)
-
-			r.Get("/releases", h.handleReleases)
+			r.Get("/issues", h.handleIssues)
 			r.Post("/releases", h.handleCreateRelease)
 			r.Post("/releases/{tag}/assets", h.handleUploadReleaseAsset)
 

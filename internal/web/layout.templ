@@ -46,6 +46,8 @@ templ Layout(data LayoutData) {
 					const dark = document.documentElement.classList.contains('dark');
 					document.querySelectorAll('.theme-icon-sun').forEach(el => el.classList.toggle('hidden', dark));
 					document.querySelectorAll('.theme-icon-moon').forEach(el => el.classList.toggle('hidden', !dark));
+					const btn = document.getElementById('theme-toggle');
+					if (btn) btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
 				}
 				function toggleNotifications(btn) {
 					const panel = document.getElementById('notif-panel');
@@ -90,7 +92,7 @@ templ Layout(data LayoutData) {
 							</nav>
 							<form action="/search" method="get" class="gh-header-search">
 								@Icon("search", "")
-								<input type="search" name="q" placeholder="Search or jump to..."/>
+								<input type="search" name="q" placeholder="Search or jump to..." aria-label="Search"/>
 							</form>
 						}
 						<div class="gh-header-actions">
@@ -99,7 +101,7 @@ templ Layout(data LayoutData) {
 									@Icon("search", "")
 								</a>
 							}
-							<button type="button" class="gh-header-btn" onclick="toggleTheme()" aria-label="Toggle theme">
+							<button type="button" class="gh-header-btn" onclick="toggleTheme()" aria-label="Toggle theme" aria-pressed="false" id="theme-toggle">
 								<span class="theme-icon-sun">
 									@Icon("sun", "")
 								</span>

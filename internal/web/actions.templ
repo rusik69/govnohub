@@ -2,6 +2,13 @@ package web
 
 import "time"
 
+type WorkflowInfo struct {
+	ID     string
+	Name   string
+	Path   string
+	Active bool
+}
+
 type WorkflowRun struct {
 	ID         string
 	RunNumber  int
@@ -12,18 +19,39 @@ type WorkflowRun struct {
 	CreatedAt  time.Time
 }
 
-templ ActionsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, runs []WorkflowRun) {
+templ ActionsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, workflows []WorkflowInfo, runs []WorkflowRun, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
 		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
-		Content: ActionsContent(header, nav, runs),
+		Content: ActionsContent(header, nav, workflows, runs, csrf),
 	})
 }
 
-templ ActionsContent(header RepoHeaderData, nav RepoNavData, runs []WorkflowRun) {
+templ ActionsContent(header RepoHeaderData, nav RepoNavData, workflows []WorkflowInfo, runs []WorkflowRun, csrf string) {
 	@RepoPageShell(header, nav)
 	<div class="max-w-7xl mx-auto">
 		<h1 class="text-xl font-bold mb-4">Actions</h1>
+		if len(workflows) > 0 {
+			<div class="card p-4 mb-6">
+				<h2 class="text-sm font-semibold mb-3 m-0">Workflows</h2>
+				<div class="flex flex-col gap-3">
+					for _, wf := range workflows {
+						<div class="flex justify-between items-center gap-3 flex-wrap">
+							<div>
+								<div class="font-medium">{ wf.Name }</div>
+								<div class="text-xs text-muted">{ wf.Path }</div>
+							</div>
+							<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/actions/trigger") } class="flex gap-2 items-center">
+								@CSRFInput(csrf)
+								<input type="hidden" name="workflow_id" value={ wf.ID }/>
+								<input type="text" name="branch" value="main" class="input text-sm" style="width:8rem" aria-label="Branch to run"/>
+								<button type="submit" class="btn-secondary text-sm">Run workflow</button>
+							</form>
+						</div>
+					}
+				</div>
+			</div>
+		}
 		if len(runs) == 0 {
 			@EmptyState("No workflow runs")
 		} else {
@@ -47,7 +75,11 @@ templ ActionsContent(header RepoHeaderData, nav RepoNavData, runs []WorkflowRun)
 									>
 										Show logs
 									</button>
-									<div id={ "logs-" + run.ID } class="mt-2"></div>
+								</td>
+							</tr>
+							<tr>
+								<td colspan="5" class="p-0 border-0">
+									<div id={ "logs-" + run.ID } class="p-3"></div>
 								</td>
 							</tr>
 						}
@@ -79,7 +111,7 @@ templ ActionLogsPartial(logs string, logURL string) {
 
 func runStatusLabel(run WorkflowRun) string {
 	if run.Conclusion != "" {
-		return run.Status + " (" + run.Conclusion + ")"
+		return run.Conclusion
 	}
 	return run.Status
 }

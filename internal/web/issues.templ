@@ -34,7 +34,8 @@ templ IssuesContent(header RepoHeaderData, nav RepoNavData, issues []issue.Issue
 templ IssueCreateForm(nav RepoNavData, csrf string) {
 	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class="flex flex-col gap-3">
 		@CSRFInput(csrf)
-		<input type="text" name="title" placeholder="Title" required class="input"/>
+		@FormField("Title", "issue-title", "text", "title", "", true)
+		@FormField("Description", "issue-body", "textarea", "body", "", false)
 		<button type="submit" class="btn self-start">Create issue</button>
 	</form>
 }

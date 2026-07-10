@@ -5,16 +5,19 @@ import (
 	"github.com/rusik69/govnohub/internal/repo"
 )
 
-templ DashboardPage(layout LayoutData, repos []repo.Repository, orgs []org.Org) {
+templ DashboardPage(layout LayoutData, repos []repo.Repository, orgs []org.Org, csrf string, errMsg string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
 		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "dashboard",
-		Content: DashboardContent(repos, orgs),
+		Content: DashboardContent(repos, orgs, csrf, errMsg),
 	})
 }
 
-templ DashboardContent(repos []repo.Repository, orgs []org.Org) {
-	@PageHeader("Dashboard", DashboardActions(orgs))
+templ DashboardContent(repos []repo.Repository, orgs []org.Org, csrf string, errMsg string) {
+	@PageHeader("Dashboard", DashboardActions(orgs, csrf))
+	if errMsg != "" {
+		@ErrorAlert(errMsg)
+	}
 	<div class="grid grid-cols-2 gap-6">
 		<section>
 			<h2 class="text-lg font-semibold mb-3">Your repositories</h2>
@@ -72,11 +75,18 @@ templ DashboardContent(repos []repo.Repository, orgs []org.Org) {
 	</div>
 }
 
-templ DashboardActions(orgs []org.Org) {
-	<a href="/orgs" class="btn-secondary">Browse orgs</a>
+templ DashboardActions(orgs []org.Org, csrf string) {
+	<details class="collapsible-form">
+		<summary class="btn">New repository</summary>
+		<form method="post" action="/repos/create" class="card p-4 mt-2 flex flex-col gap-3" style="min-width:16rem">
+			@CSRFInput(csrf)
+			@FormField("Name", "repo-name", "text", "name", "", true)
+			@FormField("Description", "repo-desc", "text", "description", "", false)
+			<button type="submit" class="btn self-start">Create</button>
+		</form>
+	</details>
 	if len(orgs) > 0 {
-		<a href={ templ.SafeURL("/orgs/" + orgs[0].Name) } class="btn">New repository</a>
-	} else {
-		<a href="/orgs" class="btn">New repository</a>
+		<a href={ templ.SafeURL("/orgs/" + orgs[0].Name) } class="btn-secondary">Create in org</a>
 	}
+	<a href="/orgs" class="btn-secondary">Browse orgs</a>
 }
