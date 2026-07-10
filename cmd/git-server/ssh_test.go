@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"golang.org/x/crypto/ssh"
+)
 
 func TestParseGitSSHCommand(t *testing.T) {
 	tests := []struct {
@@ -28,6 +32,15 @@ func TestParseGitSSHCommand(t *testing.T) {
 			t.Fatalf("%q: got %s %s stateless=%v want %s %s stateless=%v",
 				tc.cmd, service, repo, stateless, tc.wantService, tc.wantRepo, tc.wantStateless)
 		}
+	}
+}
+
+func TestParseExecCommand(t *testing.T) {
+	payload := ssh.Marshal(struct {
+		Command string
+	}{Command: `git-upload-pack '/alice/app.git'`})
+	if got := parseExecCommand(payload); got != `git-upload-pack '/alice/app.git'` {
+		t.Fatalf("got %q", got)
 	}
 }
 

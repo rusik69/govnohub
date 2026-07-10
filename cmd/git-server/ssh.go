@@ -168,12 +168,17 @@ func parseGitSSHCommand(cmd string) (service, repoPath string, stateless bool, o
 }
 
 func parseExecCommand(payload []byte) string {
-	var cmd string
-	if err := ssh.Unmarshal(payload, &cmd); err == nil {
-		return strings.TrimSpace(cmd)
+	var msg struct {
+		Command string
 	}
-	if len(payload) > 4 {
-		return strings.TrimSpace(string(payload[4:]))
+	if err := ssh.Unmarshal(payload, &msg); err == nil {
+		return strings.TrimSpace(msg.Command)
+	}
+	if len(payload) >= 4 {
+		length := int(binary.BigEndian.Uint32(payload[:4]))
+		if length >= 0 && len(payload) >= 4+length {
+			return strings.TrimSpace(string(payload[4 : 4+length]))
+		}
 	}
 	return strings.TrimSpace(string(payload))
 }
