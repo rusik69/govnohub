@@ -212,10 +212,20 @@ func (s *Server) handleCreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		TagName, Name, Body string
-		Draft, Prerelease   bool
+		TagName    string `json:"tag_name"`
+		Name       string `json:"name"`
+		Body       string `json:"body"`
+		Draft      bool   `json:"draft"`
+		Prerelease bool   `json:"prerelease"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.TagName == "" {
+		jsonError(w, http.StatusBadRequest, "tag_name required")
+		return
+	}
 	rel, err := s.releases.Create(r.Context(), repository.ID, userIDFrom(r.Context()), req.TagName, req.Name, req.Body, req.Draft, req.Prerelease)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
