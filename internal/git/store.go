@@ -115,12 +115,12 @@ func (s *Store) Open(owner, name string) (*git.Repository, error) {
 	return git.PlainOpen(s.RepoPath(owner, name))
 }
 
-func (s *Store) UploadPackSSH(owner, name string, r io.Reader, w io.Writer, extraEnv []string, stateless bool) error {
-	return s.runGitBidirectional(owner, name, "upload-pack", r, w, extraEnv, stateless)
+func (s *Store) UploadPackSSH(owner, name string, r io.Reader, w io.Writer, extraEnv []string, stateless bool, stderr io.Writer) error {
+	return s.runGitBidirectional(owner, name, "upload-pack", r, w, extraEnv, stateless, stderr)
 }
 
-func (s *Store) ReceivePackSSH(owner, name string, r io.Reader, w io.Writer, extraEnv []string, stateless bool) error {
-	return s.runGitBidirectional(owner, name, "receive-pack", r, w, extraEnv, stateless)
+func (s *Store) ReceivePackSSH(owner, name string, r io.Reader, w io.Writer, extraEnv []string, stateless bool, stderr io.Writer) error {
+	return s.runGitBidirectional(owner, name, "receive-pack", r, w, extraEnv, stateless, stderr)
 }
 
 func (s *Store) ReceivePack(owner, name string, r io.Reader, w io.Writer) error {
@@ -151,7 +151,7 @@ func (s *Store) runGit(owner, name, cmd string, stateless bool, r io.Reader, w i
 
 // runGitBidirectional runs git upload/receive-pack with separate copy goroutines.
 // Required when stdin and stdout are the same SSH channel to avoid deadlocks.
-func (s *Store) runGitBidirectional(owner, name, cmd string, in io.Reader, out io.Writer, extraEnv []string, stateless bool) error {
+func (s *Store) runGitBidirectional(owner, name, cmd string, in io.Reader, out io.Writer, extraEnv []string, stateless bool, stderr io.Writer) error {
 	path := s.RepoPath(owner, name)
 	args := []string{"-c", "safe.directory=*", cmd}
 	if stateless {
@@ -160,8 +160,12 @@ func (s *Store) runGitBidirectional(owner, name, cmd string, in io.Reader, out i
 	args = append(args, path)
 	c := exec.Command("git", args...)
 	c.Env = append(os.Environ(), extraEnv...)
-	var stderr bytes.Buffer
-	c.Stderr = &stderr
+	var stderrBuf bytes.Buffer
+	if stderr != nil {
+		c.Stderr = io.MultiWriter(stderr, &stderrBuf)
+	} else {
+		c.Stderr = &stderrBuf
+	}
 
 	stdin, err := c.StdinPipe()
 	if err != nil {
@@ -189,7 +193,7 @@ func (s *Store) runGitBidirectional(owner, name, cmd string, in io.Reader, out i
 	wg.Wait()
 
 	if err := c.Wait(); err != nil {
-		return fmt.Errorf("git %s: %w: %s", cmd, err, strings.TrimSpace(stderr.String()))
+		return fmt.Errorf("git %s: %w: %s", cmd, err, strings.TrimSpace(stderrBuf.String()))
 	}
 	return nil
 }

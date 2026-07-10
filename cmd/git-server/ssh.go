@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -123,7 +122,7 @@ func (s *server) handleSSHSession(channel ssh.Channel, requests <-chan *ssh.Requ
 					}
 				}
 			}()
-			status := s.execGitSSH(context.Background(), cmd, userID, username, channel, channel, sessionEnv)
+			status := s.execGitSSH(context.Background(), cmd, userID, username, channel, sessionEnv)
 			sendExitStatus(channel, status)
 			return
 		default:
@@ -179,7 +178,18 @@ func parseExecCommand(payload []byte) string {
 	return strings.TrimSpace(string(payload))
 }
 
-func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, username string, r io.Reader, w io.Writer, sessionEnv []string) uint32 {
+func sshPackEnv(sessionEnv []string) []string {
+	env := append([]string{}, sessionEnv...)
+	for _, e := range env {
+		if strings.HasPrefix(e, "GIT_PROTOCOL=") {
+			return env
+		}
+	}
+	// Git 2.43+ defaults to protocol v2 over SSH; upload-pack needs matching GIT_PROTOCOL.
+	return append(env, "GIT_PROTOCOL=version=2")
+}
+
+func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, username string, ch ssh.Channel, sessionEnv []string) uint32 {
 	service, repoPath, stateless, ok := parseGitSSHCommand(cmd)
 	if !ok {
 		log.Printf("ssh: unknown command %q", cmd)
@@ -209,7 +219,7 @@ func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, u
 
 	switch service {
 	case "upload-pack":
-		if err := s.git.UploadPackSSH(owner, name, r, w, sessionEnv, stateless); err != nil {
+		if err := s.git.UploadPackSSH(owner, name, ch, ch, sshPackEnv(sessionEnv), stateless, ch.Stderr()); err != nil {
 			log.Printf("ssh upload-pack %s/%s: %v", owner, name, err)
 			return 1
 		}
@@ -225,7 +235,7 @@ func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, u
 			log.Printf("ssh list branches before push %s/%s: %v", owner, name, err)
 			return 1
 		}
-		if err := s.git.ReceivePackSSH(owner, name, r, w, sessionEnv, stateless); err != nil {
+		if err := s.git.ReceivePackSSH(owner, name, ch, ch, sshPackEnv(sessionEnv), stateless, ch.Stderr()); err != nil {
 			log.Printf("ssh receive-pack %s/%s: %v", owner, name, err)
 			return 1
 		}

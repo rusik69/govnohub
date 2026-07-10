@@ -3,9 +3,8 @@
 package e2e
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"net/http"
@@ -57,7 +56,7 @@ func runGit(t *testing.T, dir string, args ...string) {
 func runGitSSH(t *testing.T, dir, privKey string, args ...string) {
 	t.Helper()
 	requireSSH(t)
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", append([]string{"-c", "protocol.version=2"}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"GIT_SSH_COMMAND=ssh "+gitSSHOpts+" -i "+privKey,
@@ -77,7 +76,7 @@ func runGitAllowFail(t *testing.T, dir string, args ...string) ([]byte, error) {
 func runGitSSHAllowFail(t *testing.T, dir, privKey string, args ...string) ([]byte, error) {
 	t.Helper()
 	requireSSH(t)
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", append([]string{"-c", "protocol.version=2"}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"GIT_SSH_COMMAND=ssh "+gitSSHOpts+" -i "+privKey,
@@ -115,21 +114,21 @@ func gitCloneSSH(t *testing.T, workDir, sshURL, privKey, dirName string) string 
 
 func generateSSHKeyPair(t *testing.T) (pub string, privPath string) {
 	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sshPub, err := ssh.NewPublicKey(&key.PublicKey)
+	signer, err := ssh.NewSignerFromKey(priv)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pub = string(ssh.MarshalAuthorizedKey(sshPub))
-	privPath = filepath.Join(t.TempDir(), "id_rsa")
-	pemKey := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
-	})
-	if err := os.WriteFile(privPath, pemKey, 0o600); err != nil {
+	pub = string(ssh.MarshalAuthorizedKey(signer.PublicKey()))
+	privPath = filepath.Join(t.TempDir(), "id_ed25519")
+	block, err := ssh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(privPath, pem.EncodeToMemory(block), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return pub, privPath

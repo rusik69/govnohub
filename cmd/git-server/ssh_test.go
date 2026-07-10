@@ -39,3 +39,14 @@ func TestAcceptSSHEnv(t *testing.T) {
 		t.Fatal("expected PATH to be rejected")
 	}
 }
+
+func TestSSHPackEnv(t *testing.T) {
+	got := sshPackEnv(nil)
+	if len(got) != 1 || got[0] != "GIT_PROTOCOL=version=2" {
+		t.Fatalf("default env=%v", got)
+	}
+	got = sshPackEnv([]string{"GIT_PROTOCOL=version=1"})
+	if len(got) != 1 || got[0] != "GIT_PROTOCOL=version=1" {
+		t.Fatalf("preserved env=%v", got)
+	}
+}
