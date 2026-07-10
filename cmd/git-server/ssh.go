@@ -91,29 +91,55 @@ func (s *server) handleSSHConn(raw net.Conn, cfg *ssh.ServerConfig) {
 
 func (s *server) handleSSHSession(channel ssh.Channel, requests <-chan *ssh.Request, userID uuid.UUID, username string) {
 	defer channel.Close()
+	var sessionEnv []string
 	for req := range requests {
-		if req.Type != "exec" {
+		switch req.Type {
+		case "env":
+			accepted := false
+			var envReq struct {
+				Name  string
+				Value string
+			}
+			if err := ssh.Unmarshal(req.Payload, &envReq); err == nil {
+				if kv, ok := acceptSSHEnv(envReq.Name, envReq.Value); ok {
+					sessionEnv = append(sessionEnv, kv)
+					accepted = true
+				}
+			}
+			if req.WantReply {
+				req.Reply(accepted, nil)
+			}
+		case "exec":
+			cmd := parseExecCommand(req.Payload)
+			if req.WantReply {
+				req.Reply(true, nil)
+			}
+			// Drain remaining session requests while git runs; Git 2.54+ may send
+			// env/pty requests that block the channel if left unread.
+			go func() {
+				for r := range requests {
+					if r.WantReply {
+						r.Reply(false, nil)
+					}
+				}
+			}()
+			status := s.execGitSSH(context.Background(), cmd, userID, username, channel, channel, sessionEnv)
+			sendExitStatus(channel, status)
+			return
+		default:
 			if req.WantReply {
 				req.Reply(false, nil)
 			}
-			continue
 		}
-		cmd := parseExecCommand(req.Payload)
-		if req.WantReply {
-			req.Reply(true, nil)
-		}
-		// Drain remaining session requests while git runs; Git 2.54+ may send
-		// env/pty requests that block the channel if left unread.
-		go func() {
-			for r := range requests {
-				if r.WantReply {
-					r.Reply(false, nil)
-				}
-			}
-		}()
-		status := s.execGitSSH(context.Background(), cmd, userID, username, channel, channel)
-		sendExitStatus(channel, status)
-		return
+	}
+}
+
+func acceptSSHEnv(name, value string) (string, bool) {
+	switch name {
+	case "GIT_PROTOCOL":
+		return name + "=" + value, true
+	default:
+		return "", false
 	}
 }
 
@@ -123,7 +149,7 @@ func sendExitStatus(ch ssh.Channel, status uint32) {
 	_, _ = ch.SendRequest("exit-status", false, buf[:])
 }
 
-func parseGitSSHCommand(cmd string) (service, repoPath string, ok bool) {
+func parseGitSSHCommand(cmd string) (service, repoPath string, stateless bool, ok bool) {
 	cmd = strings.TrimSpace(cmd)
 	switch {
 	case strings.HasPrefix(cmd, "git-upload-pack"):
@@ -131,14 +157,15 @@ func parseGitSSHCommand(cmd string) (service, repoPath string, ok bool) {
 	case strings.HasPrefix(cmd, "git-receive-pack"):
 		service = "receive-pack"
 	default:
-		return "", "", false
+		return "", "", false, false
 	}
+	stateless = strings.Contains(cmd, "--stateless-rpc")
 	i := strings.LastIndex(cmd, " ")
 	if i < 0 {
-		return "", "", false
+		return "", "", false, false
 	}
 	repoPath = strings.Trim(strings.TrimSuffix(strings.Trim(cmd[i+1:], `"'`), ".git"), "/")
-	return service, repoPath, repoPath != ""
+	return service, repoPath, stateless, repoPath != ""
 }
 
 func parseExecCommand(payload []byte) string {
@@ -152,8 +179,8 @@ func parseExecCommand(payload []byte) string {
 	return strings.TrimSpace(string(payload))
 }
 
-func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, username string, r io.Reader, w io.Writer) uint32 {
-	service, repoPath, ok := parseGitSSHCommand(cmd)
+func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, username string, r io.Reader, w io.Writer, sessionEnv []string) uint32 {
+	service, repoPath, stateless, ok := parseGitSSHCommand(cmd)
 	if !ok {
 		log.Printf("ssh: unknown command %q", cmd)
 		return 127
@@ -182,7 +209,7 @@ func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, u
 
 	switch service {
 	case "upload-pack":
-		if err := s.git.UploadPackSSH(owner, name, r, w); err != nil {
+		if err := s.git.UploadPackSSH(owner, name, r, w, sessionEnv, stateless); err != nil {
 			log.Printf("ssh upload-pack %s/%s: %v", owner, name, err)
 			return 1
 		}
@@ -198,7 +225,7 @@ func (s *server) execGitSSH(ctx context.Context, cmd string, userID uuid.UUID, u
 			log.Printf("ssh list branches before push %s/%s: %v", owner, name, err)
 			return 1
 		}
-		if err := s.git.ReceivePackSSH(owner, name, r, w); err != nil {
+		if err := s.git.ReceivePackSSH(owner, name, r, w, sessionEnv, stateless); err != nil {
 			log.Printf("ssh receive-pack %s/%s: %v", owner, name, err)
 			return 1
 		}

@@ -54,6 +54,7 @@ func NewLocalDeploy(t *testing.T) *LocalDeploy {
 	apiCmd.Env = append(os.Environ(), append(baseEnv, "HTTP_ADDR=:"+itoa(apiPort))...)
 
 	gitCmd := exec.Command(gitBin)
+	gitCmd.Stderr = os.Stderr
 	gitCmd.Env = append(os.Environ(), append(baseEnv,
 		"GIT_HTTP_ADDR=:"+itoa(gitPort),
 		"GIT_SSH_ADDR=:"+itoa(sshPort),

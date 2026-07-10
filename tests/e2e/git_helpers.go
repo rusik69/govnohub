@@ -34,13 +34,7 @@ func requireSSH(t *testing.T) {
 	}
 }
 
-func skipSSHInCI(t *testing.T) {
-	t.Helper()
-	requireSSH(t)
-	if os.Getenv("GITHUB_ACTIONS") == "true" {
-		t.Skip("SSH git e2e unstable on GitHub Actions; HTTP git tests cover deploy flow")
-	}
-}
+const gitSSHOpts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o SendEnv=GIT_PROTOCOL"
 
 func gitRemoteURL(gitBase, owner, repo, user, password string) string {
 	remote := fmt.Sprintf("%s/%s/%s.git", strings.TrimRight(gitBase, "/"), owner, repo)
@@ -62,11 +56,11 @@ func runGit(t *testing.T, dir string, args ...string) {
 
 func runGitSSH(t *testing.T, dir, privKey string, args ...string) {
 	t.Helper()
-	skipSSHInCI(t)
+	requireSSH(t)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
-		"GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "+privKey,
+		"GIT_SSH_COMMAND=ssh "+gitSSHOpts+" -i "+privKey,
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %s %v", args, out, err)
@@ -82,11 +76,11 @@ func runGitAllowFail(t *testing.T, dir string, args ...string) ([]byte, error) {
 
 func runGitSSHAllowFail(t *testing.T, dir, privKey string, args ...string) ([]byte, error) {
 	t.Helper()
-	skipSSHInCI(t)
+	requireSSH(t)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
-		"GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "+privKey,
+		"GIT_SSH_COMMAND=ssh "+gitSSHOpts+" -i "+privKey,
 	)
 	return cmd.CombinedOutput()
 }
@@ -112,7 +106,7 @@ func gitClone(t *testing.T, workDir, cloneURL, dirName string) string {
 
 func gitCloneSSH(t *testing.T, workDir, sshURL, privKey, dirName string) string {
 	t.Helper()
-	skipSSHInCI(t)
+	requireSSH(t)
 	runGitSSH(t, workDir, privKey, "clone", sshURL, dirName)
 	repoDir := filepath.Join(workDir, dirName)
 	setupGit(t, repoDir)

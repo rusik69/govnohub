@@ -115,12 +115,12 @@ func (s *Store) Open(owner, name string) (*git.Repository, error) {
 	return git.PlainOpen(s.RepoPath(owner, name))
 }
 
-func (s *Store) UploadPackSSH(owner, name string, r io.Reader, w io.Writer) error {
-	return s.runGitBidirectional(owner, name, "upload-pack", r, w)
+func (s *Store) UploadPackSSH(owner, name string, r io.Reader, w io.Writer, extraEnv []string, stateless bool) error {
+	return s.runGitBidirectional(owner, name, "upload-pack", r, w, extraEnv, stateless)
 }
 
-func (s *Store) ReceivePackSSH(owner, name string, r io.Reader, w io.Writer) error {
-	return s.runGitBidirectional(owner, name, "receive-pack", r, w)
+func (s *Store) ReceivePackSSH(owner, name string, r io.Reader, w io.Writer, extraEnv []string, stateless bool) error {
+	return s.runGitBidirectional(owner, name, "receive-pack", r, w, extraEnv, stateless)
 }
 
 func (s *Store) ReceivePack(owner, name string, r io.Reader, w io.Writer) error {
@@ -151,9 +151,15 @@ func (s *Store) runGit(owner, name, cmd string, stateless bool, r io.Reader, w i
 
 // runGitBidirectional runs git upload/receive-pack with separate copy goroutines.
 // Required when stdin and stdout are the same SSH channel to avoid deadlocks.
-func (s *Store) runGitBidirectional(owner, name, cmd string, in io.Reader, out io.Writer) error {
+func (s *Store) runGitBidirectional(owner, name, cmd string, in io.Reader, out io.Writer, extraEnv []string, stateless bool) error {
 	path := s.RepoPath(owner, name)
-	c := exec.Command("git", "-c", "safe.directory=*", cmd, path)
+	args := []string{"-c", "safe.directory=*", cmd}
+	if stateless {
+		args = append(args, "--stateless-rpc")
+	}
+	args = append(args, path)
+	c := exec.Command("git", args...)
+	c.Env = append(os.Environ(), extraEnv...)
 	var stderr bytes.Buffer
 	c.Stderr = &stderr
 
