@@ -7,13 +7,14 @@ import (
 )
 
 type PRDetailData struct {
-	Header   RepoHeaderData
-	Nav      RepoNavData
-	PR       *pull.PullRequest
-	Reviews  []pull.Review
-	Comments []pull.LineComment
-	Files    []DiffFile
-	CSRF     string
+	Header    RepoHeaderData
+	Nav       RepoNavData
+	PR        *pull.PullRequest
+	Author    string
+	Reviews   []pull.Review
+	Comments  []pull.LineComment
+	Files     []DiffFile
+	CSRF      string
 	Mergeable bool
 }
 
@@ -26,9 +27,8 @@ templ PRDetailPage(layout LayoutData, data PRDetailData) {
 }
 
 templ PRDetailContent(data PRDetailData) {
+	@RepoPageShell(data.Header, data.Nav)
 	<div class="max-w-7xl mx-auto">
-		@RepoHeader(data.Header)
-		@RepoNav(data.Nav)
 		<div class="flex gap-4 max-md-flex-col">
 			<div class="flex-1">
 				<div class="flex items-center gap-2 mb-2">
@@ -47,7 +47,7 @@ templ PRDetailContent(data PRDetailData) {
 				</p>
 				if data.PR.Body != "" {
 					<ul class="gh-timeline mb-4">
-						@CommentBox("author", "commented on this pull request", prBodyComponent(data.PR.Body))
+						@CommentBox(data.Author, "commented on this pull request", prBodyComponent(data.PR.Body))
 					</ul>
 				}
 				for _, f := range data.Files {
@@ -118,7 +118,7 @@ templ PRDetailContent(data PRDetailData) {
 							@CSRFInput(data.CSRF)
 							<input type="hidden" name="path" id="comment-path"/>
 							<input type="hidden" name="line" id="comment-line"/>
-							<textarea name="body" class="input mb-2" rows="3" placeholder="Add inline comment (click a line)"></textarea>
+							<textarea name="body" class="input mb-2" rows="3" placeholder="Add inline comment (click or focus a line)"></textarea>
 							<button type="submit" class="btn-secondary w-full">Add comment</button>
 						</form>
 					</div>
@@ -127,10 +127,22 @@ templ PRDetailContent(data PRDetailData) {
 		</div>
 	</div>
 	<script>
+		function selectDiffLine(el) {
+			document.querySelectorAll('.diff-line.selected').forEach(n => n.classList.remove('selected'));
+			el.classList.add('selected');
+			document.getElementById('comment-path').value = el.dataset.path;
+			document.getElementById('comment-line').value = el.dataset.line;
+		}
 		document.querySelectorAll('.diff-line.clickable').forEach(el => {
-			el.addEventListener('click', () => {
-				document.getElementById('comment-path').value = el.dataset.path;
-				document.getElementById('comment-line').value = el.dataset.line;
+			el.setAttribute('tabindex', '0');
+			el.setAttribute('role', 'button');
+			el.setAttribute('aria-label', 'Comment on line ' + el.dataset.line);
+			el.addEventListener('click', () => selectDiffLine(el));
+			el.addEventListener('keydown', (e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					selectDiffLine(el);
+				}
 			});
 		});
 	</script>

@@ -26,9 +26,8 @@ templ RepoPage(data RepoPageData) {
 }
 
 templ RepoContent(data RepoPageData) {
+	@RepoPageShell(data.Header, data.Nav)
 	<div class="max-w-7xl mx-auto">
-		@RepoHeader(data.Header)
-		@RepoNav(data.Nav)
 		@BranchBar(data.Repo.FullName, data.Ref, data.Path)
 		if data.Content != "" {
 			<div class="gh-code-block">

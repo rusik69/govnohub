@@ -165,7 +165,7 @@ func notifClass(read bool) string {
 	if read {
 		return ""
 	}
-	return "bg-hover"
+	return "bg-highlight"
 }
 
 var _ = templruntime.GeneratedTemplate

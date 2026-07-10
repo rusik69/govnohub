@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -26,18 +25,24 @@ func (h *Handler) layout(r *http.Request, title string) LayoutData {
 	}
 }
 
-func (h *Handler) repoPageCtx(ctx context.Context, repository *repo.Repository, tab string) (RepoHeaderData, RepoNavData) {
-	issues, _ := h.deps.Issues.List(ctx, repository.ID)
-	prs, _ := h.deps.Pulls.List(ctx, repository.ID)
-	return RepoHeaderData{Repository: repository},
-		RepoNavData{
-			Owner:      repository.OwnerName,
-			Repo:       repository.Name,
-			Tab:        tab,
-			FullName:   repository.FullName,
-			IssueCount: len(issues),
-			PullCount:  len(prs),
-		}
+func (h *Handler) repoPageCtx(r *http.Request, repository *repo.Repository, tab string) (RepoHeaderData, RepoNavData) {
+	issues, _ := h.deps.Issues.List(r.Context(), repository.ID)
+	prs, _ := h.deps.Pulls.List(r.Context(), repository.ID)
+	header := RepoHeaderData{
+		Repository: repository,
+		CSRF:       csrfFrom(r.Context()),
+	}
+	if su := userFrom(r.Context()); su != nil {
+		header.Starred, _ = h.deps.Repos.IsStarred(r.Context(), repository.ID, su.ID)
+	}
+	return header, RepoNavData{
+		Owner:      repository.OwnerName,
+		Repo:       repository.Name,
+		Tab:        tab,
+		FullName:   repository.FullName,
+		IssueCount: len(issues),
+		PullCount:  len(prs),
+	}
 }
 
 func render(w http.ResponseWriter, r *http.Request, c templ.Component) {
@@ -66,10 +71,6 @@ func (h *Handler) getRepo(w http.ResponseWriter, r *http.Request, perm string) (
 		return nil, false
 	}
 	return repository, true
-}
-
-func repoNav(owner, repo, tab string) RepoNavData {
-	return RepoNavData{Owner: owner, Repo: repo, Tab: tab, FullName: owner + "/" + repo}
 }
 
 func parseNum(w http.ResponseWriter, r *http.Request, key string) (int, bool) {
@@ -104,4 +105,8 @@ func (h *Handler) requirePOST(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+func renderToast(w http.ResponseWriter, r *http.Request, msg, variant string) {
+	render(w, r, Toast(msg, variant))
 }

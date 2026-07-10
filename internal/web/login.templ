@@ -14,14 +14,8 @@ templ loginContent(csrf, errMsg, next string) {
 		<form method="post" action="/login" class="flex flex-col gap-4">
 			@CSRFInput(csrf)
 			<input type="hidden" name="next" value={ next }/>
-			<div>
-				<label class="text-sm font-medium">Username or email</label>
-				<input type="text" name="username" required class="input mt-2" autofocus/>
-			</div>
-			<div>
-				<label class="text-sm font-medium">Password</label>
-				<input type="password" name="password" required class="input mt-2"/>
-			</div>
+			@FormField("Username or email", "login-username", "text", "username", "", true)
+			@FormField("Password", "login-password", "password", "password", "", true)
 			<button type="submit" class="btn w-full justify-center">Sign in</button>
 		</form>
 	</div>

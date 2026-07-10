@@ -8,43 +8,64 @@ import (
 templ OrgsPage(layout LayoutData, orgs []org.Org, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: OrgsContent(orgs, csrf),
+		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+		Content: OrgsContent(orgs, csrf),
 	})
 }
 
 templ OrgsContent(orgs []org.Org, csrf string) {
-	<h1 class="text-2xl font-bold mb-6">Organizations</h1>
-	<form method="post" action="/orgs" class="card p-4 mb-6 grid grid-cols-2 gap-3">
+	@PageHeader("Organizations", templ.NopComponent)
+	@CollapsibleForm("New organization", OrgCreateForm(csrf))
+	if len(orgs) == 0 {
+		@EmptyState("No organizations")
+	} else {
+		<div class="gh-list">
+			for _, o := range orgs {
+				<a href={ templ.SafeURL("/orgs/" + o.Name) } class="gh-list-item">
+					<span class="gh-list-item-icon">
+						@Icon("repo", "")
+					</span>
+					<div class="gh-list-item-body">
+						<div class="gh-list-item-title">{ o.Name }</div>
+						<div class="gh-list-item-meta">
+							if o.DisplayName != "" {
+								<span>{ o.DisplayName }</span>
+							}
+							if o.Description != "" {
+								<span> · { o.Description }</span>
+							}
+						</div>
+					</div>
+				</a>
+			}
+		</div>
+	}
+}
+
+templ OrgCreateForm(csrf string) {
+	<form method="post" action="/orgs" class="grid grid-cols-2 gap-3">
 		@CSRFInput(csrf)
 		<input type="text" name="name" placeholder="org-name" required class="input"/>
 		<input type="text" name="display_name" placeholder="Display name" class="input"/>
 		<textarea name="description" placeholder="Description" class="input col-span-2" rows="2"></textarea>
 		<button type="submit" class="btn col-span-2">Create organization</button>
 	</form>
-	if len(orgs) == 0 {
-		@EmptyState("No organizations")
-	} else {
-		<ul class="card">
-			for _, o := range orgs {
-				<li class="border-b px-4 py-3">
-					<a href={ templ.SafeURL("/orgs/" + o.Name) } class="font-medium">{ o.Name }</a>
-					if o.DisplayName != "" {
-						<span class="text-muted ml-2">{ o.DisplayName }</span>
-					}
-				</li>
-			}
-		</ul>
-	}
 }
 
 templ OrgDetailPage(layout LayoutData, o *org.Org, members []org.Member, repos []repo.Repository, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: OrgDetailContent(o, members, repos, csrf),
+		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+		Content: OrgDetailContent(o, members, repos, csrf),
 	})
 }
 
 templ OrgDetailContent(o *org.Org, members []org.Member, repos []repo.Repository, csrf string) {
+	<nav class="text-sm text-muted mb-2">
+		<a href="/orgs">Organizations</a>
+		<span> / </span>
+		<span>{ o.Name }</span>
+	</nav>
 	<h1 class="text-2xl font-bold mb-2">{ o.Name }</h1>
 	if o.Description != "" {
 		<p class="text-muted mb-4">{ o.Description }</p>
@@ -54,85 +75,128 @@ templ OrgDetailContent(o *org.Org, members []org.Member, repos []repo.Repository
 	</div>
 	<section class="mb-6">
 		<h2 class="text-lg font-semibold mb-3">Repositories</h2>
-		<form method="post" action={ templ.SafeURL("/orgs/" + o.Name + "/repos") } class="card p-4 mb-4 flex gap-3">
-			@CSRFInput(csrf)
-			<input type="text" name="name" placeholder="repo-name" required class="input flex-1"/>
-			<input type="text" name="description" placeholder="Description" class="input flex-1"/>
-			<button type="submit" class="btn">Create repo</button>
-		</form>
+		@CollapsibleForm("New repository", OrgRepoCreateForm(o.Name, csrf))
 		if len(repos) == 0 {
 			@EmptyState("No repositories")
 		} else {
-			<ul class="card mb-4">
+			<div class="gh-list mb-4">
 				for _, r := range repos {
-					<li class="border-b px-4 py-3">
-						<a href={ templ.SafeURL("/" + r.FullName) } class="font-medium">{ r.FullName }</a>
-					</li>
+					<a href={ templ.SafeURL("/" + r.FullName) } class="gh-list-item">
+						<span class="gh-list-item-icon">
+							@Icon("repo", "")
+						</span>
+						<div class="gh-list-item-body">
+							<div class="gh-list-item-title">{ r.FullName }</div>
+						</div>
+					</a>
 				}
-			</ul>
+			</div>
 		}
 	</section>
 	<h2 class="text-lg font-semibold mb-3">Members</h2>
-	<form method="post" action={ templ.SafeURL("/orgs/" + o.Name + "/members") } class="card p-4 mb-4 flex gap-3">
+	<form method="post" action={ templ.SafeURL("/orgs/" + o.Name + "/members") } class="card p-4 mb-4 flex gap-3 flex-wrap">
 		@CSRFInput(csrf)
 		<input type="text" name="username" placeholder="Username" required class="input flex-1"/>
-		<select name="role" class="input"><option value="member">member</option><option value="admin">admin</option></select>
+		<select name="role" class="input">
+			<option value="member">member</option>
+			<option value="admin">admin</option>
+		</select>
 		<button type="submit" class="btn">Add member</button>
 	</form>
-	<table class="card">
-		<thead><tr><th>User</th><th>Role</th></tr></thead>
-		<tbody>
-			for _, m := range members {
-				<tr><td>{ m.Username }</td><td>{ m.Role }</td></tr>
-			}
-		</tbody>
-	</table>
+	<div class="overflow-auto">
+		<table class="card">
+			<thead><tr><th scope="col">User</th><th scope="col">Role</th></tr></thead>
+			<tbody>
+				for _, m := range members {
+					<tr><td>{ m.Username }</td><td>{ m.Role }</td></tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ OrgRepoCreateForm(orgName, csrf string) {
+	<form method="post" action={ templ.SafeURL("/orgs/" + orgName + "/repos") } class="flex gap-3 flex-wrap">
+		@CSRFInput(csrf)
+		<input type="text" name="name" placeholder="repo-name" required class="input flex-1"/>
+		<input type="text" name="description" placeholder="Description" class="input flex-1"/>
+		<button type="submit" class="btn">Create repo</button>
+	</form>
 }
 
 templ OrgTeamsPage(layout LayoutData, orgName string, teams []org.Team, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: OrgTeamsContent(orgName, teams, csrf),
+		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+		Content: OrgTeamsContent(orgName, teams, csrf),
 	})
 }
 
 templ OrgTeamsContent(orgName string, teams []org.Team, csrf string) {
-	<h1 class="text-2xl font-bold mb-4"><a href={ templ.SafeURL("/orgs/" + orgName) }>{ orgName }</a> / Teams</h1>
-	<form method="post" action={ templ.SafeURL("/orgs/" + orgName + "/teams") } class="card p-4 mb-4 flex gap-3">
+	<nav class="text-sm text-muted mb-2">
+		<a href="/orgs">Organizations</a>
+		<span> / </span>
+		<a href={ templ.SafeURL("/orgs/" + orgName) }>{ orgName }</a>
+		<span> / Teams</span>
+	</nav>
+	<h1 class="text-2xl font-bold mb-4">Teams</h1>
+	@CollapsibleForm("New team", OrgTeamCreateForm(orgName, csrf))
+	if len(teams) == 0 {
+		@EmptyState("No teams")
+	} else {
+		<ul class="card">
+			for _, t := range teams {
+				<li class="border-b px-4 py-3">
+					<a href={ templ.SafeURL("/orgs/" + orgName + "/teams/" + t.Name) } class="font-medium">{ t.Name }</a>
+					if t.Description != "" {
+						<p class="text-sm text-muted m-0 mt-1">{ t.Description }</p>
+					}
+				</li>
+			}
+		</ul>
+	}
+}
+
+templ OrgTeamCreateForm(orgName, csrf string) {
+	<form method="post" action={ templ.SafeURL("/orgs/" + orgName + "/teams") } class="flex flex-col gap-3">
 		@CSRFInput(csrf)
-		<input type="text" name="name" placeholder="Team name" required class="input flex-1"/>
-		<input type="text" name="description" placeholder="Description" class="input flex-1"/>
-		<button type="submit" class="btn">Create team</button>
+		<input type="text" name="name" placeholder="team-name" required class="input"/>
+		<textarea name="description" placeholder="Description" class="input" rows="2"></textarea>
+		<button type="submit" class="btn self-start">Create team</button>
 	</form>
-	<ul class="card">
-		for _, t := range teams {
-			<li class="border-b px-4 py-3">
-				<a href={ templ.SafeURL("/orgs/" + orgName + "/teams/" + t.Name) } class="font-medium">{ t.Name }</a>
-				if t.Description != "" {
-					<p class="text-sm text-muted m-0">{ t.Description }</p>
-				}
-			</li>
-		}
-	</ul>
 }
 
 templ TeamDetailPage(layout LayoutData, orgName string, team *org.Team, members []org.Member, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: TeamDetailContent(orgName, team, members, csrf),
+		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+		Content: TeamDetailContent(orgName, team, members, csrf),
 	})
 }
 
 templ TeamDetailContent(orgName string, team *org.Team, members []org.Member, csrf string) {
-	<h1 class="text-2xl font-bold mb-4">{ orgName } / { team.Name }</h1>
+	<nav class="text-sm text-muted mb-2">
+		<a href="/orgs">Organizations</a>
+		<span> / </span>
+		<a href={ templ.SafeURL("/orgs/" + orgName) }>{ orgName }</a>
+		<span> / </span>
+		<a href={ templ.SafeURL("/orgs/" + orgName + "/teams") }>Teams</a>
+		<span> / { team.Name }</span>
+	</nav>
+	<h1 class="text-2xl font-bold mb-4">{ team.Name }</h1>
 	<form method="post" action={ templ.SafeURL("/orgs/" + orgName + "/teams/" + team.Name + "/members") } class="card p-4 mb-4 flex gap-3">
 		@CSRFInput(csrf)
 		<input type="text" name="username" placeholder="Username" required class="input flex-1"/>
-		<button type="submit" class="btn">Add to team</button>
+		<button type="submit" class="btn">Add member</button>
 	</form>
-	<ul class="card">
-		for _, m := range members {
-			<li class="border-b px-4 py-3">{ m.Username }</li>
-		}
-	</ul>
+	<div class="overflow-auto">
+		<table class="card">
+			<thead><tr><th scope="col">User</th><th scope="col">Role</th></tr></thead>
+			<tbody>
+				for _, m := range members {
+					<tr><td>{ m.Username }</td><td>{ m.Role }</td></tr>
+				}
+			</tbody>
+		</table>
+	</div>
 }

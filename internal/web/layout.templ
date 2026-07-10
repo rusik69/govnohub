@@ -14,6 +14,7 @@ type LayoutData struct {
 	Content          templ.Component
 	FullWidth        bool
 	HideNav          bool
+	ActiveNav        string
 }
 
 templ Layout(data LayoutData) {
@@ -25,9 +26,16 @@ templ Layout(data LayoutData) {
 			<meta name="csrf-token" content={ data.CSRF }/>
 			<title>{ data.Title } · Govnohub</title>
 			<link rel="stylesheet" href="/static/app.css"/>
-			<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JBL2yH9sZz4MhyRgGO3rdv6j9sZ9rN8jdtJ0ZvW+hi87" crossorigin="anonymous"></script>
+			<script src="/static/htmx.min.js"></script>
 			<script>
-				document.documentElement.classList.toggle('dark', localStorage.getItem('theme') === 'dark');
+				(function() {
+					const stored = localStorage.getItem('theme');
+					if (stored) {
+						document.documentElement.classList.toggle('dark', stored === 'dark');
+					} else {
+						document.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);
+					}
+				})();
 				function toggleTheme() {
 					const dark = !document.documentElement.classList.contains('dark');
 					document.documentElement.classList.toggle('dark', dark);
@@ -39,7 +47,27 @@ templ Layout(data LayoutData) {
 					document.querySelectorAll('.theme-icon-sun').forEach(el => el.classList.toggle('hidden', dark));
 					document.querySelectorAll('.theme-icon-moon').forEach(el => el.classList.toggle('hidden', !dark));
 				}
+				function toggleNotifications(btn) {
+					const panel = document.getElementById('notif-panel');
+					if (!panel) return;
+					panel.classList.toggle('hidden');
+					const isOpen = !panel.classList.contains('hidden');
+					btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+					if (isOpen && panel.innerHTML.trim() === '') {
+						htmx.ajax('GET', '/notifications', {target: '#notif-panel', swap: 'innerHTML'});
+					}
+				}
 				document.addEventListener('DOMContentLoaded', updateThemeIcon);
+				document.addEventListener('click', function(e) {
+					const panel = document.getElementById('notif-panel');
+					const bell = document.querySelector('.notif-bell');
+					if (!panel || panel.classList.contains('hidden')) return;
+					if (bell && !bell.contains(e.target)) {
+						panel.classList.add('hidden');
+						const btn = bell.querySelector('button');
+						if (btn) btn.setAttribute('aria-expanded', 'false');
+					}
+				});
 				document.addEventListener('htmx:configRequest', function(evt) {
 					const token = document.querySelector('meta[name="csrf-token"]');
 					if (token) evt.detail.headers['X-CSRF-Token'] = token.content;
@@ -47,6 +75,7 @@ templ Layout(data LayoutData) {
 			</script>
 		</head>
 		<body class="min-h-screen">
+			<a href="#main-content" class="skip-link">Skip to main content</a>
 			if !data.HideNav {
 				<header class="gh-header">
 					<div class="gh-header-inner">
@@ -54,13 +83,23 @@ templ Layout(data LayoutData) {
 							@Icon("mark-github", "")
 						</a>
 						if data.User != nil {
+							<nav class="gh-global-nav" aria-label="Global">
+								<a href="/" class={ globalNavClass(data.ActiveNav, "dashboard") }>Dashboard</a>
+								<a href="/orgs" class={ globalNavClass(data.ActiveNav, "orgs") }>Organizations</a>
+								<a href="/search" class={ globalNavClass(data.ActiveNav, "search") + " gh-header-search-mobile" }>Search</a>
+							</nav>
 							<form action="/search" method="get" class="gh-header-search">
 								@Icon("search", "")
 								<input type="search" name="q" placeholder="Search or jump to..."/>
 							</form>
 						}
 						<div class="gh-header-actions">
-							<button type="button" class="gh-header-btn" onclick="toggleTheme()" title="Toggle theme">
+							if data.User != nil {
+								<a href="/search" class="gh-header-btn gh-header-search-mobile" aria-label="Search">
+									@Icon("search", "")
+								</a>
+							}
+							<button type="button" class="gh-header-btn" onclick="toggleTheme()" aria-label="Toggle theme">
 								<span class="theme-icon-sun">
 									@Icon("sun", "")
 								</span>
@@ -71,18 +110,19 @@ templ Layout(data LayoutData) {
 							if data.User != nil {
 								<div class="notif-bell">
 									<button
+										type="button"
 										class="gh-header-btn"
-										hx-get="/notifications"
-										hx-target="#notif-panel"
-										hx-swap="innerHTML"
-										title="Notifications"
+										aria-label="Notifications"
+										aria-expanded="false"
+										aria-controls="notif-panel"
+										onclick="toggleNotifications(this)"
 									>
 										@Icon("bell", "")
 									</button>
 									if data.UnreadNotifs > 0 {
 										<span class="notif-count">{ unreadLabel(data.UnreadNotifs) }</span>
 									}
-									<div id="notif-panel" class="notif-dropdown card hidden"></div>
+									<div id="notif-panel" class="notif-dropdown card hidden" aria-live="polite"></div>
 								</div>
 								<details class="gh-user-menu">
 									<summary>
@@ -107,7 +147,7 @@ templ Layout(data LayoutData) {
 					</div>
 				</header>
 			}
-			<main class={ layoutMainClass(data) }>
+			<main id="main-content" class={ layoutMainClass(data) }>
 				@data.Content
 			</main>
 		</body>
@@ -119,6 +159,13 @@ func layoutMainClass(data LayoutData) string {
 		return "p-4"
 	}
 	return "max-w-7xl mx-auto p-4"
+}
+
+func globalNavClass(active, tab string) string {
+	if active == tab {
+		return "active"
+	}
+	return ""
 }
 
 func unreadLabel(n int) string {

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -56,6 +57,48 @@ func avatarColor(name string) string {
 		h += int(c)
 	}
 	return colors[h%len(colors)]
+}
+
+templ RepoPageShell(header RepoHeaderData, nav RepoNavData) {
+	<div class="max-w-7xl mx-auto">
+		@RepoHeader(header)
+		@RepoNav(nav)
+	</div>
+}
+
+templ PageHeader(title string, actions templ.Component) {
+	<div class="flex justify-between items-center mb-6 gap-3 flex-wrap">
+		<h1 class="text-2xl font-bold m-0">{ title }</h1>
+		if actions != nil {
+			<div class="flex gap-2 flex-wrap">
+				@actions
+			</div>
+		}
+	</div>
+}
+
+templ CollapsibleForm(title string, content templ.Component) {
+	<details class="collapsible-form card mb-4">
+		<summary class="collapsible-form-summary">{ title }</summary>
+		<div class="collapsible-form-body p-4">
+			@content
+		</div>
+	</details>
+}
+
+templ FormField(label, id, inputType, name, value string, required bool) {
+	<div class="form-field">
+		<label class="text-sm" for={ id }>{ label }</label>
+		if inputType == "textarea" {
+			<textarea id={ id } name={ name } class="input mt-2" rows="3">{ value }</textarea>
+		} else {
+			<input type={ inputType } id={ id } name={ name } value={ value } class="input mt-2" required?={ required }/>
+		}
+	</div>
+}
+
+templ Toast(message, variant string) {
+	<div class={ "toast toast-" + variant } role="status" aria-live="polite">{ message }</div>
 }
 
 templ RepoHeader(data RepoHeaderData) {
@@ -130,13 +173,20 @@ templ RepoNav(data RepoNavData) {
 }
 
 templ repoTab(data RepoNavData, tab, suffix, icon, title string, count int) {
-	<a href={ templ.SafeURL("/" + data.Owner + "/" + data.Repo + suffix) } class={ tabClass(data.Tab, tab) }>
+	<a href={ templ.SafeURL("/" + data.Owner + "/" + data.Repo + suffix) } class={ tabClass(data.Tab, tab) } aria-current={ tabAriaCurrent(data.Tab, tab) }>
 		@Icon(iconName(icon, tab), "")
 		{ title }
 		if count > 0 && (tab == "issues" || tab == "pulls") {
 			<span class="gh-counter">{ strconv.Itoa(count) }</span>
 		}
 	</a>
+}
+
+func tabAriaCurrent(active, tab string) string {
+	if active == tab {
+		return "page"
+	}
+	return ""
 }
 
 func iconName(icon, tab string) string {
@@ -155,11 +205,11 @@ func tabClass(active, tab string) string {
 
 templ IssueSubhead(nav RepoNavData, issues []issue.Issue, state string) {
 	<div class="gh-subhead">
-		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class={ subheadPillClass(state, "open") }>
+		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class={ subheadPillClass(state, "open") } aria-current={ subheadAriaCurrent(state, "open") }>
 			@Icon("issue-opened", "")
 			{ strconv.Itoa(countIssuesByState(issues, "open")) } Open
 		</a>
-		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues?state=closed") } class={ subheadPillClass(state, "closed") }>
+		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues?state=closed") } class={ subheadPillClass(state, "closed") } aria-current={ subheadAriaCurrent(state, "closed") }>
 			@Icon("issue-closed", "")
 			{ strconv.Itoa(countIssuesByState(issues, "closed")) } Closed
 		</a>
@@ -168,11 +218,11 @@ templ IssueSubhead(nav RepoNavData, issues []issue.Issue, state string) {
 
 templ PRSubhead(nav RepoNavData, prs []pull.PullRequest, state string) {
 	<div class="gh-subhead">
-		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls") } class={ subheadPillClass(state, "open") }>
+		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls") } class={ subheadPillClass(state, "open") } aria-current={ subheadAriaCurrent(state, "open") }>
 			@Icon("git-pull-request", "")
 			{ strconv.Itoa(countPRsByState(prs, "open")) } Open
 		</a>
-		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls?state=closed") } class={ subheadPillClass(state, "closed") }>
+		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls?state=closed") } class={ subheadPillClass(state, "closed") } aria-current={ subheadAriaCurrent(state, "closed") }>
 			@Icon("git-pull-request", "")
 			{ strconv.Itoa(countPRsByState(prs, "closed")) } Closed
 		</a>
@@ -184,6 +234,13 @@ func subheadPillClass(current, pill string) string {
 		return "gh-subhead-pill active"
 	}
 	return "gh-subhead-pill"
+}
+
+func subheadAriaCurrent(current, pill string) string {
+	if current == pill || (current == "" && pill == "open") {
+		return "page"
+	}
+	return ""
 }
 
 func countIssuesByState(issues []issue.Issue, state string) int {
@@ -332,7 +389,7 @@ templ StateBadge(state string) {
 }
 
 templ LabelBadge(name, color string) {
-	<span class="gh-label" style={ "background:" + labelColor(color) }>{ name }</span>
+	<span class="gh-label" style={ "background:" + labelColor(color) + ";color:" + labelTextColor(color) }>{ name }</span>
 }
 
 func labelColor(color string) string {
@@ -340,9 +397,23 @@ func labelColor(color string) string {
 		return "#656d76"
 	}
 	if color[0] != '#' {
-		return "#" + color
+		color = "#" + color
 	}
 	return color
+}
+
+func labelTextColor(color string) string {
+	c := labelColor(color)
+	if len(c) != 7 {
+		return "#fff"
+	}
+	var r, g, b int
+	fmt.Sscanf(c[1:], "%02x%02x%02x", &r, &g, &b)
+	luminance := (0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) / 255
+	if luminance > 0.6 {
+		return "#1f2328"
+	}
+	return "#fff"
 }
 
 templ CSRFInput(token string) {

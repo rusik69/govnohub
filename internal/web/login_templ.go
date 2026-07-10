@@ -90,7 +90,19 @@ func loginContent(csrf, errMsg, next string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\"><div><label class=\"text-sm font-medium\">Username or email</label> <input type=\"text\" name=\"username\" required class=\"input mt-2\" autofocus></div><div><label class=\"text-sm font-medium\">Password</label> <input type=\"password\" name=\"password\" required class=\"input mt-2\"></div><button type=\"submit\" class=\"btn w-full justify-center\">Sign in</button></form></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = FormField("Username or email", "login-username", "text", "username", "", true).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = FormField("Password", "login-password", "password", "password", "", true).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<button type=\"submit\" class=\"btn w-full justify-center\">Sign in</button></form></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

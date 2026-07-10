@@ -3,6 +3,7 @@ package web
 import (
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/rusik69/govnohub/internal/issue"
 )
 
@@ -15,9 +16,8 @@ templ IssueDetailPage(layout LayoutData, header RepoHeaderData, nav RepoNavData,
 }
 
 templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issue, comments []issue.Comment, labels []issue.Label, milestones []issue.Milestone, users []string, csrf string) {
+	@RepoPageShell(header, nav)
 	<div class="max-w-7xl mx-auto">
-		@RepoHeader(header)
-		@RepoNav(nav)
 		<div class="flex gap-4 max-md-flex-col">
 			<div class="flex-1">
 				<div class="flex items-center gap-2 mb-3">
@@ -39,10 +39,11 @@ templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issu
 				</form>
 			</div>
 			<aside class="sidebar">
+				<div id="issue-toast"></div>
 				<div class="gh-sidebar-panel">
 					<div class="gh-sidebar-section">
 						<div class="gh-sidebar-label">Assignees</div>
-						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/assignee" } hx-swap="none">
+						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/assignee" } hx-target="#issue-toast" hx-swap="innerHTML">
 							@CSRFInput(csrf)
 							<select name="assignee" class="input" onchange="this.form.requestSubmit()">
 								<option value="">No one assigned</option>
@@ -54,7 +55,7 @@ templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issu
 					</div>
 					<div class="gh-sidebar-section">
 						<div class="gh-sidebar-label">Milestone</div>
-						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/milestone" } hx-swap="none">
+						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/milestone" } hx-target="#issue-toast" hx-swap="innerHTML">
 							@CSRFInput(csrf)
 							<select name="milestone_id" class="input" onchange="this.form.requestSubmit()">
 								<option value="">No milestone</option>
@@ -68,14 +69,22 @@ templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issu
 						<div class="gh-sidebar-label">Labels</div>
 						<div class="flex flex-wrap gap-2 mb-3">
 							for _, l := range iss.Labels {
-								@LabelBadge(l.Name, l.Color)
+								<span class="inline-flex items-center gap-1">
+									@LabelBadge(l.Name, l.Color)
+									<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/labels/" + l.ID.String() + "/remove") } class="inline">
+										@CSRFInput(csrf)
+										<button type="submit" class="btn-secondary text-xs" aria-label={ "Remove label " + l.Name }>×</button>
+									</form>
+								</span>
 							}
 						</div>
 						for _, l := range labels {
-							<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/labels/" + l.ID.String()) } class="inline mr-2">
-								@CSRFInput(csrf)
-								<button type="submit" class="btn-secondary text-xs">+ { l.Name }</button>
-							</form>
+							if !issueHasLabel(iss, l.ID) {
+								<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/labels/" + l.ID.String()) } class="inline mr-2">
+									@CSRFInput(csrf)
+									<button type="submit" class="btn-secondary text-xs">+ { l.Name }</button>
+								</form>
+							}
 						}
 					</div>
 					if iss.State == "open" {
@@ -90,6 +99,15 @@ templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issu
 			</aside>
 		</div>
 	</div>
+}
+
+func issueHasLabel(iss *issue.Issue, id uuid.UUID) bool {
+	for _, l := range iss.Labels {
+		if l.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 templ issueBodyComponent(body string) {

@@ -10,7 +10,7 @@ templ SettingsPage(layout LayoutData, pats []auth.PATInfo, keys []auth.SSHKeyInf
 }
 
 templ SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, newPAT, errMsg string) {
-	<h1 class="text-2xl font-bold mb-6">Settings</h1>
+	@PageHeader("Settings", templ.NopComponent)
 	@ErrorAlert(errMsg)
 	if newPAT != "" {
 		<div class="alert card p-4 mb-4">
@@ -22,10 +22,9 @@ templ SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, 
 		<h2 class="text-lg font-semibold mb-3">Personal access tokens</h2>
 		<form method="post" action="/settings/pat" class="card p-4 mb-4 flex flex-col gap-3">
 			@CSRFInput(csrf)
-			<div class="flex gap-3 items-end">
+			<div class="flex gap-3 items-end flex-wrap">
 				<div class="flex-1">
-					<label class="text-sm">Name</label>
-					<input type="text" name="name" required class="input mt-2"/>
+					@FormField("Name", "pat-name", "text", "name", "", true)
 				</div>
 				<button type="submit" class="btn">Create token</button>
 			</div>
@@ -63,14 +62,8 @@ templ SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, 
 		<h2 class="text-lg font-semibold mb-3">SSH keys</h2>
 		<form method="post" action="/settings/ssh-key" class="card p-4 mb-4 flex flex-col gap-3">
 			@CSRFInput(csrf)
-			<div>
-				<label class="text-sm">Title</label>
-				<input type="text" name="title" required class="input mt-2"/>
-			</div>
-			<div>
-				<label class="text-sm">Public key</label>
-				<textarea name="key" required class="input mt-2 font-mono" rows="4"></textarea>
-			</div>
+			@FormField("Title", "ssh-title", "text", "title", "", true)
+			@FormField("Public key", "ssh-key", "textarea", "key", "", true)
 			<button type="submit" class="btn self-start">Add SSH key</button>
 		</form>
 		if len(keys) == 0 {

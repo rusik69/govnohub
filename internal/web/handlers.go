@@ -315,8 +315,7 @@ func (h *Handler) handleRepo(w http.ResponseWriter, r *http.Request) {
 		ref = repository.DefaultBranch
 	}
 	entries, _ := h.deps.Git.GetTree(repository.OwnerName, repository.Name, ref, "")
-	header, nav := h.repoPageCtx(r.Context(), repository, "code")
-	header.CSRF = csrfFrom(r.Context())
+	header, nav := h.repoPageCtx(r, repository, "code")
 	render(w, r, RepoPage(RepoPageData{
 		Layout: h.layout(r, repository.FullName),
 		Header: header, Nav: nav,
@@ -335,8 +334,7 @@ func (h *Handler) handleRepoTree(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
 	entries, _ := h.deps.Git.GetTree(repository.OwnerName, repository.Name, ref, path)
-	header, nav := h.repoPageCtx(r.Context(), repository, "code")
-	header.CSRF = csrfFrom(r.Context())
+	header, nav := h.repoPageCtx(r, repository, "code")
 	render(w, r, RepoPage(RepoPageData{
 		Layout: h.layout(r, repository.FullName),
 		Header: header, Nav: nav,
@@ -359,8 +357,7 @@ func (h *Handler) handleRepoBlob(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		content = string(data)
 	}
-	header, nav := h.repoPageCtx(r.Context(), repository, "code")
-	header.CSRF = csrfFrom(r.Context())
+	header, nav := h.repoPageCtx(r, repository, "code")
 	render(w, r, RepoPage(RepoPageData{
 		Layout: h.layout(r, repository.FullName),
 		Header: header, Nav: nav,
@@ -375,8 +372,7 @@ func (h *Handler) handleIssues(w http.ResponseWriter, r *http.Request) {
 	}
 	issues, _ := h.deps.Issues.List(r.Context(), repository.ID)
 	state := r.URL.Query().Get("state")
-	header, nav := h.repoPageCtx(r.Context(), repository, "issues")
-	header.CSRF = csrfFrom(r.Context())
+	header, nav := h.repoPageCtx(r, repository, "issues")
 	render(w, r, IssuesPage(h.layout(r, "Issues"), header, nav, issues, state, csrfFrom(r.Context())))
 }
 
@@ -411,8 +407,7 @@ func (h *Handler) handleIssueDetail(w http.ResponseWriter, r *http.Request) {
 	labels, _ := h.deps.Issues.ListLabels(r.Context(), repository.ID)
 	milestones, _ := h.deps.Issues.ListMilestones(r.Context(), repository.ID)
 	users, _ := h.deps.Issues.ListRepoUsers(r.Context(), repository.ID)
-	header, nav := h.repoPageCtx(r.Context(), repository, "issues")
-	header.CSRF = csrfFrom(r.Context())
+	header, nav := h.repoPageCtx(r, repository, "issues")
 	render(w, r, IssueDetailPage(h.layout(r, iss.Title), header, nav, iss, comments, labels, milestones, users, csrfFrom(r.Context())))
 }
 
@@ -491,7 +486,7 @@ func (h *Handler) handleIssueAssignee(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = h.deps.Issues.SetAssignee(r.Context(), iss.ID, id)
-	w.WriteHeader(http.StatusOK)
+	renderToast(w, r, "Assignee updated", "success")
 }
 
 func (h *Handler) handleIssueMilestone(w http.ResponseWriter, r *http.Request) {
@@ -520,7 +515,7 @@ func (h *Handler) handleIssueMilestone(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = h.deps.Issues.SetMilestone(r.Context(), iss.ID, id)
-	w.WriteHeader(http.StatusOK)
+	renderToast(w, r, "Milestone updated", "success")
 }
 
 func (h *Handler) handleIssueAddLabel(w http.ResponseWriter, r *http.Request) {
@@ -580,8 +575,7 @@ func (h *Handler) handlePulls(w http.ResponseWriter, r *http.Request) {
 	}
 	prs, _ := h.deps.Pulls.List(r.Context(), repository.ID)
 	state := r.URL.Query().Get("state")
-	header, nav := h.repoPageCtx(r.Context(), repository, "pulls")
-	header.CSRF = csrfFrom(r.Context())
+	header, nav := h.repoPageCtx(r, repository, "pulls")
 	render(w, r, PullsPage(h.layout(r, "Pull requests"), header, nav, prs, state, csrfFrom(r.Context())))
 }
 
@@ -634,11 +628,14 @@ func (h *Handler) handlePRDetail(w http.ResponseWriter, r *http.Request) {
 			mergeable = ok
 		}
 	}
-	header, nav := h.repoPageCtx(r.Context(), repository, "pulls")
-	header.CSRF = csrfFrom(r.Context())
+	header, nav := h.repoPageCtx(r, repository, "pulls")
+	author := "author"
+	if u, err := h.deps.Auth.GetUser(r.Context(), pr.AuthorID); err == nil {
+		author = u.Username
+	}
 	render(w, r, PRDetailPage(h.layout(r, pr.Title), PRDetailData{
 		Header: header, Nav: nav,
-		PR: pr, Reviews: reviews, Comments: comments, Files: files, CSRF: csrfFrom(r.Context()),
+		PR: pr, Author: author, Reviews: reviews, Comments: comments, Files: files, CSRF: csrfFrom(r.Context()),
 		Mergeable: mergeable,
 	}))
 }
@@ -746,11 +743,13 @@ func (h *Handler) handleActions(w http.ResponseWriter, r *http.Request) {
 		run.ID = id.String()
 		runs = append(runs, run)
 	}
-	render(w, r, ActionsPage(h.layout(r, "Actions"), repoNav(repository.OwnerName, repository.Name, "actions"), runs))
+	header, nav := h.repoPageCtx(r, repository, "actions")
+	render(w, r, ActionsPage(h.layout(r, "Actions"), header, nav, runs))
 }
 
 func (h *Handler) handleActionLogs(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.getRepo(w, r, "read"); !ok {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
 		return
 	}
 	runID, err := uuid.Parse(chi.URLParam(r, "runID"))
@@ -778,7 +777,8 @@ func (h *Handler) handleActionLogs(w http.ResponseWriter, r *http.Request) {
 			logs.WriteString("\n")
 		}
 	}
-	render(w, r, ActionLogsPartial(logs.String()))
+	logURL := "/" + repository.OwnerName + "/" + repository.Name + "/actions/runs/" + runID.String() + "/logs"
+	render(w, r, ActionLogsPartial(logs.String(), logURL))
 }
 
 func (h *Handler) handleReleases(w http.ResponseWriter, r *http.Request) {
@@ -792,7 +792,8 @@ func (h *Handler) handleReleases(w http.ResponseWriter, r *http.Request) {
 		assets, _ := h.deps.Releases.ListAssets(r.Context(), rel.ID)
 		rows = append(rows, ReleaseWithAssets{Release: rel, Assets: assets})
 	}
-	render(w, r, ReleasesPage(h.layout(r, "Releases"), repoNav(repository.OwnerName, repository.Name, "releases"), rows, csrfFrom(r.Context())))
+	header, nav := h.repoPageCtx(r, repository, "releases")
+	render(w, r, ReleasesPage(h.layout(r, "Releases"), header, nav, rows, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleCreateRelease(w http.ResponseWriter, r *http.Request) {
@@ -814,7 +815,8 @@ func (h *Handler) handlePackages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pkgs, _ := h.deps.Packages.List(r.Context(), repository.ID)
-	render(w, r, PackagesPage(h.layout(r, "Packages"), repoNav(repository.OwnerName, repository.Name, "packages"), pkgs, csrfFrom(r.Context())))
+	header, nav := h.repoPageCtx(r, repository, "packages")
+	render(w, r, PackagesPage(h.layout(r, "Packages"), header, nav, pkgs, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleRepoSettings(w http.ResponseWriter, r *http.Request) {
@@ -843,8 +845,10 @@ func (h *Handler) handleRepoSettings(w http.ResponseWriter, r *http.Request) {
 	collabs, _ := h.deps.Repos.ListCollaborators(r.Context(), repository.ID)
 	protected, _ := h.deps.Repos.ListProtectedBranches(r.Context(), repository.ID)
 	labels, _ := h.deps.Issues.ListLabels(r.Context(), repository.ID)
+	header, nav := h.repoPageCtx(r, repository, "settings")
 	data := RepoSettingsData{
-		Nav:               repoNav(repository.OwnerName, repository.Name, "settings"),
+		Header:            header,
+		Nav:               nav,
 		CSRF:              csrfFrom(r.Context()),
 		Webhooks:          hooks,
 		Collaborators:     collabs,
@@ -876,7 +880,8 @@ func (h *Handler) handleWiki(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pages, _ := h.deps.Wiki.List(r.Context(), repository.ID)
-	render(w, r, WikiPage(h.layout(r, "Wiki"), repoNav(repository.OwnerName, repository.Name, "wiki"), pages))
+	header, nav := h.repoPageCtx(r, repository, "wiki")
+	render(w, r, WikiPage(h.layout(r, "Wiki"), header, nav, pages))
 }
 
 func (h *Handler) handleWikiPage(w http.ResponseWriter, r *http.Request) {
@@ -891,7 +896,8 @@ func (h *Handler) handleWikiPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	html, _ := RenderMarkdown(page.Content)
-	render(w, r, WikiViewPage(h.layout(r, page.Title), repoNav(repository.OwnerName, repository.Name, "wiki"), page, html, csrfFrom(r.Context())))
+	header, nav := h.repoPageCtx(r, repository, "wiki")
+	render(w, r, WikiViewPage(h.layout(r, page.Title), header, nav, page, html, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleWikiEdit(w http.ResponseWriter, r *http.Request) {
@@ -906,7 +912,8 @@ func (h *Handler) handleWikiEdit(w http.ResponseWriter, r *http.Request) {
 			title, content = page.Title, page.Content
 		}
 	}
-	render(w, r, WikiEditPage(h.layout(r, "Edit wiki"), repoNav(repository.OwnerName, repository.Name, "wiki"), slug, title, content, csrfFrom(r.Context())))
+	header, nav := h.repoPageCtx(r, repository, "wiki")
+	render(w, r, WikiEditPage(h.layout(r, "Edit wiki"), header, nav, slug, title, content, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleWikiSave(w http.ResponseWriter, r *http.Request) {
@@ -976,7 +983,8 @@ func (h *Handler) handleMilestones(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ms, _ := h.deps.Issues.ListMilestones(r.Context(), repository.ID)
-	render(w, r, MilestonesPage(h.layout(r, "Milestones"), repoNav(repository.OwnerName, repository.Name, "milestones"), ms, csrfFrom(r.Context())))
+	header, nav := h.repoPageCtx(r, repository, "milestones")
+	render(w, r, MilestonesPage(h.layout(r, "Milestones"), header, nav, ms, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleCreateMilestone(w http.ResponseWriter, r *http.Request) {

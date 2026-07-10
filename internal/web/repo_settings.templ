@@ -19,6 +19,7 @@ type WebhookWithDeliveries struct {
 }
 
 type RepoSettingsData struct {
+	Header            RepoHeaderData
 	Nav               RepoNavData
 	CSRF              string
 	Webhooks          []WebhookWithDeliveries
@@ -30,13 +31,15 @@ type RepoSettingsData struct {
 templ RepoSettingsPage(layout LayoutData, data RepoSettingsData) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: RepoSettingsContent(data),
+		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		Content: RepoSettingsContent(data),
 	})
 }
 
 templ RepoSettingsContent(data RepoSettingsData) {
-	@RepoNav(data.Nav)
-	<h1 class="text-xl font-bold mb-4">Settings</h1>
+	@RepoPageShell(data.Header, data.Nav)
+	<div class="max-w-7xl mx-auto">
+		<h1 class="text-xl font-bold mb-4">Settings</h1>
 
 	<section class="mb-6">
 		<h2 class="text-lg font-semibold mb-3">Collaborators</h2>
@@ -153,6 +156,7 @@ templ RepoSettingsContent(data RepoSettingsData) {
 			}
 		}
 	</section>
+	</div>
 }
 
 func joinStrings(ss []string) string {

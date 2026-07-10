@@ -63,7 +63,7 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h1 class=\"text-2xl font-bold mb-6\">Settings</h1>")
+		templ_7745c5c3_Err = PageHeader("Settings", templ.NopComponent).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -72,7 +72,7 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 			return templ_7745c5c3_Err
 		}
 		if newPAT != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"alert card p-4 mb-4\"><strong>New token (copy now):</strong> <code class=\"block mt-2 font-mono text-sm\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"alert card p-4 mb-4\"><strong>New token (copy now):</strong> <code class=\"block mt-2 font-mono text-sm\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -85,12 +85,12 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</code></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</code></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<section class=\"mb-6\"><h2 class=\"text-lg font-semibold mb-3\">Personal access tokens</h2><form method=\"post\" action=\"/settings/pat\" class=\"card p-4 mb-4 flex flex-col gap-3\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<section class=\"mb-6\"><h2 class=\"text-lg font-semibold mb-3\">Personal access tokens</h2><form method=\"post\" action=\"/settings/pat\" class=\"card p-4 mb-4 flex flex-col gap-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -98,7 +98,15 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"flex gap-3 items-end\"><div class=\"flex-1\"><label class=\"text-sm\">Name</label> <input type=\"text\" name=\"name\" required class=\"input mt-2\"></div><button type=\"submit\" class=\"btn\">Create token</button></div><div class=\"flex flex-wrap gap-3 text-sm\"><label><input type=\"checkbox\" name=\"scope\" value=\"repo\"> repo</label> <label><input type=\"checkbox\" name=\"scope\" value=\"repo:write\"> repo:write</label> <label><input type=\"checkbox\" name=\"scope\" value=\"workflow\"> workflow</label> <label><input type=\"checkbox\" name=\"scope\" value=\"read:user\"> read:user</label></div></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"flex gap-3 items-end flex-wrap\"><div class=\"flex-1\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = FormField("Name", "pat-name", "text", "name", "", true).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div><button type=\"submit\" class=\"btn\">Create token</button></div><div class=\"flex flex-wrap gap-3 text-sm\"><label><input type=\"checkbox\" name=\"scope\" value=\"repo\"> repo</label> <label><input type=\"checkbox\" name=\"scope\" value=\"repo:write\"> repo:write</label> <label><input type=\"checkbox\" name=\"scope\" value=\"workflow\"> workflow</label> <label><input type=\"checkbox\" name=\"scope\" value=\"read:user\"> read:user</label></div></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -120,7 +128,7 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(p.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 47, Col: 19}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 46, Col: 19}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -133,7 +141,7 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(joinScopes(p.Scopes))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 48, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 47, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -146,7 +154,7 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(p.CreatedAt.Format("2006-01-02"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 49, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 48, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -159,7 +167,7 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 				var templ_7745c5c3_Var7 templ.SafeURL
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/settings/pat/" + p.ID.String() + "/revoke"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 51, Col: 96}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 50, Col: 96}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -191,7 +199,15 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div><label class=\"text-sm\">Title</label> <input type=\"text\" name=\"title\" required class=\"input mt-2\"></div><div><label class=\"text-sm\">Public key</label> <textarea name=\"key\" required class=\"input mt-2 font-mono\" rows=\"4\"></textarea></div><button type=\"submit\" class=\"btn self-start\">Add SSH key</button></form>")
+		templ_7745c5c3_Err = FormField("Title", "ssh-title", "text", "title", "", true).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = FormField("Public key", "ssh-key", "textarea", "key", "", true).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<button type=\"submit\" class=\"btn self-start\">Add SSH key</button></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -213,7 +229,7 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(k.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 84, Col: 20}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 77, Col: 20}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -226,7 +242,7 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(k.Fingerprint)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 85, Col: 52}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 78, Col: 52}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -239,7 +255,7 @@ func SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, n
 				var templ_7745c5c3_Var10 templ.SafeURL
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/settings/ssh-key/" + k.ID.String() + "/delete"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 87, Col: 100}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 80, Col: 100}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {

@@ -2,17 +2,43 @@ package web
 
 import pkg "github.com/rusik69/govnohub/internal/package"
 
-templ PackagesPage(layout LayoutData, nav RepoNavData, packages []pkg.Package, csrf string) {
+templ PackagesPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, packages []pkg.Package, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: PackagesContent(nav, packages, csrf),
+		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		Content: PackagesContent(header, nav, packages, csrf),
 	})
 }
 
-templ PackagesContent(nav RepoNavData, packages []pkg.Package, csrf string) {
-	@RepoNav(nav)
-	<h1 class="text-xl font-bold mb-4">Packages</h1>
-	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/packages") } enctype="multipart/form-data" class="card p-4 mb-4 grid grid-cols-2 gap-3">
+templ PackagesContent(header RepoHeaderData, nav RepoNavData, packages []pkg.Package, csrf string) {
+	@RepoPageShell(header, nav)
+	<div class="max-w-7xl mx-auto">
+		<h1 class="text-xl font-bold mb-4">Packages</h1>
+		@CollapsibleForm("Publish package", PackageCreateForm(nav, csrf))
+		if len(packages) == 0 {
+			@EmptyState("No packages published")
+		} else {
+			<div class="overflow-auto">
+				<table class="card">
+					<thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Version</th><th scope="col">Published</th></tr></thead>
+					<tbody>
+						for _, p := range packages {
+							<tr>
+								<td>{ p.Name }</td>
+								<td>{ p.PackageType }</td>
+								<td>{ p.Version }</td>
+								<td class="text-sm text-muted">{ p.CreatedAt.Format("2006-01-02") }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+templ PackageCreateForm(nav RepoNavData, csrf string) {
+	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/packages") } enctype="multipart/form-data" class="grid grid-cols-2 gap-3">
 		@CSRFInput(csrf)
 		<input type="text" name="name" placeholder="Package name" required class="input"/>
 		<input type="text" name="version" placeholder="Version" required class="input"/>
@@ -20,21 +46,4 @@ templ PackagesContent(nav RepoNavData, packages []pkg.Package, csrf string) {
 		<input type="file" name="file" required class="input"/>
 		<button type="submit" class="btn col-span-2">Publish package</button>
 	</form>
-	if len(packages) == 0 {
-		@EmptyState("No packages published")
-	} else {
-		<table class="card">
-			<thead><tr><th>Name</th><th>Type</th><th>Version</th><th>Published</th></tr></thead>
-			<tbody>
-				for _, p := range packages {
-					<tr>
-						<td>{ p.Name }</td>
-						<td>{ p.PackageType }</td>
-						<td>{ p.Version }</td>
-						<td class="text-sm text-muted">{ p.CreatedAt.Format("2006-01-02") }</td>
-					</tr>
-				}
-			</tbody>
-		</table>
-	}
 }

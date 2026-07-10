@@ -10,21 +10,13 @@ templ AdminUsersPage(layout LayoutData, users []auth.User, errMsg string) {
 }
 
 templ AdminUsersContent(csrf string, users []auth.User, errMsg string) {
-	<h1 class="text-2xl font-bold mb-6">Admin · Users</h1>
+	@PageHeader("Admin · Users", templ.NopComponent)
 	<p class="mb-4"><a href="/admin/audit">Audit log</a></p>
 	@ErrorAlert(errMsg)
-	<form method="post" action="/admin/users" class="card p-4 mb-6 grid grid-cols-2 gap-4">
-		@CSRFInput(csrf)
-		<div><label class="text-sm">Username</label><input name="username" required class="input mt-2"/></div>
-		<div><label class="text-sm">Email</label><input name="email" type="email" required class="input mt-2"/></div>
-		<div><label class="text-sm">Password</label><input name="password" type="password" required class="input mt-2"/></div>
-		<div><label class="text-sm">Role</label>
-			<select name="role" class="input mt-2"><option value="user">user</option><option value="admin">admin</option></select>
-		</div>
-		<div class="col-span-2"><button type="submit" class="btn">Create user</button></div>
-	</form>
-	<table class="card">
-		<thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th></th></tr></thead>
+	@CollapsibleForm("Create user", AdminUserCreateForm(csrf))
+	<div class="overflow-auto">
+		<table class="card">
+			<thead><tr><th scope="col">Username</th><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Created</th><th scope="col"></th></tr></thead>
 		<tbody>
 			for _, u := range users {
 				<tr>
@@ -41,5 +33,23 @@ templ AdminUsersContent(csrf string, users []auth.User, errMsg string) {
 				</tr>
 			}
 		</tbody>
-	</table>
+		</table>
+	</div>
+}
+
+templ AdminUserCreateForm(csrf string) {
+	<form method="post" action="/admin/users" class="grid grid-cols-2 gap-4">
+		@CSRFInput(csrf)
+		@FormField("Username", "admin-username", "text", "username", "", true)
+		@FormField("Email", "admin-email", "email", "email", "", true)
+		@FormField("Password", "admin-password", "password", "password", "", true)
+		<div class="form-field">
+			<label class="text-sm" for="admin-role">Role</label>
+			<select id="admin-role" name="role" class="input mt-2">
+				<option value="user">user</option>
+				<option value="admin">admin</option>
+			</select>
+		</div>
+		<div class="col-span-2"><button type="submit" class="btn">Create user</button></div>
+	</form>
 }

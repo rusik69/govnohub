@@ -8,28 +8,42 @@ import (
 templ DashboardPage(layout LayoutData, repos []repo.Repository, orgs []org.Org) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: DashboardContent(repos, orgs),
+		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "dashboard",
+		Content: DashboardContent(repos, orgs),
 	})
 }
 
 templ DashboardContent(repos []repo.Repository, orgs []org.Org) {
-	<h1 class="text-2xl font-bold mb-6">Dashboard</h1>
-	<div class="grid grid-cols-2 gap-6 max-md-flex-col">
+	@PageHeader("Dashboard", DashboardActions(orgs))
+	<div class="grid grid-cols-2 gap-6">
 		<section>
 			<h2 class="text-lg font-semibold mb-3">Your repositories</h2>
 			if len(repos) == 0 {
 				@EmptyState("No repositories yet")
 			} else {
-				<ul class="card">
+				<div class="gh-list">
 					for _, r := range repos {
-						<li class="border-b px-4 py-3">
-							<a href={ templ.SafeURL("/" + r.FullName) } class="font-medium">{ r.FullName }</a>
-							if r.Description != "" {
-								<p class="text-sm text-muted m-0 mt-1">{ r.Description }</p>
-							}
-						</li>
+						<a href={ templ.SafeURL("/" + r.FullName) } class="gh-list-item">
+							<span class="gh-list-item-icon">
+								@Icon("repo", "")
+							</span>
+							<div class="gh-list-item-body">
+								<div class="gh-list-item-title">{ r.FullName }</div>
+								<div class="gh-list-item-meta">
+									if r.IsPrivate {
+										<span class="gh-visibility">Private</span>
+									} else {
+										<span class="gh-visibility">Public</span>
+									}
+									if r.Description != "" {
+										<span> · { r.Description }</span>
+									}
+									<span> · Updated { r.UpdatedAt.Format("Jan 2, 2006") }</span>
+								</div>
+							</div>
+						</a>
 					}
-				</ul>
+				</div>
 			}
 		</section>
 		<section>
@@ -37,18 +51,32 @@ templ DashboardContent(repos []repo.Repository, orgs []org.Org) {
 			if len(orgs) == 0 {
 				@EmptyState("No organizations")
 			} else {
-				<ul class="card">
+				<div class="gh-list">
 					for _, o := range orgs {
-						<li class="border-b px-4 py-3">
-							<a href={ templ.SafeURL("/orgs/" + o.Name) } class="font-medium">{ o.Name }</a>
-							if o.Description != "" {
-								<p class="text-sm text-muted m-0 mt-1">{ o.Description }</p>
-							}
-						</li>
+						<a href={ templ.SafeURL("/orgs/" + o.Name) } class="gh-list-item">
+							<span class="gh-list-item-icon">
+								@Icon("repo", "")
+							</span>
+							<div class="gh-list-item-body">
+								<div class="gh-list-item-title">{ o.Name }</div>
+								if o.Description != "" {
+									<div class="gh-list-item-meta">{ o.Description }</div>
+								}
+							</div>
+						</a>
 					}
-				</ul>
+				</div>
 			}
 			<a href="/orgs" class="btn-secondary mt-4 inline-flex">View all orgs</a>
 		</section>
 	</div>
+}
+
+templ DashboardActions(orgs []org.Org) {
+	<a href="/orgs" class="btn-secondary">Browse orgs</a>
+	if len(orgs) > 0 {
+		<a href={ templ.SafeURL("/orgs/" + orgs[0].Name) } class="btn">New repository</a>
+	} else {
+		<a href="/orgs" class="btn">New repository</a>
+	}
 }

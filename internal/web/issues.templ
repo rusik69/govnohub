@@ -13,16 +13,11 @@ templ IssuesPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, issu
 }
 
 templ IssuesContent(header RepoHeaderData, nav RepoNavData, issues []issue.Issue, state, csrf string) {
+	@RepoPageShell(header, nav)
 	<div class="max-w-7xl mx-auto">
-		@RepoHeader(header)
-		@RepoNav(nav)
 		<div class="flex justify-between items-center mb-4 gap-3 flex-wrap">
 			@IssueSubhead(nav, issues, state)
-			<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class="flex gap-2 flex-1" style="max-width:32rem">
-				@CSRFInput(csrf)
-				<input type="text" name="title" placeholder="Title" required class="input flex-1"/>
-				<button type="submit" class="btn">New issue</button>
-			</form>
+			@CollapsibleForm("New issue", IssueCreateForm(nav, csrf))
 		</div>
 		if len(filterIssues(issues, state)) == 0 {
 			@EmptyState("No issues found")
@@ -34,6 +29,14 @@ templ IssuesContent(header RepoHeaderData, nav RepoNavData, issues []issue.Issue
 			</div>
 		}
 	</div>
+}
+
+templ IssueCreateForm(nav RepoNavData, csrf string) {
+	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class="flex flex-col gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="title" placeholder="Title" required class="input"/>
+		<button type="submit" class="btn self-start">Create issue</button>
+	</form>
 }
 
 func filterIssues(issues []issue.Issue, state string) []issue.Issue {

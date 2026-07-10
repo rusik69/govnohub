@@ -182,6 +182,12 @@ func (s *Service) Star(ctx context.Context, repoID, userID uuid.UUID) error {
 	return tx.Commit(ctx)
 }
 
+func (s *Service) IsStarred(ctx context.Context, repoID, userID uuid.UUID) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM repo_stars WHERE repo_id=$1 AND user_id=$2)`, repoID, userID).Scan(&exists)
+	return exists, err
+}
+
 func (s *Service) Watch(ctx context.Context, repoID, userID uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `INSERT INTO repo_watchers (repo_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, repoID, userID)
 	return err

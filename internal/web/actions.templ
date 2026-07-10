@@ -12,47 +12,69 @@ type WorkflowRun struct {
 	CreatedAt  time.Time
 }
 
-templ ActionsPage(layout LayoutData, nav RepoNavData, runs []WorkflowRun) {
+templ ActionsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, runs []WorkflowRun) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: ActionsContent(nav, runs),
+		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		Content: ActionsContent(header, nav, runs),
 	})
 }
 
-templ ActionsContent(nav RepoNavData, runs []WorkflowRun) {
-	@RepoNav(nav)
-	<h1 class="text-xl font-bold mb-4">Actions</h1>
-	if len(runs) == 0 {
-		@EmptyState("No workflow runs")
+templ ActionsContent(header RepoHeaderData, nav RepoNavData, runs []WorkflowRun) {
+	@RepoPageShell(header, nav)
+	<div class="max-w-7xl mx-auto">
+		<h1 class="text-xl font-bold mb-4">Actions</h1>
+		if len(runs) == 0 {
+			@EmptyState("No workflow runs")
+		} else {
+			<div class="overflow-auto">
+				<table class="card">
+					<thead><tr><th scope="col">Run</th><th scope="col">Event</th><th scope="col">Branch</th><th scope="col">Status</th><th scope="col">Logs</th></tr></thead>
+					<tbody>
+						for _, run := range runs {
+							<tr>
+								<td>#{ run.RunNumber }</td>
+								<td>{ run.Event }</td>
+								<td>{ run.HeadBranch }</td>
+								<td>@RunStatusBadge(run)</td>
+								<td>
+									<button
+										type="button"
+										class="btn-secondary text-xs"
+										hx-get={ "/" + nav.Owner + "/" + nav.Repo + "/actions/runs/" + run.ID + "/logs" }
+										hx-target={ "#logs-" + run.ID }
+										hx-swap="innerHTML"
+									>
+										Show logs
+									</button>
+									<div id={ "logs-" + run.ID } class="mt-2"></div>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+templ RunStatusBadge(run WorkflowRun) {
+	if run.Conclusion == "success" {
+		<span class="gh-state gh-state-open">{ runStatusLabel(run) }</span>
+	} else if run.Conclusion == "failure" {
+		<span class="gh-state gh-state-closed">{ runStatusLabel(run) }</span>
 	} else {
-		<table class="card">
-			<thead><tr><th>Run</th><th>Event</th><th>Branch</th><th>Status</th><th>Logs</th></tr></thead>
-			<tbody>
-				for _, run := range runs {
-					<tr>
-						<td>#{ run.RunNumber }</td>
-						<td>{ run.Event }</td>
-						<td>{ run.HeadBranch }</td>
-						<td>{ runStatusLabel(run) }</td>
-						<td>
-							<div
-								hx-get={ "/" + nav.Owner + "/" + nav.Repo + "/actions/runs/" + run.ID + "/logs" }
-								hx-trigger="every 2s"
-								hx-swap="innerHTML"
-								class="font-mono text-xs"
-							>
-								Loading logs...
-							</div>
-						</td>
-					</tr>
-				}
-			</tbody>
-		</table>
+		<span class="badge">{ runStatusLabel(run) }</span>
 	}
 }
 
-templ ActionLogsPartial(logs string) {
-	<pre class="m-0 p-3 bg-hover rounded text-xs overflow-auto max-h-64">{ logs }</pre>
+templ ActionLogsPartial(logs string, logURL string) {
+	<pre
+		class="m-0 p-3 bg-hover rounded text-xs overflow-auto max-h-64"
+		hx-get={ logURL }
+		hx-trigger="every 2s"
+		hx-swap="outerHTML"
+	>{ logs }</pre>
 }
 
 func runStatusLabel(run WorkflowRun) string {
