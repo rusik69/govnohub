@@ -70,7 +70,7 @@ Uses `testenv.NewLocalDeploy` — real api-server + git-server processes.
 | File | Tests |
 |------|-------|
 | `deploy_flow_test.go` | Local deploy health; full journey smoke (git push, PAT, actions, packages, orgs, search) |
-| `git_flow_test.go` | Git push updates commits and contents API |
+| `git_flow_test.go` | Git HTTP/SSH clone, push, pull, fetch, feature branch, PAT auth, unauthorized |
 | `deploy_admin_test.go` | Admin audit log |
 
 Optional cluster test: set `GOVNOHUB_DEPLOY_E2E=1` and `GOVNOHUB_BASE_URL` for `TestDeployedClusterFullJourney`.

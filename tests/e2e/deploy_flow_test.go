@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -304,47 +302,6 @@ jobs:
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("admin users: %d", resp.StatusCode)
 		}
-	}
-}
-
-func testGitPush(t *testing.T, gitBase, owner, repo, user, password string) {
-	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not installed")
-	}
-	work := t.TempDir()
-	remote := fmt.Sprintf("%s/%s/%s.git", strings.TrimRight(gitBase, "/"), owner, repo)
-	cloneURL := strings.Replace(remote, "://", "://"+user+":"+password+"@", 1)
-
-	runGit(t, work, "clone", cloneURL, "repo")
-	repoDir := filepath.Join(work, "repo")
-	setupGit(t, repoDir)
-	readme := filepath.Join(repoDir, "README.md")
-	if err := os.WriteFile(readme, []byte("e2e\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit(t, repoDir, "add", "README.md")
-	runGit(t, repoDir, "commit", "-m", "e2e commit")
-	runGit(t, repoDir, "branch", "-M", "main")
-	runGit(t, repoDir, "push", "--force", "origin", "main")
-}
-
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %s %v", args, out, err)
-	}
-}
-
-func setupGit(t *testing.T, dir string) {
-	t.Helper()
-	for _, cfg := range [][]string{
-		{"config", "user.email", "e2e@test.local"},
-		{"config", "user.name", "e2e"},
-	} {
-		runGit(t, dir, cfg...)
 	}
 }
 

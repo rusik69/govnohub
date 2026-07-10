@@ -15,9 +15,10 @@ import (
 // testcontainers PostgreSQL — closer to a production deployment than httptest.
 type LocalDeploy struct {
 	*Env
-	apiCmd *exec.Cmd
-	gitCmd *exec.Cmd
-	GitURL string
+	apiCmd    *exec.Cmd
+	gitCmd    *exec.Cmd
+	GitURL    string
+	GitSSHURL string
 }
 
 func NewLocalDeploy(t *testing.T) *LocalDeploy {
@@ -36,6 +37,8 @@ func NewLocalDeploy(t *testing.T) *LocalDeploy {
 	env := New(t)
 	apiPort := freePort(t)
 	gitPort := freePort(t)
+	sshPort := freePort(t)
+	sshHostKey := filepath.Join(binDir, "ssh_host_key")
 
 	baseEnv := []string{
 		"DATABASE_URL=" + env.DatabaseURL,
@@ -51,7 +54,11 @@ func NewLocalDeploy(t *testing.T) *LocalDeploy {
 	apiCmd.Env = append(os.Environ(), append(baseEnv, "HTTP_ADDR=:"+itoa(apiPort))...)
 
 	gitCmd := exec.Command(gitBin)
-	gitCmd.Env = append(os.Environ(), append(baseEnv, "GIT_HTTP_ADDR=:"+itoa(gitPort))...)
+	gitCmd.Env = append(os.Environ(), append(baseEnv,
+		"GIT_HTTP_ADDR=:"+itoa(gitPort),
+		"GIT_SSH_ADDR=:"+itoa(sshPort),
+		"GIT_SSH_HOST_KEY="+sshHostKey,
+	)...)
 
 	if err := apiCmd.Start(); err != nil {
 		t.Fatalf("start api-server: %v", err)
@@ -63,13 +70,15 @@ func NewLocalDeploy(t *testing.T) *LocalDeploy {
 
 	apiURL := fmt.Sprintf("http://127.0.0.1:%d", apiPort)
 	gitURL := fmt.Sprintf("http://127.0.0.1:%d", gitPort)
+	gitSSHURL := fmt.Sprintf("ssh://git@127.0.0.1:%d", sshPort)
 	waitHTTP(t, apiURL+"/healthz", 30*time.Second)
 	waitHTTP(t, gitURL+"/healthz", 30*time.Second)
+	waitTCP(t, fmt.Sprintf("127.0.0.1:%d", sshPort), 30*time.Second)
 
 	env.Server.Close()
 	env.URL = apiURL
 
-	ld := &LocalDeploy{Env: env, apiCmd: apiCmd, gitCmd: gitCmd, GitURL: gitURL}
+	ld := &LocalDeploy{Env: env, apiCmd: apiCmd, gitCmd: gitCmd, GitURL: gitURL, GitSSHURL: gitSSHURL}
 	origCleanup := env.Cleanup
 	env.Cleanup = func() {
 		if ld.apiCmd.Process != nil {
@@ -136,6 +145,20 @@ func waitHTTP(t *testing.T, url string, timeout time.Duration) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatalf("timeout waiting for %s", url)
+}
+
+func waitTCP(t *testing.T, addr string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", addr, time.Second)
+		if err == nil {
+			conn.Close()
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for tcp %s", addr)
 }
 
 func itoa(n int) string {
