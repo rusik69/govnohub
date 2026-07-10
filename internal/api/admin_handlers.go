@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/rusik69/govnohub/internal/audit"
 	"github.com/rusik69/govnohub/internal/auth"
 )
 
@@ -16,6 +17,7 @@ func (s *Server) registerAdminRoutes(r chi.Router) {
 		r.Get("/users", s.handleListUsers)
 		r.Post("/users", s.handleAdminCreateUser)
 		r.Delete("/users/{userID}", s.handleDeleteUser)
+		r.Get("/audit", s.handleListAuditLog)
 	})
 }
 
@@ -78,6 +80,7 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	_ = s.audit.Record(r.Context(), userIDFrom(r.Context()), "user.create", "user", u.ID.String(), map[string]string{"username": u.Username})
 	jsonOK(w, u)
 }
 
@@ -98,5 +101,18 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	_ = s.audit.Record(r.Context(), userIDFrom(r.Context()), "user.delete", "user", targetID.String(), nil)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleListAuditLog(w http.ResponseWriter, r *http.Request) {
+	entries, err := s.audit.List(r.Context(), 100)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if entries == nil {
+		entries = []audit.Entry{}
+	}
+	jsonOK(w, entries)
 }

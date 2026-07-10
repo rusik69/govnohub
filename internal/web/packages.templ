@@ -2,16 +2,24 @@ package web
 
 import pkg "github.com/rusik69/govnohub/internal/package"
 
-templ PackagesPage(layout LayoutData, nav RepoNavData, packages []pkg.Package) {
+templ PackagesPage(layout LayoutData, nav RepoNavData, packages []pkg.Package, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: PackagesContent(nav, packages),
+		UnreadNotifs: layout.UnreadNotifs, Content: PackagesContent(nav, packages, csrf),
 	})
 }
 
-templ PackagesContent(nav RepoNavData, packages []pkg.Package) {
+templ PackagesContent(nav RepoNavData, packages []pkg.Package, csrf string) {
 	@RepoNav(nav)
 	<h1 class="text-xl font-bold mb-4">Packages</h1>
+	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/packages") } enctype="multipart/form-data" class="card p-4 mb-4 grid grid-cols-2 gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="name" placeholder="Package name" required class="input"/>
+		<input type="text" name="version" placeholder="Version" required class="input"/>
+		<input type="text" name="type" placeholder="Type (generic)" value="generic" class="input"/>
+		<input type="file" name="file" required class="input"/>
+		<button type="submit" class="btn col-span-2">Publish package</button>
+	</form>
 	if len(packages) == 0 {
 		@EmptyState("No packages published")
 	} else {

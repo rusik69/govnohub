@@ -53,6 +53,7 @@ func (h *Handler) Routes() chi.Router {
 			r.Get("/admin/users", h.handleAdminUsers)
 			r.Post("/admin/users", h.handleAdminCreateUser)
 			r.Post("/admin/users/{id}/delete", h.handleAdminDeleteUser)
+			r.Get("/admin/audit", h.handleAdminAudit)
 		})
 
 		r.Route("/{owner}/{repo}", func(r chi.Router) {
@@ -73,6 +74,10 @@ func (h *Handler) Routes() chi.Router {
 			r.Post("/issues/{number}/labels/{labelID}", h.handleIssueAddLabel)
 			r.Post("/issues/{number}/labels/{labelID}/remove", h.handleIssueRemoveLabel)
 
+			r.Get("/milestones", h.handleMilestones)
+			r.Post("/milestones", h.handleCreateMilestone)
+			r.Post("/milestones/{id}/close", h.handleCloseMilestone)
+
 			r.Get("/pulls", h.handlePulls)
 			r.Post("/pulls", h.handleCreatePR)
 			r.Get("/pulls/{number}", h.handlePRDetail)
@@ -85,17 +90,26 @@ func (h *Handler) Routes() chi.Router {
 
 			r.Get("/releases", h.handleReleases)
 			r.Post("/releases", h.handleCreateRelease)
+			r.Post("/releases/{tag}/assets", h.handleUploadReleaseAsset)
 
 			r.Get("/packages", h.handlePackages)
+			r.Post("/packages", h.handlePublishPackage)
 
 			r.Get("/settings", h.handleRepoSettings)
 			r.Post("/settings/webhook", h.handleCreateWebhook)
+			r.Post("/settings/collaborator", h.handleAddCollaborator)
+			r.Post("/settings/collaborator/{username}/remove", h.handleRemoveCollaborator)
+			r.Post("/settings/protection", h.handleProtectBranch)
+			r.Post("/settings/label", h.handleCreateLabel)
 
 			r.Get("/wiki", h.handleWiki)
 			r.Get("/wiki/{slug}", h.handleWikiPage)
 			r.Get("/wiki/{slug}/edit", h.handleWikiEdit)
 			r.Post("/wiki/{slug}", h.handleWikiSave)
+			r.Post("/wiki/{slug}/delete", h.handleWikiDelete)
 		})
+
+		r.Post("/orgs/{org}/repos", h.handleCreateOrgRepo)
 	})
 
 	return r

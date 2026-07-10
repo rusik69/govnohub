@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -102,6 +104,59 @@ func (c *Client) CreatePR(owner, repo, title, body, head, base string) (map[stri
 		"title": title, "body": body, "head": head, "base": base,
 	}, &out)
 	return out, err
+}
+
+func (c *Client) MergePR(owner, repo string, number int, squash bool) (map[string]any, error) {
+	var out map[string]any
+	err := c.post(fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/merge", owner, repo, number), c.token, map[string]any{
+		"squash": squash,
+	}, &out)
+	return out, err
+}
+
+func (c *Client) CreateRelease(owner, repo, tag, name, body string) (map[string]any, error) {
+	var out map[string]any
+	err := c.post(fmt.Sprintf("/api/v1/repos/%s/%s/releases", owner, repo), c.token, map[string]any{
+		"tag_name": tag, "name": name, "body": body,
+	}, &out)
+	return out, err
+}
+
+func (c *Client) UploadReleaseAsset(owner, repo, tag, filePath string) (map[string]any, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	part, err := w.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(part, f); err != nil {
+		return nil, err
+	}
+	w.Close()
+	req, err := http.NewRequest(http.MethodPost,
+		c.baseURL+fmt.Sprintf("/api/v1/repos/%s/%s/releases/%s/assets", owner, repo, url.PathEscape(tag)),
+		&buf)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("%s: %s", resp.Status, string(data))
+	}
+	var out map[string]any
+	return out, json.Unmarshal(data, &out)
 }
 
 func (c *Client) ListRuns(owner, repo string) ([]map[string]any, error) {

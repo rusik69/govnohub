@@ -1,6 +1,9 @@
 package web
 
-import "github.com/rusik69/govnohub/internal/org"
+import (
+	"github.com/rusik69/govnohub/internal/org"
+	"github.com/rusik69/govnohub/internal/repo"
+)
 
 templ OrgsPage(layout LayoutData, orgs []org.Org, csrf string) {
 	@Layout(LayoutData{
@@ -34,14 +37,14 @@ templ OrgsContent(orgs []org.Org, csrf string) {
 	}
 }
 
-templ OrgDetailPage(layout LayoutData, o *org.Org, members []org.Member, csrf string) {
+templ OrgDetailPage(layout LayoutData, o *org.Org, members []org.Member, repos []repo.Repository, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: OrgDetailContent(o, members, csrf),
+		UnreadNotifs: layout.UnreadNotifs, Content: OrgDetailContent(o, members, repos, csrf),
 	})
 }
 
-templ OrgDetailContent(o *org.Org, members []org.Member, csrf string) {
+templ OrgDetailContent(o *org.Org, members []org.Member, repos []repo.Repository, csrf string) {
 	<h1 class="text-2xl font-bold mb-2">{ o.Name }</h1>
 	if o.Description != "" {
 		<p class="text-muted mb-4">{ o.Description }</p>
@@ -49,6 +52,27 @@ templ OrgDetailContent(o *org.Org, members []org.Member, csrf string) {
 	<div class="flex gap-3 mb-6">
 		<a href={ templ.SafeURL("/orgs/" + o.Name + "/teams") } class="btn-secondary">Teams</a>
 	</div>
+	<section class="mb-6">
+		<h2 class="text-lg font-semibold mb-3">Repositories</h2>
+		<form method="post" action={ templ.SafeURL("/orgs/" + o.Name + "/repos") } class="card p-4 mb-4 flex gap-3">
+			@CSRFInput(csrf)
+			<input type="text" name="name" placeholder="repo-name" required class="input flex-1"/>
+			<input type="text" name="description" placeholder="Description" class="input flex-1"/>
+			<button type="submit" class="btn">Create repo</button>
+		</form>
+		if len(repos) == 0 {
+			@EmptyState("No repositories")
+		} else {
+			<ul class="card mb-4">
+				for _, r := range repos {
+					<li class="border-b px-4 py-3">
+						<a href={ templ.SafeURL("/" + r.FullName) } class="font-medium">{ r.FullName }</a>
+					</li>
+				}
+			</ul>
+		}
+	</section>
+	<h2 class="text-lg font-semibold mb-3">Members</h2>
 	<form method="post" action={ templ.SafeURL("/orgs/" + o.Name + "/members") } class="card p-4 mb-4 flex gap-3">
 		@CSRFInput(csrf)
 		<input type="text" name="username" placeholder="Username" required class="input flex-1"/>

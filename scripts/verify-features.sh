@@ -74,6 +74,26 @@ check "list packages" "$(api GET /api/v1/repos/devuser/$REPO/packages "$DEV_TOKE
 check "upsert workflow" "$(api POST /api/v1/repos/devuser/$REPO/actions/workflows "$DEV_TOKEN" '{"name":"CI","path":".govnohub/workflows/ci.yaml","content":"name: CI\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n"}')" 200
 check "list workflows" "$(api GET /api/v1/repos/devuser/$REPO/actions/workflows "$DEV_TOKEN")" 200
 
+echo "==> Milestones, wiki, notifications"
+check "create milestone" "$(api POST /api/v1/repos/devuser/$REPO/milestones "$DEV_TOKEN" '{"title":"v1.0","description":"First release"}')" 200
+check "list milestones" "$(api GET /api/v1/repos/devuser/$REPO/milestones "$DEV_TOKEN")" 200
+check "create wiki" "$(api PUT /api/v1/repos/devuser/$REPO/wiki/home "$DEV_TOKEN" '{"title":"Home","content":"# Wiki"}')" 200
+check "list wiki" "$(api GET /api/v1/repos/devuser/$REPO/wiki "$DEV_TOKEN")" 200
+check "list notifications" "$(api GET /api/v1/notifications "$DEV_TOKEN")" 200
+check "admin audit" "$(api GET /api/v1/admin/audit "$ADMIN_TOKEN")" 200
+
+echo "==> Release assets & webhook deliveries"
+echo 'asset-data' > /tmp/govnohub_asset.txt
+CODE=$(curl -s -o /tmp/govnohub_resp.json -w "%{http_code}" -X POST "$BASE/api/v1/repos/devuser/$REPO/releases/v0.1.0/assets" \
+  -H "Authorization: Bearer $DEV_TOKEN" -F "file=@/tmp/govnohub_asset.txt")
+check "upload release asset" "$CODE" 200
+check "list release assets" "$(api GET /api/v1/repos/devuser/$REPO/releases/v0.1.0/assets "$DEV_TOKEN")" 200
+check "download release asset" "$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/repos/devuser/$REPO/releases/v0.1.0/assets/govnohub_asset.txt" -H "Authorization: Bearer $DEV_TOKEN")" 200
+HOOK_ID=$(curl -s "$BASE/api/v1/repos/devuser/$REPO/webhooks" -H "Authorization: Bearer $DEV_TOKEN" | python3 -c "import sys,json; hs=json.load(sys.stdin); print(hs[0]['id'] if hs else '')")
+if [ -n "$HOOK_ID" ]; then
+  check "webhook deliveries" "$(api GET /api/v1/repos/devuser/$REPO/webhooks/$HOOK_ID/deliveries "$DEV_TOKEN")" 200
+fi
+
 echo "==> Search & tokens"
 check "search" "$(api GET "/api/v1/search?q=Test" "$DEV_TOKEN")" 200
 check "create PAT" "$(api POST /api/v1/user/tokens "$DEV_TOKEN" '{"name":"cli","scopes":["repo"]}')" 200

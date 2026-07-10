@@ -65,6 +65,14 @@ govnohub issue create alice/my-app "Bug title" "Details here"
 
 govnohub pr list alice/my-app
 govnohub pr create alice/my-app "Add feature" --head feature --base main
+govnohub pr merge alice/my-app 1
+```
+
+## Releases
+
+```bash
+govnohub release create alice/my-app --tag v1.0.0 --name "First release" --body "Notes"
+govnohub release upload alice/my-app v1.0.0 ./dist/app.tar.gz
 ```
 
 ## Actions

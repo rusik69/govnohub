@@ -1,0 +1,44 @@
+package web
+
+import "github.com/rusik69/govnohub/internal/issue"
+
+templ MilestonesPage(layout LayoutData, nav RepoNavData, milestones []issue.Milestone, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: MilestonesContent(nav, milestones, csrf),
+	})
+}
+
+templ MilestonesContent(nav RepoNavData, milestones []issue.Milestone, csrf string) {
+	@RepoNav(nav)
+	<h1 class="text-xl font-bold mb-4">Milestones</h1>
+	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/milestones") } class="card p-4 mb-4 flex flex-col gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="title" placeholder="Milestone title" required class="input"/>
+		<textarea name="description" placeholder="Description" class="input" rows="2"></textarea>
+		<button type="submit" class="btn self-start">Create milestone</button>
+	</form>
+	if len(milestones) == 0 {
+		@EmptyState("No milestones")
+	} else {
+		<ul class="card">
+			for _, m := range milestones {
+				<li class="border-b px-4 py-3 flex justify-between items-center">
+					<div>
+						<strong>{ m.Title }</strong>
+						<span class="badge ml-2">{ m.State }</span>
+						if m.Description != "" {
+							<p class="text-sm text-muted m-0 mt-1">{ m.Description }</p>
+						}
+					</div>
+					if m.State == "open" {
+						<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/milestones/" + m.ID.String() + "/close") }>
+							@CSRFInput(csrf)
+							<button type="submit" class="btn-secondary text-sm">Close</button>
+						</form>
+					}
+				</li>
+			}
+		</ul>
+	}
+}

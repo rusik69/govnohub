@@ -100,3 +100,34 @@ func NewPushEvent(owner, name, branch, sha, pusher string) PushEvent {
 		Timestamp:  time.Now().UTC(),
 	}
 }
+
+type Delivery struct {
+	ID         uuid.UUID `json:"id"`
+	WebhookID  uuid.UUID `json:"webhook_id"`
+	Event      string    `json:"event"`
+	StatusCode int       `json:"status_code"`
+	DeliveredAt time.Time `json:"delivered_at"`
+}
+
+func (s *Service) ListDeliveries(ctx context.Context, webhookID uuid.UUID, limit int) ([]Delivery, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, webhook_id, event, status_code, delivered_at
+		FROM webhook_deliveries WHERE webhook_id=$1
+		ORDER BY delivered_at DESC LIMIT $2`, webhookID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Delivery
+	for rows.Next() {
+		var d Delivery
+		if err := rows.Scan(&d.ID, &d.WebhookID, &d.Event, &d.StatusCode, &d.DeliveredAt); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}

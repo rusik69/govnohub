@@ -14,6 +14,7 @@ type PRDetailData struct {
 	Comments []pull.LineComment
 	Files    []DiffFile
 	CSRF     string
+	Mergeable bool
 }
 
 templ PRDetailPage(layout LayoutData, data PRDetailData) {
@@ -63,11 +64,16 @@ templ PRDetailContent(data PRDetailData) {
 					<div class="gh-merge-box">
 						<form method="post" action={ templ.SafeURL("/" + data.Nav.Owner + "/" + data.Nav.Repo + "/pulls/" + strconv.Itoa(data.PR.Number) + "/merge") }>
 							@CSRFInput(data.CSRF)
-							<p class="text-sm m-0 mb-3">This branch has no conflicts with the base branch.</p>
-							<button type="submit" class="btn w-full">
-								@Icon("git-merge", "")
-								Merge pull request
-							</button>
+							if data.Mergeable {
+								<p class="text-sm m-0 mb-3">This branch has no conflicts with the base branch.</p>
+								<button type="submit" class="btn w-full">
+									@Icon("git-merge", "")
+									Merge pull request
+								</button>
+							} else {
+								<p class="text-sm m-0 mb-3 text-red">This branch has conflicts that must be resolved.</p>
+								<button type="submit" class="btn w-full" disabled>Merge pull request</button>
+							}
 						</form>
 					</div>
 					<div class="gh-sidebar-panel mb-4">

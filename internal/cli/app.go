@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -55,6 +56,8 @@ func (a *App) Run(args []string) int {
 		err = a.runIssue(args[1:])
 	case "pr":
 		err = a.runPR(args[1:])
+	case "release":
+		err = a.runRelease(args[1:])
 	case "run":
 		err = a.runWorkflow(args[1:])
 	case "search":
@@ -322,8 +325,80 @@ func (a *App) runPR(args []string) error {
 		}
 		printJSON(pr)
 		return nil
+	case "merge":
+		if len(args) < 3 {
+			return fmt.Errorf("usage: govnohub pr merge <owner/repo> <number>")
+		}
+		num, err := strconv.Atoi(args[2])
+		if err != nil {
+			return fmt.Errorf("invalid PR number")
+		}
+		out, err := client.MergePR(owner, repo, num, false)
+		if err != nil {
+			return err
+		}
+		printJSON(out)
+		return nil
 	default:
 		return fmt.Errorf("unknown pr command: %s", args[0])
+	}
+}
+
+func (a *App) runRelease(args []string) error {
+	if len(args) < 2 {
+		return fmt.Errorf("usage: govnohub release create|upload <owner/repo> ...")
+	}
+	owner, repo, err := ParseOwnerRepo(args[1])
+	if err != nil {
+		return err
+	}
+	client, err := a.client()
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "create":
+		tag, name, body := "", "", ""
+		for i := 2; i < len(args); i++ {
+			switch args[i] {
+			case "--tag":
+				if i+1 < len(args) {
+					tag = args[i+1]
+					i++
+				}
+			case "--name":
+				if i+1 < len(args) {
+					name = args[i+1]
+					i++
+				}
+			case "--body":
+				if i+1 < len(args) {
+					body = args[i+1]
+					i++
+				}
+			}
+		}
+		if tag == "" {
+			return fmt.Errorf("--tag is required")
+		}
+		out, err := client.CreateRelease(owner, repo, tag, name, body)
+		if err != nil {
+			return err
+		}
+		printJSON(out)
+		return nil
+	case "upload":
+		if len(args) < 4 {
+			return fmt.Errorf("usage: govnohub release upload <owner/repo> <tag> <file>")
+		}
+		out, err := client.UploadReleaseAsset(owner, repo, args[2], args[3])
+		if err != nil {
+			return err
+		}
+		printJSON(out)
+		return nil
+	default:
+		return fmt.Errorf("unknown release command: %s", args[0])
 	}
 }
 
@@ -420,6 +495,9 @@ Commands:
   issue create <owner/repo> <title> [body]
   pr list <owner/repo>
   pr create <owner/repo> <title> [--head BR] [--base BR] [body]
+  pr merge <owner/repo> <number>
+  release create <owner/repo> --tag TAG [--name NAME] [--body TEXT]
+  release upload <owner/repo> <tag> <file>
   run list <owner/repo>
   run trigger <owner/repo> --workflow ID [--branch BR]
   search <query>

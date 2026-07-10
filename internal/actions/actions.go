@@ -27,6 +27,7 @@ type Step struct {
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
 	Env  map[string]string `yaml:"env"`
+	With map[string]string `yaml:"with"`
 }
 
 type TriggerEvent struct {
@@ -162,13 +163,15 @@ func BuildStepScript(step Step, ctx map[string]string) string {
 	return "true"
 }
 
-func GitHubContext(owner, repo, sha, ref, event string) map[string]string {
+func GitHubContext(owner, repo, sha, ref, event, runID, artifactRoot string) map[string]string {
 	return map[string]string{
-		"GITHUB_REPOSITORY": owner + "/" + repo,
-		"GITHUB_SHA":        sha,
-		"GITHUB_REF":        "refs/heads/" + ref,
-		"GITHUB_EVENT_NAME": event,
-		"GITHUB_WORKSPACE":  "/github/workspace",
+		"GITHUB_REPOSITORY":       owner + "/" + repo,
+		"GITHUB_SHA":              sha,
+		"GITHUB_REF":              "refs/heads/" + ref,
+		"GITHUB_EVENT_NAME":       event,
+		"GITHUB_WORKSPACE":        "/github/workspace",
+		"GITHUB_RUN_ID":           runID,
+		"GOVNOHUB_ARTIFACT_ROOT":  artifactRoot,
 	}
 }
 

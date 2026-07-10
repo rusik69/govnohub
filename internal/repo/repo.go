@@ -99,6 +99,22 @@ func (s *Service) ListForUser(ctx context.Context, userID uuid.UUID) ([]Reposito
 	return scanRepos(rows)
 }
 
+func (s *Service) ListForOrg(ctx context.Context, orgID uuid.UUID) ([]Repository, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT r.id, r.owner_type, r.owner_id, r.name, COALESCE(r.description,''),
+		       r.default_branch, r.is_private, r.is_fork, r.star_count, r.created_at, r.updated_at,
+		       o.name AS owner_name
+		FROM repos r
+		JOIN orgs o ON r.owner_type='org' AND r.owner_id=o.id
+		WHERE r.owner_id=$1
+		ORDER BY r.updated_at DESC`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRepos(rows)
+}
+
 func (s *Service) CanAccess(ctx context.Context, repoID, userID uuid.UUID, minPerm string) (bool, error) {
 	var ownerType string
 	var ownerID uuid.UUID

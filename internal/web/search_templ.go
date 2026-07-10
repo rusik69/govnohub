@@ -198,6 +198,9 @@ func searchHitURL(h search.Hit) string {
 	if h.Type == "issue" && h.Repo != "" && h.Ref != "" {
 		return "/" + h.Repo + "/issues/" + h.Ref
 	}
+	if h.Type == "pull_request" && h.Repo != "" && h.Ref != "" {
+		return "/" + h.Repo + "/pulls/" + h.Ref
+	}
 	return "/search?q=" + h.Title
 }
 

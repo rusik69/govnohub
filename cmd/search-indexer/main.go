@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -74,7 +75,7 @@ func indexRepos(ctx context.Context, pool *pgxpool.Pool, s *search.Service) {
 
 func indexIssues(ctx context.Context, pool *pgxpool.Pool, s *search.Service) {
 	rows, err := pool.Query(ctx, `
-		SELECT i.id, i.title, COALESCE(i.body,''), COALESCE(u.username, o.name), r.name
+		SELECT i.id, i.number, i.title, COALESCE(i.body,''), COALESCE(u.username, o.name), r.name
 		FROM issues i
 		JOIN repos r ON r.id = i.repo_id
 		LEFT JOIN users u ON r.owner_type='user' AND r.owner_id=u.id
@@ -85,16 +86,18 @@ func indexIssues(ctx context.Context, pool *pgxpool.Pool, s *search.Service) {
 	defer rows.Close()
 	for rows.Next() {
 		var id, title, body, owner, repo string
-		rows.Scan(&id, &title, &body, &owner, &repo)
+		var number int
+		rows.Scan(&id, &number, &title, &body, &owner, &repo)
 		s.Index(ctx, search.Document{
-			ID: "issue-" + id, Type: "issue", Title: title, Body: body, Repo: owner + "/" + repo,
+			ID: "issue-" + id, Type: "issue", Title: title, Body: body,
+			Repo: owner + "/" + repo, Ref: strconv.Itoa(number),
 		})
 	}
 }
 
 func indexPRs(ctx context.Context, pool *pgxpool.Pool, s *search.Service) {
 	rows, err := pool.Query(ctx, `
-		SELECT p.id, p.title, COALESCE(p.body,''), COALESCE(u.username, o.name), r.name
+		SELECT p.id, p.number, p.title, COALESCE(p.body,''), COALESCE(u.username, o.name), r.name
 		FROM pull_requests p
 		JOIN repos r ON r.id = p.repo_id
 		LEFT JOIN users u ON r.owner_type='user' AND r.owner_id=u.id
@@ -105,9 +108,11 @@ func indexPRs(ctx context.Context, pool *pgxpool.Pool, s *search.Service) {
 	defer rows.Close()
 	for rows.Next() {
 		var id, title, body, owner, repo string
-		rows.Scan(&id, &title, &body, &owner, &repo)
+		var number int
+		rows.Scan(&id, &number, &title, &body, &owner, &repo)
 		s.Index(ctx, search.Document{
-			ID: "pr-" + id, Type: "pull_request", Title: title, Body: body, Repo: owner + "/" + repo,
+			ID: "pr-" + id, Type: "pull_request", Title: title, Body: body,
+			Repo: owner + "/" + repo, Ref: strconv.Itoa(number),
 		})
 	}
 }

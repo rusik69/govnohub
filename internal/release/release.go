@@ -103,3 +103,48 @@ func (s *Service) OpenAsset(ctx context.Context, assetID uuid.UUID) (string, io.
 	f, err := os.Open(path)
 	return path, f, err
 }
+
+func (s *Service) GetByTag(ctx context.Context, repoID uuid.UUID, tag string) (*Release, error) {
+	var r Release
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, repo_id, tag_name, COALESCE(name,''), COALESCE(body,''), author_id, draft, prerelease, created_at
+		FROM releases WHERE repo_id=$1 AND tag_name=$2`, repoID, tag,
+	).Scan(&r.ID, &r.RepoID, &r.TagName, &r.Name, &r.Body, &r.AuthorID, &r.Draft, &r.Prerelease, &r.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (s *Service) ListAssets(ctx context.Context, releaseID uuid.UUID) ([]Asset, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, release_id, name, content_type, size_bytes
+		FROM release_assets WHERE release_id=$1 ORDER BY name`, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Asset
+	for rows.Next() {
+		var a Asset
+		if err := rows.Scan(&a.ID, &a.ReleaseID, &a.Name, &a.ContentType, &a.SizeBytes); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) OpenAssetByName(ctx context.Context, releaseID uuid.UUID, name string) (Asset, io.ReadCloser, error) {
+	var a Asset
+	var path string
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, release_id, name, content_type, size_bytes, storage_path
+		FROM release_assets WHERE release_id=$1 AND name=$2`, releaseID, name,
+	).Scan(&a.ID, &a.ReleaseID, &a.Name, &a.ContentType, &a.SizeBytes, &path)
+	if err != nil {
+		return Asset{}, nil, err
+	}
+	f, err := os.Open(path)
+	return a, f, err
+}

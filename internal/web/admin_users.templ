@@ -11,6 +11,7 @@ templ AdminUsersPage(layout LayoutData, users []auth.User, errMsg string) {
 
 templ AdminUsersContent(csrf string, users []auth.User, errMsg string) {
 	<h1 class="text-2xl font-bold mb-6">Admin · Users</h1>
+	<p class="mb-4"><a href="/admin/audit">Audit log</a></p>
 	@ErrorAlert(errMsg)
 	<form method="post" action="/admin/users" class="card p-4 mb-6 grid grid-cols-2 gap-4">
 		@CSRFInput(csrf)

@@ -15,6 +15,7 @@ import (
 
 	"github.com/rusik69/govnohub/internal/actions"
 	"github.com/rusik69/govnohub/internal/aireview"
+	"github.com/rusik69/govnohub/internal/audit"
 	"github.com/rusik69/govnohub/internal/auth"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
@@ -45,6 +46,7 @@ type Server struct {
 	aiReview *aireview.Service
 	notify   *notification.Service
 	wiki     *wiki.Service
+	audit    *audit.Service
 	web      *web.Handler
 }
 
@@ -63,19 +65,21 @@ func NewServer(
 	aiReviewSvc *aireview.Service,
 	notifySvc *notification.Service,
 	wikiSvc *wiki.Service,
+	auditSvc *audit.Service,
 ) *Server {
 	s := &Server{
 		auth: authSvc, repos: repoSvc, git: gitStore,
 		issues: issueSvc, pulls: pullSvc, releases: releaseSvc,
 		packages: pkgSvc, webhooks: webhookSvc, search: searchSvc,
 		pool: pool, org: orgSvc, aiReview: aiReviewSvc,
-		notify: notifySvc, wiki: wikiSvc,
+		notify: notifySvc, wiki: wikiSvc, audit: auditSvc,
 	}
 	s.web = web.NewHandler(web.Deps{
 		Auth: authSvc, Repos: repoSvc, Git: gitStore, Issues: issueSvc,
 		Pulls: pullSvc, Releases: releaseSvc, Packages: pkgSvc,
 		Webhooks: webhookSvc, Search: searchSvc, Pool: pool,
 		Org: orgSvc, AIReview: aiReviewSvc, Notify: notifySvc, Wiki: wikiSvc,
+		Audit: auditSvc,
 	})
 	return s
 }
@@ -161,6 +165,8 @@ func (s *Server) Router() http.Handler {
 			r.Get("/releases", s.handleListReleases)
 			r.Post("/releases", s.handleCreateRelease)
 			r.Post("/releases/{tag}/assets", s.handleUploadAsset)
+			r.Get("/releases/{tag}/assets", s.handleListReleaseAssets)
+			r.Get("/releases/{tag}/assets/{name}", s.handleDownloadReleaseAsset)
 
 			r.Get("/packages", s.handleListPackages)
 			r.Post("/packages", s.handlePublishPackage)
@@ -168,6 +174,7 @@ func (s *Server) Router() http.Handler {
 
 			r.Get("/webhooks", s.handleListWebhooks)
 			r.Post("/webhooks", s.handleCreateWebhook)
+			r.Get("/webhooks/{webhookID}/deliveries", s.handleListWebhookDeliveries)
 
 			r.Post("/branches", s.handleCreateBranch)
 			r.Get("/protected-branches", s.handleListProtectedBranches)
@@ -675,6 +682,11 @@ func (s *Server) handleCloseIssue(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if i.AuthorID != userIDFrom(r.Context()) {
+		s.notify.NotifyAsync(i.AuthorID, "Issue closed",
+			"Issue #"+strconv.Itoa(num)+" was closed in "+repository.FullName,
+			"/"+repository.OwnerName+"/"+repository.Name+"/issues/"+strconv.Itoa(num))
+	}
 	jsonOK(w, map[string]string{"status": "closed"})
 }
 
@@ -759,7 +771,22 @@ func (s *Server) handleGetPR(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	jsonOK(w, pr)
+	mergeable := true
+	if pr.State == "open" {
+		ok, err := s.git.CanMerge(repository.OwnerName, repository.Name, pr.BaseBranch, pr.HeadBranch)
+		if err == nil {
+			mergeable = ok
+		}
+	}
+	jsonOK(w, map[string]interface{}{
+		"id": pr.ID, "repo_id": pr.RepoID, "number": pr.Number,
+		"title": pr.Title, "body": pr.Body, "state": pr.State,
+		"author_id": pr.AuthorID, "head_branch": pr.HeadBranch,
+		"base_branch": pr.BaseBranch, "head_sha": pr.HeadSHA,
+		"merged_at": pr.MergedAt, "merge_sha": pr.MergeSHA,
+		"created_at": pr.CreatedAt, "updated_at": pr.UpdatedAt,
+		"mergeable": mergeable,
+	})
 }
 
 func (s *Server) handleAddReview(w http.ResponseWriter, r *http.Request) {
@@ -850,6 +877,9 @@ func (s *Server) handleMergePR(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.notify.NotifyAsync(pr.AuthorID, "PR merged",
+		"PR #"+strconv.Itoa(num)+" was merged in "+repository.FullName,
+		"/"+repository.OwnerName+"/"+repository.Name+"/pulls/"+strconv.Itoa(num))
 	jsonOK(w, map[string]string{"merge_sha": sha})
 }
 

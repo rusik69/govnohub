@@ -32,9 +32,14 @@ func TestInitAndTree(t *testing.T) {
 	}
 }
 
-func bareCommit(t *testing.T, repoPath, branch, msg string) {
+func bareCommitOn(t *testing.T, repoPath, parentSHA, branch, msg string) string {
 	t.Helper()
-	cmd := exec.Command("git", "--git-dir", repoPath, "commit-tree", "-m", msg, emptyTree)
+	args := []string{"--git-dir", repoPath, "commit-tree", "-m", msg}
+	if parentSHA != "" {
+		args = append(args, "-p", parentSHA)
+	}
+	args = append(args, emptyTree)
+	cmd := exec.Command("git", args...)
 	cmd.Env = append(os.Environ(),
 		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.local",
 		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.local",
@@ -47,6 +52,12 @@ func bareCommit(t *testing.T, repoPath, branch, msg string) {
 	if err := exec.Command("git", "--git-dir", repoPath, "update-ref", "refs/heads/"+branch, sha).Run(); err != nil {
 		t.Fatalf("update-ref: %v", err)
 	}
+	return sha
+}
+
+func bareCommit(t *testing.T, repoPath, branch, msg string) {
+	t.Helper()
+	bareCommitOn(t, repoPath, "", branch, msg)
 }
 
 func runGit(t *testing.T, dir string, args ...string) {
@@ -73,5 +84,53 @@ func TestRepoPath(t *testing.T) {
 	got := store.RepoPath("o", "r")
 	if filepath.Base(got) != "r.git" {
 		t.Fatalf("path=%s", got)
+	}
+}
+
+func TestMergeUpdatesBareRef(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Init(context.Background(), "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	path := store.RepoPath("alice", "demo")
+	mainSHA := bareCommitOn(t, path, "", "main", "init")
+	bareCommitOn(t, path, mainSHA, "feature", "feature work")
+
+	sha, err := store.Merge("alice", "demo", "main", "feature", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := exec.Command("git", "--git-dir", path, "rev-parse", "refs/heads/main").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(got)) != sha {
+		t.Fatalf("bare ref=%s want merge sha=%s", got, sha)
+	}
+}
+
+func TestCanMerge(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Init(context.Background(), "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	path := store.RepoPath("alice", "demo")
+	mainSHA := bareCommitOn(t, path, "", "main", "init")
+	bareCommitOn(t, path, mainSHA, "feature", "feature work")
+
+	ok, err := store.CanMerge("alice", "demo", "main", "feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected mergeable")
 	}
 }

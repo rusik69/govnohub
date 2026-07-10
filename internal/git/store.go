@@ -352,7 +352,25 @@ func (s *Store) Merge(owner, name, baseBranch, headBranch string, squash bool) (
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	sha := strings.TrimSpace(string(out))
+	if err := exec.Command("git", "--git-dir", path, "update-ref", "refs/heads/"+baseBranch, sha).Run(); err != nil {
+		return "", fmt.Errorf("update-ref: %w", err)
+	}
+	return sha, nil
+}
+
+func (s *Store) CanMerge(owner, name, baseBranch, headBranch string) (bool, error) {
+	path := s.RepoPath(owner, name)
+	cmd := exec.Command("git", "-C", path, "merge-tree", "--write-tree", baseBranch, headBranch)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		// merge-tree exits non-zero on conflicts
+		if strings.Contains(string(out), "CONFLICT") || strings.Contains(string(out), "conflict") {
+			return false, nil
+		}
+		return false, fmt.Errorf("merge-tree: %w: %s", err, out)
+	}
+	return true, nil
 }
 
 func resolveCommit(repo *git.Repository, ref string) (*object.Commit, error) {

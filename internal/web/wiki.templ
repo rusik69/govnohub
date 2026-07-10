@@ -26,18 +26,24 @@ templ WikiListContent(nav RepoNavData, pages []wiki.Page) {
 	}
 }
 
-templ WikiViewPage(layout LayoutData, nav RepoNavData, page *wiki.Page, html string) {
+templ WikiViewPage(layout LayoutData, nav RepoNavData, page *wiki.Page, html, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: WikiViewContent(nav, page, html),
+		UnreadNotifs: layout.UnreadNotifs, Content: WikiViewContent(nav, page, html, csrf),
 	})
 }
 
-templ WikiViewContent(nav RepoNavData, page *wiki.Page, html string) {
+templ WikiViewContent(nav RepoNavData, page *wiki.Page, html string, csrf string) {
 	@RepoNav(nav)
 	<div class="flex justify-between items-center mb-4">
 		<h1 class="text-xl font-bold m-0">{ page.Title }</h1>
-		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/" + page.Slug + "/edit") } class="btn-secondary">Edit</a>
+		<div class="flex gap-2">
+			<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/" + page.Slug + "/edit") } class="btn-secondary">Edit</a>
+			<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/" + page.Slug + "/delete") }>
+				@CSRFInput(csrf)
+				<button type="submit" class="btn-secondary">Delete</button>
+			</form>
+		</div>
 	</div>
 	<div class="card p-6 markdown">@templ.Raw(html)</div>
 }

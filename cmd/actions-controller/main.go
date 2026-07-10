@@ -187,7 +187,7 @@ func completedJobs(ctx context.Context, pool *pgxpool.Pool, runID uuid.UUID) (ma
 }
 
 func dispatchJob(ctx context.Context, pool *pgxpool.Pool, k8s *kubernetes.Clientset, cfg config.Config, runID uuid.UUID, jobID string, job actions.Job, sha, branch, event, owner, repoName string) error {
-	ctxMap := actions.GitHubContext(owner, repoName, sha, branch, event)
+	ctxMap := actions.GitHubContext(owner, repoName, sha, branch, event, runID.String(), cfg.ArtifactRoot)
 	script := actions.WriteJobScript(job.Steps, ctxMap)
 	logDir := filepath.Join(cfg.ArtifactRoot, "logs", runID.String())
 	os.MkdirAll(logDir, 0o755)

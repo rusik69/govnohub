@@ -20,13 +20,21 @@ templ SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, 
 	}
 	<section class="mb-6">
 		<h2 class="text-lg font-semibold mb-3">Personal access tokens</h2>
-		<form method="post" action="/settings/pat" class="card p-4 mb-4 flex gap-3 items-end">
+		<form method="post" action="/settings/pat" class="card p-4 mb-4 flex flex-col gap-3">
 			@CSRFInput(csrf)
-			<div class="flex-1">
-				<label class="text-sm">Name</label>
-				<input type="text" name="name" required class="input mt-2"/>
+			<div class="flex gap-3 items-end">
+				<div class="flex-1">
+					<label class="text-sm">Name</label>
+					<input type="text" name="name" required class="input mt-2"/>
+				</div>
+				<button type="submit" class="btn">Create token</button>
 			</div>
-			<button type="submit" class="btn">Create token</button>
+			<div class="flex flex-wrap gap-3 text-sm">
+				<label><input type="checkbox" name="scope" value="repo"/> repo</label>
+				<label><input type="checkbox" name="scope" value="repo:write"/> repo:write</label>
+				<label><input type="checkbox" name="scope" value="workflow"/> workflow</label>
+				<label><input type="checkbox" name="scope" value="read:user"/> read:user</label>
+			</div>
 		</form>
 		if len(pats) == 0 {
 			@EmptyState("No tokens")

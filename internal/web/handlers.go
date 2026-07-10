@@ -1,7 +1,9 @@
 package web
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -75,7 +77,11 @@ func (h *Handler) handleCreatePAT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	su := userFrom(r.Context())
-	token, err := h.deps.Auth.CreatePAT(r.Context(), su.ID, r.FormValue("name"), nil)
+	scopes := r.Form["scope"]
+	if len(scopes) == 0 {
+		scopes = nil
+	}
+	token, err := h.deps.Auth.CreatePAT(r.Context(), su.ID, r.FormValue("name"), scopes)
 	pats, _ := h.deps.Auth.ListPATs(r.Context(), su.ID)
 	keys, _ := h.deps.Auth.ListSSHKeys(r.Context(), su.ID)
 	errMsg := ""
@@ -176,7 +182,8 @@ func (h *Handler) handleOrgDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	members, _ := h.deps.Org.ListMembers(r.Context(), o.ID)
-	render(w, r, OrgDetailPage(h.layout(r, o.Name), o, members, csrfFrom(r.Context())))
+	repos, _ := h.deps.Repos.ListForOrg(r.Context(), o.ID)
+	render(w, r, OrgDetailPage(h.layout(r, o.Name), o, members, repos, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleAddOrgMember(w http.ResponseWriter, r *http.Request) {
@@ -268,6 +275,11 @@ func (h *Handler) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) 
 	errMsg := ""
 	if err != nil {
 		errMsg = err.Error()
+	} else if h.deps.Audit != nil {
+		su := userFrom(r.Context())
+		if u, uerr := h.deps.Auth.GetUserByUsername(r.Context(), r.FormValue("username")); uerr == nil {
+			_ = h.deps.Audit.Record(r.Context(), su.ID, "user.create", "user", u.ID.String(), map[string]string{"username": u.Username})
+		}
 	}
 	render(w, r, AdminUsersPage(h.layout(r, "Admin"), users, errMsg))
 }
@@ -282,7 +294,15 @@ func (h *Handler) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	_ = h.deps.Auth.DeleteUser(r.Context(), su.ID, id)
+	if h.deps.Audit != nil {
+		_ = h.deps.Audit.Record(r.Context(), su.ID, "user.delete", "user", id.String(), nil)
+	}
 	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+}
+
+func (h *Handler) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
+	entries, _ := h.deps.Audit.List(r.Context(), 100)
+	render(w, r, AdminAuditPage(h.layout(r, "Audit log"), entries))
 }
 
 func (h *Handler) handleRepo(w http.ResponseWriter, r *http.Request) {
@@ -436,6 +456,12 @@ func (h *Handler) handleCloseIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = h.deps.Issues.Close(r.Context(), iss.ID)
+	su := userFrom(r.Context())
+	if iss.AuthorID != su.ID {
+		h.deps.Notify.NotifyAsync(iss.AuthorID, "Issue closed",
+			"Issue #"+strconv.Itoa(num)+" was closed in "+repository.FullName,
+			"/"+repository.FullName+"/issues/"+strconv.Itoa(num))
+	}
 	http.Redirect(w, r, "/"+repository.FullName+"/issues/"+strconv.Itoa(num), http.StatusSeeOther)
 }
 
@@ -601,11 +627,19 @@ func (h *Handler) handlePRDetail(w http.ResponseWriter, r *http.Request) {
 	baseSHA, _ := h.deps.Git.UpdateHead(repository.OwnerName, repository.Name, pr.BaseBranch)
 	diff, _ := h.deps.Git.Diff(repository.OwnerName, repository.Name, baseSHA, pr.HeadSHA)
 	files := ParseUnifiedDiff(diff)
+	mergeable := true
+	if pr.State == "open" {
+		ok, err := h.deps.Git.CanMerge(repository.OwnerName, repository.Name, pr.BaseBranch, pr.HeadBranch)
+		if err == nil {
+			mergeable = ok
+		}
+	}
 	header, nav := h.repoPageCtx(r.Context(), repository, "pulls")
 	header.CSRF = csrfFrom(r.Context())
 	render(w, r, PRDetailPage(h.layout(r, pr.Title), PRDetailData{
 		Header: header, Nav: nav,
 		PR: pr, Reviews: reviews, Comments: comments, Files: files, CSRF: csrfFrom(r.Context()),
+		Mergeable: mergeable,
 	}))
 }
 
@@ -683,6 +717,9 @@ func (h *Handler) handlePRMerge(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.deps.Pulls.Merge(r.Context(), pr.ID, sha)
 	_ = h.deps.Repos.UpdateBranchHead(r.Context(), repository.ID, pr.BaseBranch, sha)
+	h.deps.Notify.NotifyAsync(pr.AuthorID, "PR merged",
+		"PR #"+strconv.Itoa(num)+" was merged in "+repository.FullName,
+		"/"+repository.FullName+"/pulls/"+strconv.Itoa(num))
 	http.Redirect(w, r, "/"+repository.FullName+"/pulls/"+strconv.Itoa(num), http.StatusSeeOther)
 }
 
@@ -750,7 +787,12 @@ func (h *Handler) handleReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rels, _ := h.deps.Releases.List(r.Context(), repository.ID)
-	render(w, r, ReleasesPage(h.layout(r, "Releases"), repoNav(repository.OwnerName, repository.Name, "releases"), rels, csrfFrom(r.Context())))
+	var rows []ReleaseWithAssets
+	for _, rel := range rels {
+		assets, _ := h.deps.Releases.ListAssets(r.Context(), rel.ID)
+		rows = append(rows, ReleaseWithAssets{Release: rel, Assets: assets})
+	}
+	render(w, r, ReleasesPage(h.layout(r, "Releases"), repoNav(repository.OwnerName, repository.Name, "releases"), rows, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleCreateRelease(w http.ResponseWriter, r *http.Request) {
@@ -772,7 +814,7 @@ func (h *Handler) handlePackages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pkgs, _ := h.deps.Packages.List(r.Context(), repository.ID)
-	render(w, r, PackagesPage(h.layout(r, "Packages"), repoNav(repository.OwnerName, repository.Name, "packages"), pkgs))
+	render(w, r, PackagesPage(h.layout(r, "Packages"), repoNav(repository.OwnerName, repository.Name, "packages"), pkgs, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleRepoSettings(w http.ResponseWriter, r *http.Request) {
@@ -786,7 +828,7 @@ func (h *Handler) handleRepoSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
-	var hooks []WebhookRow
+	var hooks []WebhookWithDeliveries
 	for rows.Next() {
 		var hook WebhookRow
 		var id uuid.UUID
@@ -794,10 +836,22 @@ func (h *Handler) handleRepoSettings(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&id, &hook.URL, &events, &hook.Active); err == nil {
 			hook.ID = id.String()
 			hook.Events = strings.Join(events, ", ")
-			hooks = append(hooks, hook)
+			deliveries, _ := h.deps.Webhooks.ListDeliveries(r.Context(), id, 5)
+			hooks = append(hooks, WebhookWithDeliveries{Hook: hook, Deliveries: deliveries})
 		}
 	}
-	render(w, r, RepoSettingsPage(h.layout(r, "Settings"), repoNav(repository.OwnerName, repository.Name, "settings"), hooks, csrfFrom(r.Context())))
+	collabs, _ := h.deps.Repos.ListCollaborators(r.Context(), repository.ID)
+	protected, _ := h.deps.Repos.ListProtectedBranches(r.Context(), repository.ID)
+	labels, _ := h.deps.Issues.ListLabels(r.Context(), repository.ID)
+	data := RepoSettingsData{
+		Nav:               repoNav(repository.OwnerName, repository.Name, "settings"),
+		CSRF:              csrfFrom(r.Context()),
+		Webhooks:          hooks,
+		Collaborators:     collabs,
+		ProtectedBranches: protected,
+		Labels:            labels,
+	}
+	render(w, r, RepoSettingsPage(h.layout(r, "Settings"), data))
 }
 
 func (h *Handler) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
@@ -837,7 +891,7 @@ func (h *Handler) handleWikiPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	html, _ := RenderMarkdown(page.Content)
-	render(w, r, WikiViewPage(h.layout(r, page.Title), repoNav(repository.OwnerName, repository.Name, "wiki"), page, html))
+	render(w, r, WikiViewPage(h.layout(r, page.Title), repoNav(repository.OwnerName, repository.Name, "wiki"), page, html, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleWikiEdit(w http.ResponseWriter, r *http.Request) {
@@ -914,4 +968,193 @@ func (h *Handler) handleFork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/"+fork.FullName, http.StatusSeeOther)
+}
+
+func (h *Handler) handleMilestones(w http.ResponseWriter, r *http.Request) {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	ms, _ := h.deps.Issues.ListMilestones(r.Context(), repository.ID)
+	render(w, r, MilestonesPage(h.layout(r, "Milestones"), repoNav(repository.OwnerName, repository.Name, "milestones"), ms, csrfFrom(r.Context())))
+}
+
+func (h *Handler) handleCreateMilestone(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	_, _ = h.deps.Issues.CreateMilestone(r.Context(), repository.ID, r.FormValue("title"), r.FormValue("description"), nil)
+	http.Redirect(w, r, "/"+repository.FullName+"/milestones", http.StatusSeeOther)
+}
+
+func (h *Handler) handleCloseMilestone(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	id, ok := parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	_ = h.deps.Issues.CloseMilestone(r.Context(), id)
+	http.Redirect(w, r, "/"+repository.FullName+"/milestones", http.StatusSeeOther)
+}
+
+func (h *Handler) handleAddCollaborator(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	u, err := h.deps.Auth.GetUserByUsername(r.Context(), r.FormValue("username"))
+	if err == nil {
+		perm := r.FormValue("permission")
+		if perm == "" {
+			perm = "read"
+		}
+		_ = h.deps.Repos.AddCollaborator(r.Context(), repository.ID, u.ID, perm)
+	}
+	http.Redirect(w, r, "/"+repository.FullName+"/settings", http.StatusSeeOther)
+}
+
+func (h *Handler) handleRemoveCollaborator(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	u, err := h.deps.Auth.GetUserByUsername(r.Context(), chi.URLParam(r, "username"))
+	if err == nil {
+		_ = h.deps.Repos.RemoveCollaborator(r.Context(), repository.ID, u.ID)
+	}
+	http.Redirect(w, r, "/"+repository.FullName+"/settings", http.StatusSeeOther)
+}
+
+func (h *Handler) handleProtectBranch(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	checks := []string{}
+	if v := strings.TrimSpace(r.FormValue("required_checks")); v != "" {
+		for _, c := range strings.Split(v, ",") {
+			if c = strings.TrimSpace(c); c != "" {
+				checks = append(checks, c)
+			}
+		}
+	}
+	reviews, _ := strconv.Atoi(r.FormValue("require_reviews"))
+	_, _ = h.deps.Pool.Exec(r.Context(), `
+		INSERT INTO protected_branches (repo_id, branch_name, required_checks, require_reviews)
+		VALUES ($1,$2,$3,$4)
+		ON CONFLICT (repo_id, branch_name) DO UPDATE SET required_checks=EXCLUDED.required_checks, require_reviews=EXCLUDED.require_reviews`,
+		repository.ID, r.FormValue("branch"), checks, reviews)
+	http.Redirect(w, r, "/"+repository.FullName+"/settings", http.StatusSeeOther)
+}
+
+func (h *Handler) handleCreateLabel(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	color := r.FormValue("color")
+	if color == "" {
+		color = "#0366d6"
+	}
+	_, _ = h.deps.Issues.CreateLabel(r.Context(), repository.ID, r.FormValue("name"), color)
+	http.Redirect(w, r, "/"+repository.FullName+"/settings", http.StatusSeeOther)
+}
+
+func (h *Handler) handleUploadReleaseAsset(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	tag := chi.URLParam(r, "tag")
+	rel, err := h.deps.Releases.GetByTag(r.Context(), repository.ID, tag)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Redirect(w, r, "/"+repository.FullName+"/releases", http.StatusSeeOther)
+		return
+	}
+	defer file.Close()
+	_, _ = h.deps.Releases.UploadAsset(r.Context(), rel.ID, header.Filename, header.Header.Get("Content-Type"), file, header.Size)
+	http.Redirect(w, r, "/"+repository.FullName+"/releases", http.StatusSeeOther)
+}
+
+func (h *Handler) handlePublishPackage(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		http.Redirect(w, r, "/"+repository.FullName+"/packages", http.StatusSeeOther)
+		return
+	}
+	defer file.Close()
+	data, _ := io.ReadAll(file)
+	pkgType := r.FormValue("type")
+	if pkgType == "" {
+		pkgType = "generic"
+	}
+	_, _ = h.deps.Packages.Publish(r.Context(), repository.ID, r.FormValue("name"), pkgType, r.FormValue("version"), bytes.NewReader(data))
+	http.Redirect(w, r, "/"+repository.FullName+"/packages", http.StatusSeeOther)
+}
+
+func (h *Handler) handleWikiDelete(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	_ = h.deps.Wiki.Delete(r.Context(), repository.ID, chi.URLParam(r, "slug"))
+	http.Redirect(w, r, "/"+repository.FullName+"/wiki", http.StatusSeeOther)
+}
+
+func (h *Handler) handleCreateOrgRepo(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	o, err := h.deps.Org.GetByName(r.Context(), chi.URLParam(r, "org"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	repo, err := h.deps.Repos.Create(r.Context(), "org", o.ID, o.Name, r.FormValue("name"), r.FormValue("description"), false)
+	if err != nil {
+		http.Redirect(w, r, "/orgs/"+o.Name, http.StatusSeeOther)
+		return
+	}
+	_ = h.deps.Git.Init(r.Context(), repo.OwnerName, repo.Name)
+	http.Redirect(w, r, "/"+repo.FullName, http.StatusSeeOther)
 }

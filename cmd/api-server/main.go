@@ -11,6 +11,7 @@ import (
 
 	"github.com/rusik69/govnohub/internal/api"
 	"github.com/rusik69/govnohub/internal/aireview"
+	"github.com/rusik69/govnohub/internal/audit"
 	"github.com/rusik69/govnohub/internal/auth"
 	"github.com/rusik69/govnohub/internal/config"
 	"github.com/rusik69/govnohub/internal/db"
@@ -77,6 +78,7 @@ func main() {
 		})),
 		notification.NewService(pool),
 		wiki.NewService(pool),
+		audit.NewService(pool),
 	)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: srv.Router()}

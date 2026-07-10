@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rusik69/govnohub/internal/api"
 	"github.com/rusik69/govnohub/internal/aireview"
+	"github.com/rusik69/govnohub/internal/audit"
 	"github.com/rusik69/govnohub/internal/auth"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
@@ -69,6 +70,7 @@ func New(t *testing.T) *Env {
 		aireview.NewService(pg.Pool, aireview.NewClient(aireview.Config{Enabled: false})),
 		notification.NewService(pg.Pool),
 		wiki.NewService(pg.Pool),
+		audit.NewService(pg.Pool),
 	)
 
 	ts := httptest.NewServer(srv.Router())

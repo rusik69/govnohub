@@ -1,0 +1,42 @@
+package web
+
+import (
+	"encoding/json"
+	"github.com/rusik69/govnohub/internal/audit"
+)
+
+templ AdminAuditPage(layout LayoutData, entries []audit.Entry) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Content: AdminAuditContent(entries),
+	})
+}
+
+templ AdminAuditContent(entries []audit.Entry) {
+	<h1 class="text-2xl font-bold mb-6">Admin · Audit log</h1>
+	<p class="mb-4"><a href="/admin/users">← Users</a></p>
+	if len(entries) == 0 {
+		@EmptyState("No audit entries")
+	} else {
+		<table class="card">
+			<thead><tr><th>Time</th><th>Action</th><th>Resource</th><th>Details</th></tr></thead>
+			<tbody>
+				for _, e := range entries {
+					<tr>
+						<td class="text-sm text-muted">{ e.CreatedAt.Format("2006-01-02 15:04") }</td>
+						<td>{ e.Action }</td>
+						<td class="text-sm">{ e.ResourceType } / { e.ResourceID }</td>
+						<td class="text-sm font-mono">{ auditMeta(e.Metadata) }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}
+
+func auditMeta(m json.RawMessage) string {
+	if len(m) == 0 {
+		return ""
+	}
+	return string(m)
+}

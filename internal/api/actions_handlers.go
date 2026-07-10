@@ -11,6 +11,8 @@ import (
 
 	"github.com/rusik69/govnohub/internal/actions"
 	"github.com/rusik69/govnohub/internal/auth"
+	"github.com/rusik69/govnohub/internal/release"
+	"github.com/rusik69/govnohub/internal/webhook"
 )
 
 func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
@@ -228,19 +230,8 @@ func (s *Server) handleUploadAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tag := chi.URLParam(r, "tag")
-	releases, err := s.releases.List(r.Context(), repository.ID)
+	rel, err := s.releases.GetByTag(r.Context(), repository.ID, tag)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	var releaseID uuid.UUID
-	for _, rel := range releases {
-		if rel.TagName == tag {
-			releaseID = rel.ID
-			break
-		}
-	}
-	if releaseID == uuid.Nil {
 		jsonError(w, http.StatusNotFound, "release not found")
 		return
 	}
@@ -250,12 +241,82 @@ func (s *Server) handleUploadAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	asset, err := s.releases.UploadAsset(r.Context(), releaseID, header.Filename, header.Header.Get("Content-Type"), file, header.Size)
+	asset, err := s.releases.UploadAsset(r.Context(), rel.ID, header.Filename, header.Header.Get("Content-Type"), file, header.Size)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	jsonOK(w, asset)
+}
+
+func (s *Server) handleListReleaseAssets(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	tag := chi.URLParam(r, "tag")
+	rel, err := s.releases.GetByTag(r.Context(), repository.ID, tag)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "release not found")
+		return
+	}
+	assets, err := s.releases.ListAssets(r.Context(), rel.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if assets == nil {
+		assets = []release.Asset{}
+	}
+	jsonOK(w, assets)
+}
+
+func (s *Server) handleDownloadReleaseAsset(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	tag := chi.URLParam(r, "tag")
+	name := chi.URLParam(r, "name")
+	rel, err := s.releases.GetByTag(r.Context(), repository.ID, tag)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "release not found")
+		return
+	}
+	asset, rc, err := s.releases.OpenAssetByName(r.Context(), rel.ID, name)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "asset not found")
+		return
+	}
+	defer rc.Close()
+	if asset.ContentType != "" {
+		w.Header().Set("Content-Type", asset.ContentType)
+	} else {
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename="+asset.Name)
+	io.Copy(w, rc)
+}
+
+func (s *Server) handleListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
+	_, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	webhookID, err := uuid.Parse(chi.URLParam(r, "webhookID"))
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid webhook id")
+		return
+	}
+	deliveries, err := s.webhooks.ListDeliveries(r.Context(), webhookID, 20)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if deliveries == nil {
+		deliveries = []webhook.Delivery{}
+	}
+	jsonOK(w, deliveries)
 }
 
 func (s *Server) handleListPackages(w http.ResponseWriter, r *http.Request) {

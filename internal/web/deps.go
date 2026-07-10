@@ -4,6 +4,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/rusik69/govnohub/internal/aireview"
+	"github.com/rusik69/govnohub/internal/audit"
 	"github.com/rusik69/govnohub/internal/auth"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
@@ -33,4 +34,5 @@ type Deps struct {
 	AIReview *aireview.Service
 	Notify   *notification.Service
 	Wiki     *wiki.Service
+	Audit    *audit.Service
 }

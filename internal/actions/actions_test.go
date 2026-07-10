@@ -80,14 +80,26 @@ jobs:
 	}
 }
 
+func ghCtx() map[string]string {
+	return GitHubContext("o", "r", "sha", "main", "push", "run-1", "/artifacts")
+}
+
 func TestBuildUsesScript(t *testing.T) {
-	script := BuildUsesScript(Step{Uses: "actions/checkout@v4"}, GitHubContext("o", "r", "sha", "main", "push"))
+	script := BuildUsesScript(Step{Uses: "actions/checkout@v4"}, ghCtx())
 	if !contains(script, "Checking out") {
 		t.Fatalf("checkout script=%s", script)
 	}
 	script = BuildUsesScript(Step{Uses: "actions/setup-go@v5"}, nil)
 	if !contains(script, "Go") {
 		t.Fatalf("setup-go script=%s", script)
+	}
+	script = BuildUsesScript(Step{Uses: "actions/setup-node@v4", With: map[string]string{"node-version": "20"}}, ghCtx())
+	if !contains(script, "Node.js") {
+		t.Fatalf("setup-node script=%s", script)
+	}
+	script = BuildUsesScript(Step{Uses: "actions/upload-artifact@v4", With: map[string]string{"name": "dist", "path": "out/"}}, ghCtx())
+	if !contains(script, "Uploading artifact") {
+		t.Fatalf("upload-artifact script=%s", script)
 	}
 	script = BuildUsesScript(Step{Uses: "actions/unknown@v1"}, nil)
 	if !contains(script, "warning") {
@@ -96,7 +108,7 @@ func TestBuildUsesScript(t *testing.T) {
 }
 
 func TestWriteJobScript(t *testing.T) {
-	script := WriteJobScript([]Step{{Name: "hi", Run: "echo hello"}}, GitHubContext("o", "r", "sha", "main", "push"))
+	script := WriteJobScript([]Step{{Name: "hi", Run: "echo hello"}}, ghCtx())
 	if script == "" || !contains(script, "echo hello") {
 		t.Fatalf("script=%s", script)
 	}
