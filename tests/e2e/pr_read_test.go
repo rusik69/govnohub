@@ -121,7 +121,10 @@ func TestSquashMerge(t *testing.T) {
 
 	resp, pulls := doJSONArray(t, http.MethodGet, base+"/api/v1/repos/"+repo+"/pulls", token, nil)
 	requireStatus(t, resp, http.StatusOK, "list pulls")
-	if state, _ := pulls[0]["state"].(string); state != "merged" {
-		t.Fatalf("expected merged state, got %v", state)
+	if state, _ := pulls[0]["state"].(string); state != "closed" {
+		t.Fatalf("expected closed state after merge, got %v", state)
+	}
+	if sha, _ := pulls[0]["merge_sha"].(string); sha == "" {
+		t.Fatal("expected merge_sha after squash merge")
 	}
 }
