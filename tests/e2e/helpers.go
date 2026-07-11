@@ -144,6 +144,9 @@ func webCSRF(t *testing.T, client *http.Client, base, pagePath string) string {
 
 func webPostForm(t *testing.T, client *http.Client, postURL, csrf string, fields map[string]string) *http.Response {
 	t.Helper()
+	if fields == nil {
+		fields = map[string]string{}
+	}
 	var b strings.Builder
 	first := true
 	fields["csrf_token"] = csrf

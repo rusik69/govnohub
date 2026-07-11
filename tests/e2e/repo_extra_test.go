@@ -140,7 +140,7 @@ func TestListProtectedBranches(t *testing.T) {
 	if len(rules) == 0 {
 		t.Fatal("expected protected branch rule")
 	}
-	if branch, _ := rules[0]["branch"].(string); branch != "main" {
+	if branch, _ := rules[0]["branch_name"].(string); branch != "main" {
 		t.Fatalf("unexpected branch: %v", branch)
 	}
 }
