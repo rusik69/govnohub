@@ -106,6 +106,7 @@ func TestSquashMerge(t *testing.T) {
 		"name": "feature", "base": "main",
 	})
 	requireStatus(t, resp, http.StatusOK, "create branch")
+	gitCommitOnBranch(t, env, owner, "app", "feature", "feature.txt", "feature change\n", "feature commit")
 
 	resp, out := testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+repo+"/pulls", token, map[string]string{
 		"title": "squash me", "body": "", "head": "feature", "base": "main",

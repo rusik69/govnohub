@@ -64,7 +64,7 @@ Uses `testenv.New` — httptest API server + testcontainers PostgreSQL.
 | `admin_flow_test.go` | Admin user CRUD/delete, non-admin/PAT rejection, audit log |
 | `health_test.go` | `GET /healthz`, `GET /api/v1/user` |
 | `issue_flow_test.go` | Issue comments, labels, milestones, patch, close |
-| `issue_read_test.go` | GET issue, list comments/labels, remove label, patch title |
+| `issue_read_test.go` | GET issue, list comments/labels, remove label, patch assignee |
 | `pr_flow_test.go` | PR review + merge with branch protection; PR comments and diff |
 | `pr_read_test.go` | List/get PRs, list reviews, squash merge |
 | `actions_flow_test.go` | Workflow upsert, trigger run, list runs, fetch logs |

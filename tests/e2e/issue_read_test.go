@@ -108,29 +108,32 @@ func TestRemoveIssueLabel(t *testing.T) {
 	requireStatus(t, resp, http.StatusOK, "remove label")
 }
 
-func TestPatchIssueTitle(t *testing.T) {
+func TestPatchIssueAssignee(t *testing.T) {
 	env := testenv.New(t)
 	defer env.Cleanup()
 	base := env.URL
-	owner := "ipat" + uniqueSuffix()[len(uniqueSuffix())-6:]
+	suffix := uniqueSuffix()
+	owner := "ipat" + suffix[len(suffix)-6:]
+	assignee := "ipata" + suffix[len(suffix)-6:]
 	token := testutil.RegisterAndLogin(t, base, owner)
+	testutil.RegisterAndLogin(t, base, assignee)
 	createRepo(t, base, token, owner, "app")
 	repo := owner + "/app"
 
 	resp, out := testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+repo+"/issues", token, map[string]string{
-		"title": "original", "body": "",
+		"title": "assign me", "body": "",
 	})
 	requireStatus(t, resp, http.StatusOK, "create issue")
 	num := int(out["number"].(float64))
 
 	resp, _ = testutil.DoJSON(t, http.MethodPatch, base+"/api/v1/repos/"+repo+"/issues/"+itoa(num), token, map[string]string{
-		"title": "renamed",
+		"assignee": assignee,
 	})
-	requireStatus(t, resp, http.StatusOK, "patch issue")
+	requireStatus(t, resp, http.StatusOK, "patch issue assignee")
 
 	resp, got := testutil.DoJSON(t, http.MethodGet, base+"/api/v1/repos/"+repo+"/issues/"+itoa(num), token, nil)
 	requireStatus(t, resp, http.StatusOK, "get issue")
-	if got["title"] != "renamed" {
-		t.Fatalf("unexpected title: %v", got["title"])
+	if got["assignee"] != assignee {
+		t.Fatalf("unexpected assignee: %v", got["assignee"])
 	}
 }

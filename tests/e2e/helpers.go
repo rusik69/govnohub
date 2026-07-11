@@ -10,11 +10,15 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/rusik69/govnohub/internal/testutil"
+	"github.com/rusik69/govnohub/tests/testenv"
 )
 
 func itoa(n int) string {
@@ -124,6 +128,15 @@ func webClient(t *testing.T, base, token string) *http.Client {
 	return &http.Client{Jar: jar}
 }
 
+func webClientNoRedirect(client *http.Client) *http.Client {
+	return &http.Client{
+		Jar: client.Jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
 func webCSRF(t *testing.T, client *http.Client, base, pagePath string) string {
 	t.Helper()
 	resp, err := client.Get(base + pagePath)
@@ -201,4 +214,32 @@ func assertSearchHit(t *testing.T, hits []map[string]any, fullName string) {
 		return
 	}
 	t.Fatalf("search miss for %s", fullName)
+}
+
+func gitCommitOnBranch(t *testing.T, env *testenv.Env, owner, repo, branch, filename, content, message string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	gitDir := env.Git.RepoPath(owner, repo)
+	wt := t.TempDir()
+	if out, err := exec.Command("git", "--git-dir", gitDir, "worktree", "add", wt, branch).CombinedOutput(); err != nil {
+		t.Fatalf("worktree add: %s %v", out, err)
+	}
+	t.Cleanup(func() { exec.Command("git", "--git-dir", gitDir, "worktree", "remove", wt, "--force").Run() })
+	if err := os.WriteFile(filepath.Join(wt, filename), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	envVars := append(os.Environ(),
+		"GIT_AUTHOR_NAME=e2e", "GIT_AUTHOR_EMAIL=e2e@test.local",
+		"GIT_COMMITTER_NAME=e2e", "GIT_COMMITTER_EMAIL=e2e@test.local",
+	)
+	for _, args := range [][]string{{"add", filename}, {"commit", "-m", message}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = wt
+		cmd.Env = envVars
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %s %v", args, out, err)
+		}
+	}
 }

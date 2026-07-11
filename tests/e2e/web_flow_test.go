@@ -42,7 +42,7 @@ func TestWebLoginLogout(t *testing.T) {
 	}
 
 	csrf = webCSRF(t, client, base, "/")
-	resp = webPostForm(t, client, base+"/logout", csrf, nil)
+	resp = webPostForm(t, webClientNoRedirect(client), base+"/logout", csrf, nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("logout status=%d", resp.StatusCode)
@@ -63,7 +63,7 @@ func TestWebDashboardCreateRepo(t *testing.T) {
 
 	csrf := webCSRF(t, client, base, "/")
 	repoName := "webapp" + uniqueSuffix()[len(uniqueSuffix())-5:]
-	resp := webPostForm(t, client, base+"/repos/create", csrf, map[string]string{
+	resp := webPostForm(t, webClientNoRedirect(client), base+"/repos/create", csrf, map[string]string{
 		"name":        repoName,
 		"description": "from web",
 	})
