@@ -240,3 +240,31 @@ func TestGitSSHUnauthorized(t *testing.T) {
 		t.Fatal("expected ssh clone to fail without registered key")
 	}
 }
+
+func TestGitCloneWrongCredentials(t *testing.T) {
+	_, gitURL, _, owner, _ := setupGitRepo(t)
+	requireGit(t)
+	work := t.TempDir()
+	badURL := gitRemoteURL(gitURL, owner, "app", owner, "not-the-password")
+	if _, err := runGitAllowFail(t, work, "clone", badURL, "repo"); err == nil {
+		t.Fatal("expected clone to fail with wrong password")
+	}
+}
+
+func TestGitPushWrongCredentials(t *testing.T) {
+	_, gitURL, _, owner, _ := setupGitRepo(t)
+	requireGit(t)
+	work := t.TempDir()
+	goodURL := gitRemoteURL(gitURL, owner, "app", owner, "password123")
+	repoDir := gitClone(t, work, goodURL, "repo")
+	readme := filepath.Join(repoDir, "push-fail.md")
+	if err := os.WriteFile(readme, []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repoDir, "add", "push-fail.md")
+	runGit(t, repoDir, "commit", "-m", "should not push")
+	runGit(t, repoDir, "remote", "set-url", "origin", gitRemoteURL(gitURL, owner, "app", owner, "wrong"))
+	if _, err := runGitAllowFail(t, repoDir, "push", "origin", "main"); err == nil {
+		t.Fatal("expected push to fail with wrong password")
+	}
+}

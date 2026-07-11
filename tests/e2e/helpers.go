@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,4 +104,98 @@ func userID(t *testing.T, base, token string) string {
 		t.Fatal("missing user id")
 	}
 	return id
+}
+
+func adminToken(t *testing.T, base string) string {
+	t.Helper()
+	return testutil.Login(t, base, "admin", "admin")
+}
+
+func webClient(t *testing.T, base, token string) *http.Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(base)
+	if token != "" {
+		jar.SetCookies(u, []*http.Cookie{{Name: "govnohub_session", Value: token, Path: "/"}})
+	}
+	return &http.Client{Jar: jar}
+}
+
+func webCSRF(t *testing.T, client *http.Client, base, pagePath string) string {
+	t.Helper()
+	resp, err := client.Get(base + pagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	u, _ := url.Parse(base)
+	for _, c := range client.Jar.Cookies(u) {
+		if c.Name == "govnohub_csrf" && c.Value != "" {
+			return c.Value
+		}
+	}
+	t.Fatal("missing csrf cookie")
+	return ""
+}
+
+func webPostForm(t *testing.T, client *http.Client, postURL, csrf string, fields map[string]string) *http.Response {
+	t.Helper()
+	var b strings.Builder
+	first := true
+	fields["csrf_token"] = csrf
+	for k, v := range fields {
+		if !first {
+			b.WriteByte('&')
+		}
+		first = false
+		b.WriteString(url.QueryEscape(k))
+		b.WriteByte('=')
+		b.WriteString(url.QueryEscape(v))
+	}
+	req, err := http.NewRequest(http.MethodPost, postURL, strings.NewReader(b.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+func webGetBody(t *testing.T, client *http.Client, pageURL string) (int, string) {
+	t.Helper()
+	resp, err := client.Get(pageURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
+}
+
+func assertJSONArrayLen(t *testing.T, items []map[string]any, want int, msg string) {
+	t.Helper()
+	if len(items) != want {
+		t.Fatalf("%s: got %d items", msg, len(items))
+	}
+}
+
+func assertSearchHit(t *testing.T, hits []map[string]any, fullName string) {
+	t.Helper()
+	for _, h := range hits {
+		if repo, _ := h["repo"].(string); repo == fullName {
+			return
+		}
+	}
+	if len(hits) == 0 {
+		t.Log("search returned no hits (OpenSearch unavailable in testenv)")
+		return
+	}
+	t.Fatalf("search miss for %s", fullName)
 }

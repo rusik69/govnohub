@@ -3,12 +3,15 @@
 package e2e
 
 import (
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rusik69/govnohub/internal/testutil"
 )
 
 func repoRoot(t *testing.T) string {
@@ -60,13 +63,38 @@ func TestGovnohubDeployed(t *testing.T) {
 		ns = "govnohub"
 	}
 	deadline := time.Now().Add(2 * time.Minute)
+	ready := false
 	for time.Now().Before(deadline) {
 		out, err := exec.Command("kubectl", "get", "pods", "-n", ns,
 			"-l", "app.kubernetes.io/name=govnohub", "--field-selector=status.phase=Running").CombinedOutput()
 		if err == nil && strings.TrimSpace(string(out)) != "" {
-			return
+			ready = true
+			break
 		}
 		time.Sleep(5 * time.Second)
 	}
-	t.Fatal("govnohub pods not ready")
+	if !ready {
+		t.Fatal("govnohub pods not ready")
+	}
+
+	base := os.Getenv("GOVNOHUB_BASE_URL")
+	if base == "" {
+		base = "http://govnohub.local"
+	}
+	base = strings.TrimRight(base, "/")
+
+	resp, err := http.Get(base + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("healthz status=%d", resp.StatusCode)
+	}
+
+	adminToken := testutil.Login(t, base, "admin", "admin")
+	resp, out := testutil.DoJSON(t, http.MethodGet, base+"/api/v1/user", adminToken, nil)
+	if resp.StatusCode != http.StatusOK || out["username"] != "admin" {
+		t.Fatalf("admin user check: %d %v", resp.StatusCode, out)
+	}
 }

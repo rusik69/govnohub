@@ -116,6 +116,31 @@ func TestRepoMetadata(t *testing.T) {
 	resp, _ = testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+repo+"/fork", token, nil)
 	requireStatus(t, resp, http.StatusOK, "fork repo")
 
-	resp, _ = testutil.DoJSON(t, http.MethodGet, base+"/api/v1/search?q=app", token, nil)
+	resp, hits := doJSONArray(t, http.MethodGet, base+"/api/v1/search?q=app", token, nil)
 	requireStatus(t, resp, http.StatusOK, "search")
+	assertSearchHit(t, hits, repo)
+}
+
+func TestListProtectedBranches(t *testing.T) {
+	env := testenv.New(t)
+	defer env.Cleanup()
+	base := env.URL
+	owner := "prot" + uniqueSuffix()[len(uniqueSuffix())-6:]
+	token := testutil.RegisterAndLogin(t, base, owner)
+	createRepo(t, base, token, owner, "app")
+	repo := owner + "/app"
+
+	resp, _ := testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+repo+"/protected-branches", token, map[string]any{
+		"branch": "main", "required_checks": []string{}, "require_reviews": 1,
+	})
+	requireStatus(t, resp, http.StatusOK, "protect branch")
+
+	resp, rules := doJSONArray(t, http.MethodGet, base+"/api/v1/repos/"+repo+"/protected-branches", token, nil)
+	requireStatus(t, resp, http.StatusOK, "list protected branches")
+	if len(rules) == 0 {
+		t.Fatal("expected protected branch rule")
+	}
+	if branch, _ := rules[0]["branch"].(string); branch != "main" {
+		t.Fatalf("unexpected branch: %v", branch)
+	}
 }

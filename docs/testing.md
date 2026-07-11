@@ -61,15 +61,23 @@ Uses `testenv.New` — httptest API server + testcontainers PostgreSQL.
 |------|-------|
 | `api_flow_test.go` | `TestFullUserJourney` — smoke: repo, issue, PR, workflow, release, star, collaborator, protection |
 | `auth_flow_test.go` | PAT create/list/revoke; SSH key create/list/delete |
+| `admin_flow_test.go` | Admin user CRUD/delete, non-admin/PAT rejection, audit log |
+| `health_test.go` | `GET /healthz`, `GET /api/v1/user` |
 | `issue_flow_test.go` | Issue comments, labels, milestones, patch, close |
+| `issue_read_test.go` | GET issue, list comments/labels, remove label, patch title |
 | `pr_flow_test.go` | PR review + merge with branch protection; PR comments and diff |
+| `pr_read_test.go` | List/get PRs, list reviews, squash merge |
 | `actions_flow_test.go` | Workflow upsert, trigger run, list runs, fetch logs |
 | `release_package_test.go` | Release asset upload/download; package publish/download |
-| `repo_extra_test.go` | Wiki CRUD, webhooks, repo contents/commits, star/unstar, watch/unwatch, branches, fork, search |
+| `releases_list_test.go` | `GET .../releases` |
+| `repo_extra_test.go` | Wiki, webhooks, star/watch/branches/fork/search, protected-branches list |
 | `org_collab_test.go` | Org members/teams/repos; collaborator add/remove |
 | `notifications_test.go` | Issue comment triggers notification; mark read |
+| `notification_types_test.go` | PR review and issue close notifications |
+| `ai_review_test.go` | AI review config disabled; create returns 503 |
+| `web_flow_test.go` | Web login/logout, dashboard repo create, star/watch, issue create, notifications, branches |
 
-Shared helpers in `helpers.go` (`e2e || deploy` build tag).
+Shared helpers in `helpers.go` (`e2e || deploy` build tag): `adminToken`, `webClient`, `webCSRF`, `webPostForm`, `assertSearchHit`, etc.
 
 ### `-tags=deploy` (`make test-deploy-e2e`)
 
@@ -78,8 +86,8 @@ Uses `testenv.NewLocalDeploy` — real api-server + git-server processes.
 | File | Tests |
 |------|-------|
 | `deploy_flow_test.go` | Local deploy health; full journey smoke (git push, PAT, actions, packages, orgs, search) |
-| `git_flow_test.go` | Git HTTP/SSH clone, push, pull, fetch, feature branch, PAT auth, unauthorized |
-| `deploy_admin_test.go` | Admin audit log |
+| `git_flow_test.go` | Git HTTP/SSH clone, push, pull, fetch, feature branch, PAT auth, wrong credentials |
+| `deploy_admin_test.go` | Admin audit log, admin user list |
 
 Optional cluster test: set `GOVNOHUB_DEPLOY_E2E=1` and `GOVNOHUB_BASE_URL` for `TestDeployedClusterFullJourney`.
 
@@ -89,7 +97,7 @@ Optional cluster test: set `GOVNOHUB_DEPLOY_E2E=1` and `GOVNOHUB_BASE_URL` for `
 
 - Verifies kubectl connectivity
 - Validates `helm template` renders
-- Optional deployed pod check with `GOVNOHUB_K8S_E2E=1`
+- Optional deployed pod check with `GOVNOHUB_K8S_E2E=1` (hits `/healthz` and admin `GET /api/v1/user`)
 
 ## CI
 

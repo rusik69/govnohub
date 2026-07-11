@@ -19,3 +19,16 @@ func TestAdminAuditLog(t *testing.T) {
 	resp, _ := doJSONArray(t, http.MethodGet, base+"/api/v1/admin/audit", adminToken, nil)
 	requireStatus(t, resp, http.StatusOK, "admin audit log")
 }
+
+func TestDeployAdminUserList(t *testing.T) {
+	env := testenv.NewLocalDeploy(t)
+	defer env.Cleanup()
+	base := env.URL
+
+	adminToken := testutil.Login(t, base, "admin", "admin")
+	resp, users := doJSONArray(t, http.MethodGet, base+"/api/v1/admin/users", adminToken, nil)
+	requireStatus(t, resp, http.StatusOK, "admin list users")
+	if len(users) == 0 {
+		t.Fatal("expected users")
+	}
+}
