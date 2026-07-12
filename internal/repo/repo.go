@@ -145,7 +145,10 @@ func (s *Service) CanAccess(ctx context.Context, repoID, userID uuid.UUID, minPe
 	if err == nil {
 		return permRank(perm) >= permRank(minPerm), nil
 	}
-	return !isPrivate, nil
+	if minPerm == "read" {
+		return !isPrivate, nil
+	}
+	return false, nil
 }
 
 func (s *Service) UpdateBranchHead(ctx context.Context, repoID uuid.UUID, branch, sha string) error {
@@ -157,7 +160,16 @@ func (s *Service) UpdateBranchHead(ctx context.Context, repoID uuid.UUID, branch
 
 func (s *Service) Fork(ctx context.Context, source *Repository, userID uuid.UUID, username string) (*Repository, error) {
 	desc := "Forked from " + source.FullName
-	return s.Create(ctx, "user", userID, username, source.Name+"-fork", desc, source.IsPrivate)
+	r, err := s.Create(ctx, "user", userID, username, source.Name+"-fork", desc, source.IsPrivate)
+	if err != nil {
+		return nil, err
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE repos SET is_fork=true, fork_parent_id=$1 WHERE id=$2`, source.ID, r.ID)
+	if err != nil {
+		return nil, err
+	}
+	r.IsFork = true
+	return r, nil
 }
 
 func (s *Service) Star(ctx context.Context, repoID, userID uuid.UUID) error {
