@@ -109,6 +109,208 @@ func TestSeedMainBranchSetsHEAD(t *testing.T) {
 	}
 }
 
+func TestExists(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	// Non-existent repo
+	if store.Exists("nobody", "nope") {
+		t.Fatal("expected false for non-existent repo")
+	}
+
+	// After Init
+	if err := store.Init(ctx, "alice", "myrepo"); err != nil {
+		t.Fatal(err)
+	}
+	if !store.Exists("alice", "myrepo") {
+		t.Fatal("expected true after Init")
+	}
+
+	// Different owner/name
+	if store.Exists("alice", "other") {
+		t.Fatal("expected false for different repo name")
+	}
+	if store.Exists("bob", "myrepo") {
+		t.Fatal("expected false for different owner")
+	}
+}
+
+func TestGetTree(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := store.Init(ctx, "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SeedMainBranch("alice", "demo", "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get tree at root
+	entries, err := store.GetTree("alice", "demo", "main", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected tree entries")
+	}
+	found := false
+	for _, e := range entries {
+		if e.Path == "README.md" && e.Type == "file" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected README.md in tree entries")
+	}
+}
+
+func TestGetBlob(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := store.Init(ctx, "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SeedMainBranch("alice", "demo", "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := store.GetBlob("alice", "demo", "main", "README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(content) == 0 {
+		t.Fatal("expected non-empty blob content")
+	}
+	if !strings.Contains(string(content), "demo") {
+		t.Fatalf("expected blob to contain repo name, got: %s", string(content))
+	}
+
+	// Non-existent file should error
+	_, err = store.GetBlob("alice", "demo", "main", "NONEXISTENT.md")
+	if err == nil {
+		t.Fatal("expected error for non-existent file")
+	}
+}
+
+func TestCreateBranch(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := store.Init(ctx, "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	sha, err := store.SeedMainBranch("alice", "demo", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create branch from main
+	if err := store.CreateBranch("alice", "demo", "feature-1", "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	path := store.RepoPath("alice", "demo")
+	for _, b := range []string{"main", "feature-1"} {
+		out, err := exec.Command("git", "--git-dir", path, "rev-parse", "refs/heads/"+b).Output()
+		if err != nil {
+			t.Fatalf("rev-parse %s: %v", b, err)
+		}
+		if strings.TrimSpace(string(out)) != sha {
+			t.Fatalf("%s SHA mismatch: got %s, want %s", b, strings.TrimSpace(string(out)), sha)
+		}
+	}
+}
+
+func TestDiff(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := store.Init(ctx, "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	mainSHA, err := store.SeedMainBranch("alice", "demo", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a second commit on a feature branch
+	path := store.RepoPath("alice", "demo")
+	featureSHA := bareCommitOn(t, path, mainSHA, "feature", "second commit")
+
+	diff, err := store.Diff("alice", "demo", mainSHA, featureSHA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff == "" {
+		t.Fatal("expected non-empty diff")
+	}
+}
+
+func TestGetCommitsLimited(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := store.Init(ctx, "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.SeedMainBranch("alice", "demo", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get commits with limit
+	commits, err := store.GetCommits("alice", "demo", "main", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) != 1 {
+		t.Fatalf("expected 1 commit, got %d", len(commits))
+	}
+	if commits[0].Message != "Initial commit" {
+		t.Fatalf("expected 'Initial commit', got '%s'", commits[0].Message)
+	}
+}
+
+func TestGetCommitsEmptyRepo(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := store.Init(ctx, "alice", "empty"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty bare repo — GetCommits should fail
+	_, err = store.GetCommits("alice", "empty", "main", 10)
+	if err == nil {
+		t.Fatal("expected error for empty repo with no refs/heads/main")
+	}
+}
+
 func TestMergeUpdatesBareRef(t *testing.T) {
 	tmp := t.TempDir()
 	store, err := NewStore(tmp)
