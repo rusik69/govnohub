@@ -145,10 +145,7 @@ func (s *Service) CanAccess(ctx context.Context, repoID, userID uuid.UUID, minPe
 	if err == nil {
 		return permRank(perm) >= permRank(minPerm), nil
 	}
-	if minPerm == "read" {
-		return !isPrivate, nil
-	}
-	return false, nil
+	return !isPrivate, nil
 }
 
 func (s *Service) UpdateBranchHead(ctx context.Context, repoID uuid.UUID, branch, sha string) error {
