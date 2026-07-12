@@ -85,7 +85,7 @@ func (s *Service) ListForUser(ctx context.Context, userID uuid.UUID) ([]Reposito
 	rows, err := s.pool.Query(ctx, `
 		SELECT r.id, r.owner_type, r.owner_id, r.name, COALESCE(r.description,''),
 		       r.default_branch, r.is_private, r.is_fork, r.star_count, r.created_at, r.updated_at,
-		       COALESCE(u.username, o.name) AS owner_name
+		       COALESCE(u.username, o.name, '') AS owner_name
 		FROM repos r
 		LEFT JOIN users u ON r.owner_type='user' AND r.owner_id=u.id
 		LEFT JOIN orgs o ON r.owner_type='org' AND r.owner_id=o.id

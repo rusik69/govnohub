@@ -20,6 +20,10 @@ func TestRepoCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	other, err := authSvc.Register(ctx, "otheruser", "other@test.local", "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	t.Run("create basic repo", func(t *testing.T) {
 		r, err := repoSvc.Create(ctx, "user", u.ID, u.Username, "my-repo", "a test repo", false)
@@ -58,6 +62,40 @@ func TestRepoCreate(t *testing.T) {
 		_, err := repoSvc.Create(ctx, "user", u.ID, u.Username, "my-repo", "dup", false)
 		if err == nil {
 			t.Fatal("expected error for duplicate name")
+		}
+	})
+
+	t.Run("same name different owner succeeds", func(t *testing.T) {
+		r, err := repoSvc.Create(ctx, "user", other.ID, other.Username, "my-repo", "same name, other owner", false)
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if r.FullName != "otheruser/my-repo" {
+			t.Errorf("FullName = %q, want %q", r.FullName, "otheruser/my-repo")
+		}
+	})
+
+	t.Run("create with whitespace-only description", func(t *testing.T) {
+		r, err := repoSvc.Create(ctx, "user", u.ID, u.Username, "whitespace-desc", "   	  ", false)
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if r.Description != "   	  " {
+			t.Errorf("Description = %q, want %q", r.Description, "   	  ")
+		}
+	})
+
+	t.Run("create with long description", func(t *testing.T) {
+		longDesc := ""
+		for i := 0; i < 100; i++ {
+			longDesc += "a long description for testing purposes "
+		}
+		r, err := repoSvc.Create(ctx, "user", u.ID, u.Username, "long-desc", longDesc, false)
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if r.Name != "long-desc" {
+			t.Errorf("Name = %q, want %q", r.Name, "long-desc")
 		}
 	})
 }
@@ -518,4 +556,87 @@ func TestRepoUpdateBranchHead(t *testing.T) {
 			t.Errorf("head_sha = %q, want %q", sha, "updatedsha")
 		}
 	})
+}
+
+func TestRepoDeletedOwner(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	authSvc := auth.NewService(pg.Pool, "secret")
+	repoSvc := NewService(pg.Pool)
+
+	// Bootstrap admin for user deletion
+	if err := authSvc.BootstrapAdmin(ctx, "admin", "admin@test.local", "adminpass"); err != nil {
+		t.Fatal(err)
+	}
+	adminID := mustLoginUserID(t, authSvc, "admin")
+
+	owner, err := authSvc.Register(ctx, "deleteowner", "delete@test.local", "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create repos before deleting the user
+	_, err = repoSvc.Create(ctx, "user", owner.ID, owner.Username, "deleted-repo", "will be orphaned", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete the user
+	if err := authSvc.DeleteUser(ctx, adminID, owner.ID); err != nil {
+		t.Fatalf("DeleteUser: %v", err)
+	}
+
+	t.Run("GetByFullName returns ErrNotFound for deleted owner", func(t *testing.T) {
+		_, err := repoSvc.GetByFullName(ctx, "deleteowner", "deleted-repo")
+		if err != ErrNotFound {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("ListForUser returns repos (uses owner_id directly)", func(t *testing.T) {
+		repos, err := repoSvc.ListForUser(ctx, owner.ID)
+		if err != nil {
+			t.Fatalf("ListForUser: %v", err)
+		}
+		if len(repos) == 0 {
+			t.Error("expected at least 1 repo for deleted owner's ID")
+		}
+		found := false
+		for _, r := range repos {
+			if r.Name == "deleted-repo" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected to find 'deleted-repo' in list")
+		}
+	})
+
+	t.Run("CanAccess still works for deleted owner matching ownerID", func(t *testing.T) {
+		var repoID uuid.UUID
+		err := pg.Pool.QueryRow(ctx, `SELECT id FROM repos WHERE name='deleted-repo'`).Scan(&repoID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ok, err := repoSvc.CanAccess(ctx, repoID, owner.ID, "read")
+		if err != nil {
+			t.Fatalf("CanAccess: %v", err)
+		}
+		if !ok {
+			t.Error("expected CanAccess to return true for matching ownerID")
+		}
+	})
+}
+
+// mustLoginUserID logs in and returns the user ID; helper for tests.
+func mustLoginUserID(t *testing.T, svc *auth.Service, username string) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	user, err := svc.GetUserByUsername(ctx, username)
+	if err != nil {
+		t.Fatalf("GetUserByUsername(%q): %v", username, err)
+	}
+	return user.ID
 }
