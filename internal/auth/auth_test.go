@@ -381,12 +381,15 @@ func TestValidatePATWithExpiredToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Without ghp_ prefix should fail
-	t.Run("without prefix", func(t *testing.T) {
+	// Without ghp_ prefix should still work (code strips it internally)
+	t.Run("without prefix still works", func(t *testing.T) {
 		withoutPrefix := pat[4:] // strip "ghp_"
-		_, _, err := svc.ValidatePATWithScopes(ctx, withoutPrefix)
-		if err != ErrUnauthorized {
-			t.Fatalf("expected ErrUnauthorized without prefix, got %v", err)
+		_, scopes, err := svc.ValidatePATWithScopes(ctx, withoutPrefix)
+		if err != nil {
+			t.Fatalf("expected valid without prefix, got: %v", err)
+		}
+		if !HasScope(scopes, ScopeRepo) {
+			t.Fatal("expected repo scope")
 		}
 	})
 
