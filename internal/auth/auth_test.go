@@ -108,6 +108,310 @@ func TestBootstrapAdminAndRoles(t *testing.T) {
 	}
 }
 
+func TestDeleteUser(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	svc := NewService(pg.Pool, "test-secret")
+
+	// Bootstrap admin and create a regular user
+	if err := svc.BootstrapAdmin(ctx, "admin", "admin@test.local", "adminpass"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.Register(ctx, "reguser", "reg@test.local", "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminID := mustLoginUserID(t, svc, "admin")
+
+	t.Run("delete regular user", func(t *testing.T) {
+		userToDelete, err := svc.Register(ctx, "todelete", "delete@test.local", "pass")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.DeleteUser(ctx, adminID, userToDelete.ID); err != nil {
+			t.Fatalf("DeleteUser: %v", err)
+		}
+		// Verify user is gone via GetUser
+		_, err = svc.GetUser(ctx, userToDelete.ID)
+		if err == nil {
+			t.Fatal("expected error after deletion")
+		}
+	})
+
+	t.Run("cannot delete self", func(t *testing.T) {
+		err := svc.DeleteUser(ctx, adminID, adminID)
+		if err != ErrForbidden {
+			t.Fatalf("expected ErrForbidden, got %v", err)
+		}
+	})
+
+	t.Run("cannot delete last admin", func(t *testing.T) {
+		err := svc.DeleteUser(ctx, adminID, adminID)
+		if err != ErrForbidden {
+			t.Fatalf("expected ErrForbidden, got %v", err)
+		}
+	})
+
+	t.Run("cannot delete non-existent user", func(t *testing.T) {
+		err := svc.DeleteUser(ctx, adminID, uuid.New())
+		if err != ErrUnauthorized {
+			t.Fatalf("expected ErrUnauthorized, got %v", err)
+		}
+	})
+}
+
+func TestRegisterDuplicate(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	svc := NewService(pg.Pool, "test-secret")
+
+	_, err := svc.Register(ctx, "dupuser", "dup@test.local", "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.Register(ctx, "dupuser", "other@test.local", "pass2")
+	if err != ErrUserExists {
+		t.Fatalf("expected ErrUserExists, got %v", err)
+	}
+	// Same email should also be rejected
+	_, err = svc.Register(ctx, "other", "dup@test.local", "pass3")
+	if err != ErrUserExists {
+		t.Fatalf("expected ErrUserExists for duplicate email, got %v", err)
+	}
+}
+
+func TestValidateTokenInvalid(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	svc := NewService(pg.Pool, "test-secret")
+
+	t.Run("empty token", func(t *testing.T) {
+		_, _, err := svc.ValidateToken("")
+		if err != ErrUnauthorized {
+			t.Fatalf("expected ErrUnauthorized, got %v", err)
+		}
+	})
+
+	t.Run("garbage token", func(t *testing.T) {
+		_, _, err := svc.ValidateToken("not-a-valid-jwt-token")
+		if err != ErrUnauthorized {
+			t.Fatalf("expected ErrUnauthorized, got %v", err)
+		}
+	})
+
+	t.Run("expired-like malformed token", func(t *testing.T) {
+		_, _, err := svc.ValidateToken("eyJhbGciOiJIUzI1NiJ9.not.valid")
+		if err != ErrUnauthorized {
+			t.Fatalf("expected ErrUnauthorized, got %v", err)
+		}
+	})
+
+	t.Run("token signed with different key", func(t *testing.T) {
+		// This is a JWT with alg=none, which should be rejected
+		_, _, err := svc.ValidateToken("eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIn0.")
+		if err != ErrUnauthorized {
+			t.Fatalf("expected ErrUnauthorized, got %v", err)
+		}
+	})
+}
+
+func TestRevokePAT(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	svc := NewService(pg.Pool, "test-secret")
+
+	u, err := svc.Register(ctx, "patowner", "pat@test.local", "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pat, err := svc.CreatePAT(ctx, u.ID, "short-lived", []string{"repo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Validate it works before revoke
+	_, err = svc.ValidatePAT(ctx, pat)
+	if err != nil {
+		t.Fatalf("PAT should be valid before revoke: %v", err)
+	}
+
+	tokens, err := svc.ListPATs(ctx, u.ID)
+	if err != nil || len(tokens) != 1 {
+		t.Fatalf("expected 1 PAT, got %d", len(tokens))
+	}
+
+	// Revoke
+	if err := svc.RevokePAT(ctx, u.ID, tokens[0].ID); err != nil {
+		t.Fatalf("RevokePAT: %v", err)
+	}
+
+	// Should no longer validate
+	_, err = svc.ValidatePAT(ctx, pat)
+	if err != ErrUnauthorized {
+		t.Fatalf("expected ErrUnauthorized after revoke, got %v", err)
+	}
+
+	// List should be empty
+	tokens, err = svc.ListPATs(ctx, u.ID)
+	if err != nil || len(tokens) != 0 {
+		t.Fatalf("expected 0 PATs after revoke, got %d", len(tokens))
+	}
+}
+
+func TestHasScopeEdgeCases(t *testing.T) {
+	t.Run("nil scopes grants everything", func(t *testing.T) {
+		if !HasScope(nil, ScopeRepo) {
+			t.Fatal("nil scopes should grant access")
+		}
+		if !HasScope(nil, ScopeRepoWrite) {
+			t.Fatal("nil scopes should grant access")
+		}
+	})
+
+	t.Run("empty scopes grants everything", func(t *testing.T) {
+		if !HasScope([]string{}, ScopeRepo) {
+			t.Fatal("empty scopes should grant access")
+		}
+	})
+
+	t.Run("repo scope does not grant repo:write", func(t *testing.T) {
+		if HasScope([]string{ScopeRepo}, ScopeRepoWrite) {
+			t.Fatal("repo scope should not grant repo:write")
+		}
+	})
+
+	t.Run("repo:write grants repo", func(t *testing.T) {
+		if !HasScope([]string{ScopeRepoWrite}, ScopeRepo) {
+			t.Fatal("repo:write should imply repo")
+		}
+	})
+
+	t.Run("workflow grants repo access", func(t *testing.T) {
+		if !HasScope([]string{ScopeWorkflow}, ScopeRepo) {
+			t.Fatal("workflow scope should imply repo")
+		}
+	})
+
+	t.Run("unrelated scope does not match", func(t *testing.T) {
+		if HasScope([]string{ScopeReadUser}, ScopeRepo) {
+			t.Fatal("read:user should not grant repo")
+		}
+	})
+
+	t.Run("multiple scopes", func(t *testing.T) {
+		if !HasScope([]string{ScopeReadUser, ScopeRepo}, ScopeRepo) {
+			t.Fatal("should have repo scope")
+		}
+		if !HasScope([]string{ScopeReadUser, ScopeWorkflow}, ScopeRepo) {
+			t.Fatal("workflow should imply repo")
+		}
+		if HasScope([]string{ScopeReadUser}, ScopeWorkflow) {
+			t.Fatal("read:user should not grant workflow")
+		}
+	})
+}
+
+func TestGetUser(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	svc := NewService(pg.Pool, "test-secret")
+
+	u, err := svc.Register(ctx, "getuser", "get@test.local", "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("by id", func(t *testing.T) {
+		got, err := svc.GetUser(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("GetUser: %v", err)
+		}
+		if got.Username != "getuser" {
+			t.Errorf("username = %q, want %q", got.Username, "getuser")
+		}
+		if got.Email != "get@test.local" {
+			t.Errorf("email = %q, want %q", got.Email, "get@test.local")
+		}
+	})
+
+	t.Run("by username", func(t *testing.T) {
+		got, err := svc.GetUserByUsername(ctx, "getuser")
+		if err != nil {
+			t.Fatalf("GetUserByUsername: %v", err)
+		}
+		if got.ID != u.ID {
+			t.Errorf("id = %v, want %v", got.ID, u.ID)
+		}
+	})
+
+	t.Run("non-existent id", func(t *testing.T) {
+		_, err := svc.GetUser(ctx, uuid.New())
+		if err == nil {
+			t.Fatal("expected error for non-existent user")
+		}
+	})
+
+	t.Run("non-existent username", func(t *testing.T) {
+		_, err := svc.GetUserByUsername(ctx, "nobody")
+		if err != ErrUnauthorized {
+			t.Fatalf("expected ErrUnauthorized, got %v", err)
+		}
+	})
+}
+
+func TestValidatePATWithExpiredToken(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	svc := NewService(pg.Pool, "test-secret")
+
+	u, err := svc.Register(ctx, "patuser", "pat@test.local", "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a PAT
+	pat, err := svc.CreatePAT(ctx, u.ID, "test", []string{"repo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Without ghp_ prefix should fail
+	t.Run("without prefix", func(t *testing.T) {
+		withoutPrefix := pat[4:] // strip "ghp_"
+		_, _, err := svc.ValidatePATWithScopes(ctx, withoutPrefix)
+		if err != ErrUnauthorized {
+			t.Fatalf("expected ErrUnauthorized without prefix, got %v", err)
+		}
+	})
+
+	// Validate with correct prefix
+	t.Run("with prefix", func(t *testing.T) {
+		_, scopes, err := svc.ValidatePATWithScopes(ctx, pat)
+		if err != nil {
+			t.Fatalf("ValidatePATWithScopes: %v", err)
+		}
+		if !HasScope(scopes, ScopeRepo) {
+			t.Fatal("expected repo scope")
+		}
+	})
+
+	// Revoke and validate fails
+	t.Run("after revoke", func(t *testing.T) {
+		pats, _ := svc.ListPATs(ctx, u.ID)
+		svc.RevokePAT(ctx, u.ID, pats[0].ID)
+		_, _, err := svc.ValidatePATWithScopes(ctx, pat)
+		if err != ErrUnauthorized {
+			t.Fatalf("expected ErrUnauthorized after revoke, got %v", err)
+		}
+	})
+}
+
 func mustLoginUserID(t *testing.T, svc *Service, username string) uuid.UUID {
 	t.Helper()
 	_, u, err := svc.Login(context.Background(), username, "adminpass")
