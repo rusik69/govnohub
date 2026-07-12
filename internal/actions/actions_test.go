@@ -114,6 +114,283 @@ func TestWriteJobScript(t *testing.T) {
 	}
 }
 
+// ---- Additional tests for Item 4 ----
+
+// TestMatchesTrigger_Array tests the on: [push, pull_request] trigger format
+func TestMatchesTrigger_Array(t *testing.T) {
+	content := `
+name: CI
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: linux
+    steps:
+      - run: echo hello
+`
+	wf, err := ParseWorkflow(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		event TriggerEvent
+		want  bool
+	}{
+		{TriggerEvent{Type: "push"}, true},
+		{TriggerEvent{Type: "pull_request"}, true},
+		{TriggerEvent{Type: "release"}, false},
+		{TriggerEvent{Type: "workflow_dispatch"}, false},
+	}
+	for _, tc := range cases {
+		got := wf.MatchesTrigger(tc.event)
+		if got != tc.want {
+			t.Errorf("MatchesTrigger(%q) = %v, want %v", tc.event.Type, got, tc.want)
+		}
+	}
+}
+
+// TestMatchesTrigger_MapNoConfig tests map trigger with nil/null config
+func TestMatchesTrigger_MapNoConfig(t *testing.T) {
+	content := `
+name: CI
+on:
+  push:
+jobs:
+  build:
+    steps: [{run: echo}]
+`
+	wf, err := ParseWorkflow(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !wf.MatchesTrigger(TriggerEvent{Type: "push", Branch: "any"}) {
+		t.Fatal("should match push with null config")
+	}
+	if wf.MatchesTrigger(TriggerEvent{Type: "pull_request"}) {
+		t.Fatal("should not match pull_request")
+	}
+}
+
+// TestMatchesTrigger_NonMatchingEvent tests that events not in the workflow return false
+func TestMatchesTrigger_NonMatchingEvent(t *testing.T) {
+	content := `
+name: CI
+on: push
+jobs:
+  build:
+    steps: [{run: echo}]
+`
+	wf, _ := ParseWorkflow(content)
+	if wf.MatchesTrigger(TriggerEvent{Type: "pull_request"}) {
+		t.Fatal("should not match pull_request when on: push")
+	}
+}
+
+// TestJobOrder_DAG tests complex dependency graphs
+func TestJobOrder_DAG(t *testing.T) {
+	content := `
+name: DAG Pipeline
+on: push
+jobs:
+  build:
+    steps: [{run: echo build}]
+  lint:
+    steps: [{run: echo lint}]
+  test:
+    needs: [build, lint]
+    steps: [{run: echo test}]
+  deploy:
+    needs: test
+    steps: [{run: echo deploy}]
+`
+	wf, err := ParseWorkflow(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := wf.JobOrder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(order) != 4 {
+		t.Fatalf("expected 4 jobs, got %v", order)
+	}
+	// build and lint must come before test; test must come before deploy
+	buildIdx := indexOfStr(order, "build")
+	lintIdx := indexOfStr(order, "lint")
+	testIdx := indexOfStr(order, "test")
+	deployIdx := indexOfStr(order, "deploy")
+
+	if buildIdx < 0 || lintIdx < 0 || testIdx < 0 || deployIdx < 0 {
+		t.Fatal("missing job in order")
+	}
+	if buildIdx > testIdx || lintIdx > testIdx {
+		t.Fatal("build/lint must come before test")
+	}
+	if testIdx > deployIdx {
+		t.Fatal("test must come before deploy")
+	}
+}
+
+// TestJobOrder_UnknownDep tests error handling for missing dependencies
+func TestJobOrder_UnknownDep(t *testing.T) {
+	content := `
+name: Broken
+on: push
+jobs:
+  test:
+    needs: missing_job
+    steps: [{run: echo}]
+`
+	wf, err := ParseWorkflow(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = wf.JobOrder()
+	if err == nil {
+		t.Fatal("expected error for unknown dependency")
+	}
+}
+
+// TestNormalizeNeeds tests all variants of the needs field
+func TestNormalizeNeeds(t *testing.T) {
+	tests := []struct {
+		name  string
+		input interface{}
+		want  []string
+	}{
+		{"string", "build", []string{"build"}},
+		{"array", []interface{}{"build", "lint"}, []string{"build", "lint"}},
+		{"nil", nil, nil},
+		{"empty_array", []interface{}{}, []string{}},
+		{"mixed_array", []interface{}{"build", 42, "lint"}, []string{"build", "lint"}},
+		{"single_element_array", []interface{}{"build"}, []string{"build"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeNeeds(tt.input)
+			if len(got) != len(tt.want) {
+				t.Fatalf("NormalizeNeeds(%v) = %v (len=%d), want %v (len=%d)", tt.input, got, len(got), tt.want, len(tt.want))
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("NormalizeNeeds(%v) = %v, want %v", tt.input, got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestEvalExpression_EdgeCases tests expression evaluation edge cases
+func TestEvalExpression_EdgeCases(t *testing.T) {
+	ctx := map[string]string{
+		"GITHUB_SHA":      "abc123",
+		"GITHUB_REF_NAME": "main",
+		"MY_VAR":          "hello",
+	}
+
+	tests := []struct {
+		name string
+		expr string
+		ctx  map[string]string
+		want string
+	}{
+		{"github_ref_name", "${{ github.ref_name }}", ctx, "main"},
+		{"non_expression", "echo hello", ctx, "echo hello"},
+		{"empty_expression", "${{  }}", ctx, ""},
+		{"missing_key", "${{ github.nonexistent }}", ctx, ""},
+		{"custom_context", "${{ MY_VAR }}", ctx, "hello"},
+		{"nested_with_dot", "${{ github.sha }}", ctx, "abc123"},
+		{"empty_string", "", ctx, ""},
+		{"only_braces", "${}", ctx, "${}"},
+		{"malformed_prefix", "${{github.sha}}", ctx, "abc123"},
+		{"nil_context", "${{ github.sha }}", nil, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := EvalExpression(tt.expr, tt.ctx)
+			if got != tt.want {
+				t.Errorf("EvalExpression(%q, ctx) = %q, want %q", tt.expr, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestBuildStepScript tests the step script builder
+func TestBuildStepScript(t *testing.T) {
+	ctx := map[string]string{"GITHUB_SHA": "abc123"}
+
+	tests := []struct {
+		name string
+		step Step
+		want string // substring to check
+	}{
+		{"run_command", Step{Run: "echo hi"}, "echo hi"},
+		{"uses_fallback", Step{Uses: "actions/checkout@v4"}, "Checking out"},
+		{"empty_step", Step{}, "true"},
+		{"expression_in_run", Step{Run: "${{ github.sha }}"}, "abc123"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BuildStepScript(tt.step, ctx)
+			if !contains(got, tt.want) {
+				t.Errorf("BuildStepScript(%+v) = %q, want containing %q", tt.step, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestWriteJobScript_EdgeCases tests the full script writer
+func TestWriteJobScript_EdgeCases(t *testing.T) {
+	t.Run("empty_steps", func(t *testing.T) {
+		script := WriteJobScript([]Step{}, ghCtx())
+		if !contains(script, "#!/bin/sh") {
+			t.Fatal("script should have shebang")
+		}
+	})
+
+	t.Run("steps_with_env", func(t *testing.T) {
+		steps := []Step{
+			{
+				Name: "build",
+				Run:  "make build",
+				Env:  map[string]string{"GOOS": "linux", "GOARCH": "amd64"},
+			},
+		}
+		script := WriteJobScript(steps, ghCtx())
+		if !contains(script, "export GOOS") {
+			t.Fatalf("missing env var in script: %s", script)
+		}
+		if !contains(script, "make build") {
+			t.Fatalf("missing command in script: %s", script)
+		}
+		if !contains(script, "::group::build") {
+			t.Fatalf("missing group markers in script: %s", script)
+		}
+	})
+
+	t.Run("multi_step", func(t *testing.T) {
+		steps := []Step{
+			{Run: "echo step1"},
+			{Run: "echo step2"},
+			{Run: "echo step3"},
+		}
+		script := WriteJobScript(steps, nil)
+		if !contains(script, "echo step1") || !contains(script, "echo step3") {
+			t.Fatalf("missing steps in script: %s", script)
+		}
+	})
+
+	t.Run("step_with_empty_name", func(t *testing.T) {
+		steps := []Step{
+			{Run: "echo test"},
+		}
+		script := WriteJobScript(steps, nil)
+		if !contains(script, "::group::step") {
+			t.Fatalf("missing default step name in script: %s", script)
+		}
+	})
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || indexOf(s, sub) >= 0)
 }
@@ -121,6 +398,16 @@ func contains(s, sub string) bool {
 func indexOf(s, sub string) int {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
+}
+
+// indexOfStr returns the index of target in a string slice, or -1
+func indexOfStr(slice []string, target string) int {
+	for i, s := range slice {
+		if s == target {
 			return i
 		}
 	}
