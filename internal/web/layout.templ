@@ -76,6 +76,32 @@ templ Layout(data LayoutData) {
 					const token = document.querySelector('meta[name="csrf-token"]');
 					if (token) evt.detail.headers['X-CSRF-Token'] = token.content;
 				});
+				function switchCloneTab(btn, tab) {
+					const menu = btn.closest('.gh-clone-menu');
+					if (!menu) return;
+					menu.querySelectorAll('[data-clone-tab]').forEach(function(b) {
+						const active = b === btn;
+						b.classList.toggle('active', active);
+						b.setAttribute('aria-selected', active ? 'true' : 'false');
+					});
+					const input = menu.querySelector('.gh-clone-url');
+					const hint = menu.querySelector('.gh-clone-hint');
+					if (input) input.value = tab === 'ssh' ? input.dataset.ssh : input.dataset.https;
+					if (hint) hint.textContent = tab === 'ssh' ? hint.dataset.sshHint : hint.dataset.httpsHint;
+				}
+				function copyCloneUrl(btn) {
+					const input = btn.closest('.gh-clone-url-row').querySelector('.gh-clone-url');
+					if (!input) return;
+					navigator.clipboard.writeText(input.value).then(function() {
+						btn.setAttribute('aria-label', 'Copied');
+						setTimeout(function() { btn.setAttribute('aria-label', 'Copy'); }, 2000);
+					});
+				}
+				document.addEventListener('click', function(e) {
+					document.querySelectorAll('.gh-clone-menu[open]').forEach(function(menu) {
+						if (!menu.contains(e.target)) menu.removeAttribute('open');
+					});
+				});
 			</script>
 		</head>
 		<body class="min-h-screen">

@@ -41,6 +41,8 @@ func (h *Handler) repoPageCtx(r *http.Request, repository *repo.Repository, tab 
 	header := RepoHeaderData{
 		Repository: repository,
 		CSRF:       csrfFrom(r.Context()),
+		CloneHTTPS: cloneHTTPSURL(repository.OwnerName, repository.Name),
+		CloneSSH:   cloneSSHURL(repository.OwnerName, repository.Name),
 	}
 	if su := userFrom(r.Context()); su != nil {
 		header.Starred, _ = h.deps.Repos.IsStarred(r.Context(), repository.ID, su.ID)

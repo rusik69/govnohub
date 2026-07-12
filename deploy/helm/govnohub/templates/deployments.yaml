@@ -73,6 +73,10 @@ spec:
             - name: OPENCODE_API_KEY
               value: {{ $root.Values.aiReview.apiKey | quote }}
             {{- end }}
+            - name: GIT_HTTP_URL
+              value: "http://{{ $root.Values.ingress.gitHost }}"
+            - name: GIT_SSH_HOST
+              value: "git@{{ $root.Values.ingress.gitHost }}:{{ $root.Values.services.gitServer.sshPort }}"
             {{- end }}
           ports:
             - containerPort: 8080

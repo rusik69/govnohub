@@ -25,6 +25,8 @@ type RepoHeaderData struct {
 	CSRF       string
 	Starred    bool
 	Watched    bool
+	CloneHTTPS string
+	CloneSSH   string
 }
 
 type RepoBranchOption struct {
@@ -131,7 +133,8 @@ templ RepoHeader(data RepoHeaderData) {
 					}
 				</div>
 			</div>
-			<div class="gh-btn-group">
+			<div class="gh-repo-actions">
+				<div class="gh-btn-group">
 				if data.Starred {
 					<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/unstar") }>
 						@CSRFInput(data.CSRF)
@@ -175,9 +178,38 @@ templ RepoHeader(data RepoHeaderData) {
 						Fork
 					</button>
 				</form>
+				</div>
+				@CloneDropdown(data.CloneHTTPS, data.CloneSSH)
 			</div>
 		</div>
 	</div>
+}
+
+templ CloneDropdown(httpsURL, sshURL string) {
+	<details class="gh-clone-menu">
+		<summary class="gh-clone-btn">
+			@Icon("code", "")
+			Code
+		</summary>
+		<div class="gh-clone-panel card">
+			<div class="gh-clone-tabs" role="tablist">
+				<button type="button" class="active" data-clone-tab="https" role="tab" aria-selected="true" onclick="switchCloneTab(this,'https')">HTTPS</button>
+				<button type="button" data-clone-tab="ssh" role="tab" aria-selected="false" onclick="switchCloneTab(this,'ssh')">SSH</button>
+			</div>
+			<p class="gh-clone-label text-sm m-0 mb-2">Clone</p>
+			<div class="gh-clone-url-row">
+				<input type="text" class="input gh-clone-url" readonly value={ httpsURL } data-https={ httpsURL } data-ssh={ sshURL } aria-label="Clone URL"/>
+				<button type="button" class="gh-clone-copy gh-header-btn" aria-label="Copy" onclick="copyCloneUrl(this)">
+					@Icon("copy", "")
+				</button>
+			</div>
+			<p
+				class="gh-clone-hint text-sm text-muted m-0 mt-2"
+				data-https-hint="Use a personal access token from Settings for HTTPS auth."
+				data-ssh-hint="Use a password-protected SSH key from Settings."
+			>Use a personal access token from Settings for HTTPS auth.</p>
+		</div>
+	</details>
 }
 
 templ RepoNav(data RepoNavData) {

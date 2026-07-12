@@ -202,6 +202,12 @@ func TestWebRepoBranches(t *testing.T) {
 	if !strings.Contains(body, "main") {
 		t.Fatal("expected main branch in selector")
 	}
+	if !strings.Contains(body, `class="gh-clone-btn"`) {
+		t.Fatal("expected Code clone button on repo page")
+	}
+	if !strings.Contains(body, user+"/app.git") {
+		t.Fatalf("expected clone URL for %s/app in page", user)
+	}
 }
 
 func TestWebIssueCreateFormHasBody(t *testing.T) {
