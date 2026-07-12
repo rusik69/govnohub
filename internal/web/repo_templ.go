@@ -51,7 +51,7 @@ func RepoPage(data RepoPageData) templ.Component {
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = Layout(LayoutData{
 			Title: data.Layout.Title, User: data.Layout.User, CSRF: data.Layout.CSRF,
-			UnreadNotifs: data.Layout.UnreadNotifs, FullWidth: true,
+			UnreadNotifs: data.Layout.UnreadNotifs, Flash: data.Layout.Flash, FlashErr: data.Layout.FlashErr, FullWidth: true,
 			Content: RepoContent(data),
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {

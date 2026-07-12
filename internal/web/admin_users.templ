@@ -5,7 +5,7 @@ import "github.com/rusik69/govnohub/internal/auth"
 templ AdminUsersPage(layout LayoutData, users []auth.User, errMsg string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: AdminUsersContent(layout.CSRF, users, errMsg),
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, Content: AdminUsersContent(layout.CSRF, users, errMsg),
 	})
 }
 
@@ -25,7 +25,7 @@ templ AdminUsersContent(csrf string, users []auth.User, errMsg string) {
 					<td>{ u.Role }</td>
 					<td class="text-sm text-muted">{ u.CreatedAt.Format("2006-01-02") }</td>
 					<td>
-						<form method="post" action={ templ.SafeURL("/admin/users/" + u.ID.String() + "/delete") }>
+						<form method="post" action={ templ.SafeURL("/admin/users/" + u.ID.String() + "/delete") } onsubmit="return confirm('Delete this user?')">
 							@CSRFInput(csrf)
 							<button type="submit" class="btn-secondary text-sm">Delete</button>
 						</form>

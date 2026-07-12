@@ -8,7 +8,7 @@ import (
 templ AdminAuditPage(layout LayoutData, entries []audit.Entry) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: AdminAuditContent(entries),
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, Content: AdminAuditContent(entries),
 	})
 }
 

@@ -21,7 +21,7 @@ type PRDetailData struct {
 templ PRDetailPage(layout LayoutData, data PRDetailData) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: PRDetailContent(data),
 	})
 }

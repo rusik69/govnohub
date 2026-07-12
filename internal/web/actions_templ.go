@@ -50,7 +50,7 @@ func ActionsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, work
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = Layout(LayoutData{
 			Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-			UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+			UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 			Content: ActionsContent(header, nav, workflows, runs, csrf),
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {

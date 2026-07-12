@@ -1755,7 +1755,7 @@ func BranchBar(fullName, ref, path string, branches []RepoBranchOption) templ.Co
 			templ_7745c5c3_Var87 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 122, "<div class=\"gh-branch-bar\"><label class=\"sr-only\" for=\"branch-select\">Branch</label> <select id=\"branch-select\" class=\"gh-branch-selector input\" onchange=\"window.location=window.location.pathname.split('?')[0]+'?ref='+encodeURIComponent(this.value)\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 122, "<div class=\"gh-branch-bar\"><label class=\"sr-only\" for=\"branch-select\">Branch</label> <select id=\"branch-select\" class=\"gh-branch-selector input\" onchange=\"(function(s){var u=new URL(window.location.href);u.searchParams.set('ref',s.value);window.location=u})(this)\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

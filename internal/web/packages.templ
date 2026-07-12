@@ -5,7 +5,7 @@ import pkg "github.com/rusik69/govnohub/internal/package"
 templ PackagesPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, packages []pkg.Package, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: PackagesContent(header, nav, packages, csrf),
 	})
 }

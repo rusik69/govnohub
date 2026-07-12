@@ -36,7 +36,7 @@ func OrgsPage(layout LayoutData, orgs []org.Org, csrf string) templ.Component {
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = Layout(LayoutData{
 			Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-			UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+			UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "orgs",
 			Content: OrgsContent(orgs, csrf),
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -236,7 +236,7 @@ func OrgDetailPage(layout LayoutData, o *org.Org, members []org.Member, repos []
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = Layout(LayoutData{
 			Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-			UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+			UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "orgs",
 			Content: OrgDetailContent(o, members, repos, csrf),
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -530,7 +530,7 @@ func OrgTeamsPage(layout LayoutData, orgName string, teams []org.Team, csrf stri
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = Layout(LayoutData{
 			Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-			UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+			UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "orgs",
 			Content: OrgTeamsContent(orgName, teams, csrf),
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -742,7 +742,7 @@ func TeamDetailPage(layout LayoutData, orgName string, team *org.Team, members [
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = Layout(LayoutData{
 			Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-			UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+			UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "orgs",
 			Content: TeamDetailContent(orgName, team, members, csrf),
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {

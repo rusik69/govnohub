@@ -7,7 +7,7 @@ import (
 templ IssuesPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, issues []issue.Issue, state, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: IssuesContent(header, nav, issues, state, csrf),
 	})
 }

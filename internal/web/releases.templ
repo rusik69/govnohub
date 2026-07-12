@@ -14,7 +14,7 @@ type ReleaseWithAssets struct {
 templ ReleasesPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, releases []ReleaseWithAssets, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: ReleasesContent(header, nav, releases, csrf),
 	})
 }
@@ -34,6 +34,9 @@ templ ReleasesContent(header RepoHeaderData, nav RepoNavData, releases []Release
 						<span class="ml-2">{ row.Release.Name }</span>
 					}
 					<p class="text-sm text-muted m-0 mt-1">{ row.Release.CreatedAt.Format("2006-01-02") }</p>
+					if row.Release.Body != "" {
+						<div class="markdown mt-3 mb-0 text-sm">{ row.Release.Body }</div>
+					}
 					if len(row.Assets) > 0 {
 						<ul class="mt-3 mb-0">
 							for _, a := range row.Assets {

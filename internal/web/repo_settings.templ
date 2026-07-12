@@ -31,7 +31,7 @@ type RepoSettingsData struct {
 templ RepoSettingsPage(layout LayoutData, data RepoSettingsData) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: RepoSettingsContent(data),
 	})
 }
@@ -63,7 +63,7 @@ templ RepoSettingsContent(data RepoSettingsData) {
 							<td>{ c.Username }</td>
 							<td>{ c.Permission }</td>
 							<td>
-								<form method="post" action={ templ.SafeURL("/" + data.Nav.Owner + "/" + data.Nav.Repo + "/settings/collaborator/" + c.Username + "/remove") }>
+								<form method="post" action={ templ.SafeURL("/" + data.Nav.Owner + "/" + data.Nav.Repo + "/settings/collaborator/" + c.Username + "/remove") } onsubmit="return confirm('Remove this collaborator?')">
 									@CSRFInput(data.CSRF)
 									<button type="submit" class="btn-secondary text-sm">Remove</button>
 								</form>

@@ -8,7 +8,7 @@ import (
 templ OrgsPage(layout LayoutData, orgs []org.Org, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "orgs",
 		Content: OrgsContent(orgs, csrf),
 	})
 }
@@ -55,7 +55,7 @@ templ OrgCreateForm(csrf string) {
 templ OrgDetailPage(layout LayoutData, o *org.Org, members []org.Member, repos []repo.Repository, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "orgs",
 		Content: OrgDetailContent(o, members, repos, csrf),
 	})
 }
@@ -127,7 +127,7 @@ templ OrgRepoCreateForm(orgName, csrf string) {
 templ OrgTeamsPage(layout LayoutData, orgName string, teams []org.Team, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "orgs",
 		Content: OrgTeamsContent(orgName, teams, csrf),
 	})
 }
@@ -169,7 +169,7 @@ templ OrgTeamCreateForm(orgName, csrf string) {
 templ TeamDetailPage(layout LayoutData, orgName string, team *org.Team, members []org.Member, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "orgs",
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "orgs",
 		Content: TeamDetailContent(orgName, team, members, csrf),
 	})
 }

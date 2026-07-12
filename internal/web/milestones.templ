@@ -5,7 +5,7 @@ import "github.com/rusik69/govnohub/internal/issue"
 templ MilestonesPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, milestones []issue.Milestone, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: MilestonesContent(header, nav, milestones, csrf),
 	})
 }

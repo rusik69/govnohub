@@ -8,7 +8,7 @@ import (
 templ DashboardPage(layout LayoutData, repos []repo.Repository, orgs []org.Org, csrf string, errMsg string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, ActiveNav: "dashboard",
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "dashboard",
 		Content: DashboardContent(repos, orgs, csrf, errMsg),
 	})
 }
@@ -23,6 +23,7 @@ templ DashboardContent(repos []repo.Repository, orgs []org.Org, csrf string, err
 			<h2 class="text-lg font-semibold mb-3">Your repositories</h2>
 			if len(repos) == 0 {
 				@EmptyState("No repositories yet")
+				<p class="text-sm text-muted mt-2">Use <strong>New repository</strong> above to get started.</p>
 			} else {
 				<div class="gh-list">
 					for _, r := range repos {

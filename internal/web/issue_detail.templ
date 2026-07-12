@@ -10,7 +10,7 @@ import (
 templ IssueDetailPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, iss *issue.Issue, comments []issue.Comment, labels []issue.Label, milestones []issue.Milestone, users []string, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: IssueDetailContent(header, nav, iss, comments, labels, milestones, users, csrf),
 	})
 }

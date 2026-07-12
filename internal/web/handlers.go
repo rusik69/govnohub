@@ -128,7 +128,7 @@ func (h *Handler) handleRevokePAT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = h.deps.Auth.RevokePAT(r.Context(), su.ID, id)
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	redirectWithFlash(w, r, "/settings", "Token revoked", false)
 }
 
 func (h *Handler) handleAddSSHKey(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +156,7 @@ func (h *Handler) handleDeleteSSHKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = h.deps.Auth.DeleteSSHKey(r.Context(), su.ID, id)
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	redirectWithFlash(w, r, "/settings", "SSH key removed", false)
 }
 
 func (h *Handler) handleNotifications(w http.ResponseWriter, r *http.Request) {
@@ -193,12 +193,12 @@ func (h *Handler) handleCreateOrg(w http.ResponseWriter, r *http.Request) {
 	}
 	o, err := h.deps.Org.Create(r.Context(), r.FormValue("name"), r.FormValue("display_name"), r.FormValue("description"))
 	if err != nil {
-		http.Redirect(w, r, "/orgs", http.StatusSeeOther)
+		redirectWithFlash(w, r, "/orgs", err.Error(), true)
 		return
 	}
 	su := userFrom(r.Context())
 	_ = h.deps.Org.AddMember(r.Context(), o.ID, su.ID, "admin")
-	http.Redirect(w, r, "/orgs/"+o.Name, http.StatusSeeOther)
+	redirectWithFlash(w, r, "/orgs/"+o.Name, "Organization created", false)
 }
 
 func (h *Handler) handleOrgDetail(w http.ResponseWriter, r *http.Request) {
@@ -222,10 +222,15 @@ func (h *Handler) handleAddOrgMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := h.deps.Auth.GetUserByUsername(r.Context(), r.FormValue("username"))
-	if err == nil {
-		_ = h.deps.Org.AddMember(r.Context(), o.ID, u.ID, r.FormValue("role"))
+	if err != nil {
+		redirectWithFlash(w, r, "/orgs/"+o.Name, "User not found", true)
+		return
 	}
-	http.Redirect(w, r, "/orgs/"+o.Name, http.StatusSeeOther)
+	if err := h.deps.Org.AddMember(r.Context(), o.ID, u.ID, r.FormValue("role")); err != nil {
+		redirectWithFlash(w, r, "/orgs/"+o.Name, err.Error(), true)
+		return
+	}
+	redirectWithFlash(w, r, "/orgs/"+o.Name, "Member added", false)
 }
 
 func (h *Handler) handleOrgTeams(w http.ResponseWriter, r *http.Request) {
@@ -609,7 +614,7 @@ func (h *Handler) handlePulls(w http.ResponseWriter, r *http.Request) {
 	prs, _ := h.deps.Pulls.List(r.Context(), repository.ID)
 	state := r.URL.Query().Get("state")
 	header, nav := h.repoPageCtx(r, repository, "pulls")
-	render(w, r, PullsPage(h.layout(r, "Pull requests"), header, nav, prs, state, csrfFrom(r.Context())))
+	render(w, r, PullsPage(h.layout(r, "Pull requests"), header, nav, prs, state, repository.DefaultBranch, csrfFrom(r.Context())))
 }
 
 func (h *Handler) handleCreatePR(w http.ResponseWriter, r *http.Request) {
@@ -833,7 +838,7 @@ func (h *Handler) handleTriggerAction(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/"+repository.FullName+"/actions", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/"+repository.FullName+"/actions", http.StatusSeeOther)
+	redirectWithFlash(w, r, "/"+repository.FullName+"/actions", "Workflow triggered", false)
 }
 
 func (h *Handler) handleActionLogs(w http.ResponseWriter, r *http.Request) {
@@ -894,8 +899,12 @@ func (h *Handler) handleCreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	su := userFrom(r.Context())
-	_, _ = h.deps.Releases.Create(r.Context(), repository.ID, su.ID, r.FormValue("tag"), r.FormValue("name"), r.FormValue("body"), false, false)
-	http.Redirect(w, r, "/"+repository.FullName+"/releases", http.StatusSeeOther)
+	_, err := h.deps.Releases.Create(r.Context(), repository.ID, su.ID, r.FormValue("tag"), r.FormValue("name"), r.FormValue("body"), false, false)
+	if err != nil {
+		redirectWithFlash(w, r, "/"+repository.FullName+"/releases", err.Error(), true)
+		return
+	}
+	redirectWithFlash(w, r, "/"+repository.FullName+"/releases", "Release created", false)
 }
 
 func (h *Handler) handlePackages(w http.ResponseWriter, r *http.Request) {
@@ -1033,7 +1042,7 @@ func (h *Handler) handleStar(w http.ResponseWriter, r *http.Request) {
 	}
 	su := userFrom(r.Context())
 	_ = h.deps.Repos.Star(r.Context(), repository.ID, su.ID)
-	http.Redirect(w, r, redirectReferer(r, "/"+repository.FullName), http.StatusSeeOther)
+	redirectWithFlash(w, r, redirectReferer(r, "/"+repository.FullName), "Repository starred", false)
 }
 
 func (h *Handler) handleUnstar(w http.ResponseWriter, r *http.Request) {
@@ -1046,7 +1055,7 @@ func (h *Handler) handleUnstar(w http.ResponseWriter, r *http.Request) {
 	}
 	su := userFrom(r.Context())
 	_ = h.deps.Repos.Unstar(r.Context(), repository.ID, su.ID)
-	http.Redirect(w, r, redirectReferer(r, "/"+repository.FullName), http.StatusSeeOther)
+	redirectWithFlash(w, r, redirectReferer(r, "/"+repository.FullName), "Unstarred", false)
 }
 
 func (h *Handler) handleWatch(w http.ResponseWriter, r *http.Request) {
@@ -1059,7 +1068,7 @@ func (h *Handler) handleWatch(w http.ResponseWriter, r *http.Request) {
 	}
 	su := userFrom(r.Context())
 	_ = h.deps.Repos.Watch(r.Context(), repository.ID, su.ID)
-	http.Redirect(w, r, redirectReferer(r, "/"+repository.FullName), http.StatusSeeOther)
+	redirectWithFlash(w, r, redirectReferer(r, "/"+repository.FullName), "Watching", false)
 }
 
 func (h *Handler) handleUnwatch(w http.ResponseWriter, r *http.Request) {
@@ -1072,7 +1081,7 @@ func (h *Handler) handleUnwatch(w http.ResponseWriter, r *http.Request) {
 	}
 	su := userFrom(r.Context())
 	_ = h.deps.Repos.Unwatch(r.Context(), repository.ID, su.ID)
-	http.Redirect(w, r, redirectReferer(r, "/"+repository.FullName), http.StatusSeeOther)
+	redirectWithFlash(w, r, redirectReferer(r, "/"+repository.FullName), "Unwatched", false)
 }
 
 func (h *Handler) handleFork(w http.ResponseWriter, r *http.Request) {

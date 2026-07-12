@@ -91,6 +91,7 @@ func (h *Handler) Routes() chi.Router {
 			r.Post("/pulls/{number}/merge", h.handlePRMerge)
 
 			r.Get("/issues", h.handleIssues)
+			r.Get("/releases", h.handleReleases)
 			r.Post("/releases", h.handleCreateRelease)
 			r.Post("/releases/{tag}/assets", h.handleUploadReleaseAsset)
 

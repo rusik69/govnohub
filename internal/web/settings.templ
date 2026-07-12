@@ -5,7 +5,7 @@ import "github.com/rusik69/govnohub/internal/auth"
 templ SettingsPage(layout LayoutData, pats []auth.PATInfo, keys []auth.SSHKeyInfo, newPAT, errMsg string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, Content: SettingsContent(layout.CSRF, pats, keys, newPAT, errMsg),
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, Content: SettingsContent(layout.CSRF, pats, keys, newPAT, errMsg),
 	})
 }
 
@@ -47,7 +47,7 @@ templ SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, 
 							<td class="text-sm">{ joinScopes(p.Scopes) }</td>
 							<td class="text-sm text-muted">{ p.CreatedAt.Format("2006-01-02") }</td>
 							<td>
-								<form method="post" action={ templ.SafeURL("/settings/pat/" + p.ID.String() + "/revoke") }>
+								<form method="post" action={ templ.SafeURL("/settings/pat/" + p.ID.String() + "/revoke") } onsubmit="return confirm('Revoke this token?')">
 									@CSRFInput(csrf)
 									<button type="submit" class="btn-secondary text-sm">Revoke</button>
 								</form>
@@ -77,7 +77,7 @@ templ SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, 
 							<td>{ k.Title }</td>
 							<td class="text-sm font-mono">{ k.Fingerprint }</td>
 							<td>
-								<form method="post" action={ templ.SafeURL("/settings/ssh-key/" + k.ID.String() + "/delete") }>
+								<form method="post" action={ templ.SafeURL("/settings/ssh-key/" + k.ID.String() + "/delete") } onsubmit="return confirm('Delete this SSH key?')">
 									@CSRFInput(csrf)
 									<button type="submit" class="btn-secondary text-sm">Delete</button>
 								</form>

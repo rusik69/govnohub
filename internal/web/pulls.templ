@@ -4,19 +4,21 @@ import (
 	"github.com/rusik69/govnohub/internal/pull"
 )
 
-templ PullsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest, state, csrf string) {
+templ PullsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest, state, defaultBranch, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
-		Content: PullsContent(header, nav, prs, state, csrf),
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
+		Content: PullsContent(header, nav, prs, state, defaultBranch, csrf),
 	})
 }
 
-templ PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest, state, csrf string) {
+templ PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest, state, defaultBranch, csrf string) {
 	@RepoPageShell(header, nav)
 	<div class="max-w-7xl mx-auto">
-		@PRSubhead(nav, prs, state)
-		@CollapsibleForm("New pull request", PRCreateForm(nav, csrf))
+		<div class="flex justify-between items-center mb-4 gap-3 flex-wrap">
+			@PRSubhead(nav, prs, state)
+			@CollapsibleForm("New pull request", PRCreateForm(nav, defaultBranch, csrf))
+		</div>
 		if len(filterPRs(prs, state)) == 0 {
 			@EmptyState("No pull requests found")
 		} else {
@@ -29,12 +31,12 @@ templ PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullReques
 	</div>
 }
 
-templ PRCreateForm(nav RepoNavData, csrf string) {
+templ PRCreateForm(nav RepoNavData, defaultBranch, csrf string) {
 	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls") } class="grid grid-cols-2 gap-3">
 		@CSRFInput(csrf)
 		<input type="text" name="title" placeholder="PR title" required class="input col-span-2"/>
 		<input type="text" name="head" placeholder="Head branch" required class="input"/>
-		<input type="text" name="base" placeholder="Base branch" value="main" class="input"/>
+		<input type="text" name="base" placeholder="Base branch" value={ defaultBranch } class="input"/>
 		<textarea name="body" placeholder="Description" class="input col-span-2" rows="3"></textarea>
 		<button type="submit" class="btn col-span-2">Open pull request</button>
 	</form>

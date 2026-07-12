@@ -11,6 +11,8 @@ type LayoutData struct {
 	User             *SessionUser
 	CSRF             string
 	UnreadNotifs     int
+	Flash            string
+	FlashErr         bool
 	Content          templ.Component
 	FullWidth        bool
 	HideNav          bool
@@ -150,6 +152,13 @@ templ Layout(data LayoutData) {
 				</header>
 			}
 			<main id="main-content" class={ layoutMainClass(data) }>
+				if data.Flash != "" {
+					if data.FlashErr {
+						@ErrorAlert(data.Flash)
+					} else {
+						@Toast(data.Flash, "success")
+					}
+				}
 				@data.Content
 			</main>
 		</body>

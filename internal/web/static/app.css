@@ -481,6 +481,9 @@ html.dark .toast-error { background: #3d1418; color: #f85149; }
   .gh-header-search-mobile { display: inline-flex; }
   .gh-global-nav { display: none; }
   .gh-repo-head { flex-direction: column; }
+  .notif-dropdown { max-width: calc(100vw - 1rem); right: 0; }
+  .gh-btn-group { flex-wrap: wrap; }
+  .gh-repo-head .gh-btn-group { gap: 0.25rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

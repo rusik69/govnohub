@@ -12,7 +12,7 @@ import (
 	"github.com/rusik69/govnohub/internal/pull"
 )
 
-func PullsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest, state, csrf string) templ.Component {
+func PullsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest, state, defaultBranch, csrf string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -35,8 +35,8 @@ func PullsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, prs []
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = Layout(LayoutData{
 			Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-			UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
-			Content: PullsContent(header, nav, prs, state, csrf),
+			UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
+			Content: PullsContent(header, nav, prs, state, defaultBranch, csrf),
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -45,7 +45,7 @@ func PullsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, prs []
 	})
 }
 
-func PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest, state, csrf string) templ.Component {
+func PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest, state, defaultBranch, csrf string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -70,7 +70,7 @@ func PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"max-w-7xl mx-auto\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"max-w-7xl mx-auto\"><div class=\"flex justify-between items-center mb-4 gap-3 flex-wrap\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -78,7 +78,11 @@ func PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = CollapsibleForm("New pull request", PRCreateForm(nav, csrf)).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = CollapsibleForm("New pull request", PRCreateForm(nav, defaultBranch, csrf)).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -88,7 +92,7 @@ func PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"gh-list\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"gh-list\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -98,12 +102,12 @@ func PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -111,7 +115,7 @@ func PullsContent(header RepoHeaderData, nav RepoNavData, prs []pull.PullRequest
 	})
 }
 
-func PRCreateForm(nav RepoNavData, csrf string) templ.Component {
+func PRCreateForm(nav RepoNavData, defaultBranch, csrf string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -132,20 +136,20 @@ func PRCreateForm(nav RepoNavData, csrf string) templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<form method=\"post\" action=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<form method=\"post\" action=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var4 templ.SafeURL
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/pulls"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pulls.templ`, Line: 33, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pulls.templ`, Line: 35, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" class=\"grid grid-cols-2 gap-3\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" class=\"grid grid-cols-2 gap-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -153,7 +157,20 @@ func PRCreateForm(nav RepoNavData, csrf string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<input type=\"text\" name=\"title\" placeholder=\"PR title\" required class=\"input col-span-2\"> <input type=\"text\" name=\"head\" placeholder=\"Head branch\" required class=\"input\"> <input type=\"text\" name=\"base\" placeholder=\"Base branch\" value=\"main\" class=\"input\"> <textarea name=\"body\" placeholder=\"Description\" class=\"input col-span-2\" rows=\"3\"></textarea> <button type=\"submit\" class=\"btn col-span-2\">Open pull request</button></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<input type=\"text\" name=\"title\" placeholder=\"PR title\" required class=\"input col-span-2\"> <input type=\"text\" name=\"head\" placeholder=\"Head branch\" required class=\"input\"> <input type=\"text\" name=\"base\" placeholder=\"Base branch\" value=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var5 string
+		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(defaultBranch)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pulls.templ`, Line: 39, Col: 80}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\" class=\"input\"> <textarea name=\"body\" placeholder=\"Description\" class=\"input col-span-2\" rows=\"3\"></textarea> <button type=\"submit\" class=\"btn col-span-2\">Open pull request</button></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -350,7 +350,7 @@ templ BranchBar(fullName, ref, path string, branches []RepoBranchOption) {
 		<select
 			id="branch-select"
 			class="gh-branch-selector input"
-			onchange="window.location=window.location.pathname.split('?')[0]+'?ref='+encodeURIComponent(this.value)"
+			onchange="(function(s){var u=new URL(window.location.href);u.searchParams.set('ref',s.value);window.location=u})(this)"
 		>
 			for _, b := range branches {
 				<option value={ b.Name } selected?={ b.Name == ref }>{ b.Name }</option>

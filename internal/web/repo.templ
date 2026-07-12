@@ -23,7 +23,7 @@ type RepoPageData struct {
 templ RepoPage(data RepoPageData) {
 	@Layout(LayoutData{
 		Title: data.Layout.Title, User: data.Layout.User, CSRF: data.Layout.CSRF,
-		UnreadNotifs: data.Layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: data.Layout.UnreadNotifs, Flash: data.Layout.Flash, FlashErr: data.Layout.FlashErr, FullWidth: true,
 		Content: RepoContent(data),
 	})
 }

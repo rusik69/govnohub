@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/a-h/templ"
@@ -18,11 +19,19 @@ func (h *Handler) layout(r *http.Request, title string) LayoutData {
 	if su != nil {
 		unread, _ = h.deps.Notify.UnreadCount(r.Context(), su.ID)
 	}
+	flash := r.URL.Query().Get("ok")
+	flashErr := false
+	if flash == "" {
+		flash = r.URL.Query().Get("err")
+		flashErr = flash != ""
+	}
 	return LayoutData{
 		Title:        title,
 		User:         su,
 		CSRF:         csrfFrom(r.Context()),
 		UnreadNotifs: unread,
+		Flash:        flash,
+		FlashErr:     flashErr,
 	}
 }
 
@@ -75,6 +84,24 @@ func redirectReferer(r *http.Request, fallback string) string {
 		return ref
 	}
 	return fallback
+}
+
+func redirectWithFlash(w http.ResponseWriter, r *http.Request, path, msg string, isErr bool) {
+	u, err := url.Parse(path)
+	if err != nil {
+		http.Redirect(w, r, path, http.StatusSeeOther)
+		return
+	}
+	q := u.Query()
+	if isErr {
+		q.Set("err", msg)
+		q.Del("ok")
+	} else {
+		q.Set("ok", msg)
+		q.Del("err")
+	}
+	u.RawQuery = q.Encode()
+	http.Redirect(w, r, u.String(), http.StatusSeeOther)
 }
 
 func (h *Handler) getRepo(w http.ResponseWriter, r *http.Request, perm string) (*repo.Repository, bool) {

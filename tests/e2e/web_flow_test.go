@@ -218,3 +218,21 @@ func TestWebIssueCreateFormHasBody(t *testing.T) {
 		t.Fatal("expected issue body field")
 	}
 }
+
+func TestWebReleasesPage(t *testing.T) {
+	env := testenv.New(t)
+	defer env.Cleanup()
+	base := env.URL
+	user := "wrel" + uniqueSuffix()[len(uniqueSuffix())-6:]
+	token := testutil.RegisterAndLogin(t, base, user)
+	createRepo(t, base, token, user, "app")
+	client := webClient(t, base, token)
+
+	code, body := webGetBody(t, client, base+"/"+user+"/app/releases")
+	if code != http.StatusOK {
+		t.Fatalf("releases page status=%d", code)
+	}
+	if !strings.Contains(body, "Releases") {
+		t.Fatal("expected Releases heading on page")
+	}
+}

@@ -5,7 +5,7 @@ import "github.com/rusik69/govnohub/internal/wiki"
 templ WikiPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, pages []wiki.Page) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: WikiListContent(header, nav, pages),
 	})
 }
@@ -32,7 +32,7 @@ templ WikiListContent(header RepoHeaderData, nav RepoNavData, pages []wiki.Page)
 templ WikiViewPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, page *wiki.Page, html, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: WikiViewContent(header, nav, page, html, csrf),
 	})
 }
@@ -44,7 +44,7 @@ templ WikiViewContent(header RepoHeaderData, nav RepoNavData, page *wiki.Page, h
 			<h1 class="text-xl font-bold m-0">{ page.Title }</h1>
 			<div class="flex gap-2">
 				<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/" + page.Slug + "/edit") } class="btn-secondary">Edit</a>
-				<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/" + page.Slug + "/delete") }>
+				<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/wiki/" + page.Slug + "/delete") } onsubmit="return confirm('Delete this wiki page?')">
 					@CSRFInput(csrf)
 					<button type="submit" class="btn-secondary">Delete</button>
 				</form>
@@ -57,7 +57,7 @@ templ WikiViewContent(header RepoHeaderData, nav RepoNavData, page *wiki.Page, h
 templ WikiEditPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, slug, title, content, csrf string) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
-		UnreadNotifs: layout.UnreadNotifs, FullWidth: true,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
 		Content: WikiEditContent(header, nav, slug, title, content, csrf),
 	})
 }
