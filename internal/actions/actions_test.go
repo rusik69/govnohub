@@ -391,6 +391,249 @@ func TestWriteJobScript_EdgeCases(t *testing.T) {
 	})
 }
 
+// ---- Tests for Item 16: matrix strategy, needs with arrays, if: conditional skip ----
+
+// TestParseWorkflow_MatrixStrategy tests parsing workflow with strategy/matrix
+func TestParseWorkflow_MatrixStrategy(t *testing.T) {
+	content := `
+name: Matrix CI
+on: push
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [18, 20]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: echo "Node ${{ matrix.node }} on ${{ matrix.os }}"
+`
+	wf, err := ParseWorkflow(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, ok := wf.Jobs["test"]
+	if !ok {
+		t.Fatal("missing test job")
+	}
+	if job.Strategy == nil {
+		t.Fatal("strategy is nil")
+	}
+	osVars, ok := job.Strategy.Matrix["os"]
+	if !ok {
+		t.Fatal("missing os in matrix")
+	}
+	if len(osVars) != 2 || osVars[0] != "ubuntu-latest" || osVars[1] != "macos-latest" {
+		t.Fatalf("unexpected os vars: %v", osVars)
+	}
+	nodeVars, ok := job.Strategy.Matrix["node"]
+	if !ok {
+		t.Fatal("missing node in matrix")
+	}
+	if len(nodeVars) != 2 || nodeVars[0] != "18" || nodeVars[1] != "20" {
+		t.Fatalf("unexpected node vars: %v", nodeVars)
+	}
+}
+
+// TestParseWorkflow_MatrixStrategy_NoMatrix tests job without strategy
+func TestParseWorkflow_MatrixStrategy_NoMatrix(t *testing.T) {
+	content := `
+name: Simple
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+`
+	wf, err := ParseWorkflow(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wf.Jobs["build"].Strategy != nil {
+		t.Fatal("expected nil strategy for simple job")
+	}
+}
+
+// TestParseWorkflow_MatrixStrategy_EmptyMatrix tests strategy with empty matrix
+func TestParseWorkflow_MatrixStrategy_EmptyMatrix(t *testing.T) {
+	content := `
+name: Empty Matrix
+on: push
+jobs:
+  build:
+    strategy:
+      matrix: {}
+    steps:
+      - run: echo hello
+`
+	wf, err := ParseWorkflow(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wf.Jobs["build"].Strategy == nil {
+		t.Fatal("strategy should not be nil")
+	}
+	if len(wf.Jobs["build"].Strategy.Matrix) != 0 {
+		t.Fatalf("expected empty matrix, got %v", wf.Jobs["build"].Strategy.Matrix)
+	}
+}
+
+// TestJobOrder_NeedsArray tests needs with array syntax [build, lint]
+func TestJobOrder_NeedsArray(t *testing.T) {
+	content := `
+name: Pipeline
+on: [push]
+jobs:
+  build:
+    steps: [{run: echo build}]
+  lint:
+    steps: [{run: echo lint}]
+  test:
+    needs: [build, lint]
+    steps: [{run: echo test}]
+  deploy:
+    needs: test
+    steps: [{run: echo deploy}]
+`
+	wf, err := ParseWorkflow(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := wf.JobOrder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(order) != 4 {
+		t.Fatalf("expected 4 jobs, got %v", order)
+	}
+	buildIdx := indexOfStr(order, "build")
+	lintIdx := indexOfStr(order, "lint")
+	testIdx := indexOfStr(order, "test")
+	deployIdx := indexOfStr(order, "deploy")
+	if buildIdx > testIdx || lintIdx > testIdx {
+		t.Fatal("build/lint must come before test")
+	}
+	if testIdx > deployIdx {
+		t.Fatal("test must come before deploy")
+	}
+}
+
+// TestEvalIf tests the EvalIf function
+func TestEvalIf(t *testing.T) {
+	ctx := map[string]string{"GITHUB_SHA": "abc123"}
+
+	tests := []struct {
+		name string
+		cond string
+		ctx  map[string]string
+		want bool
+	}{
+		{"empty", "", nil, true},
+		{"true_literal", "true", nil, true},
+		{"false_literal", "false", nil, false},
+		{"always", "always()", nil, true},
+		{"success", "success()", nil, true},
+		{"failure", "failure()", nil, false},
+		{"expression_with_value", "${{ github.sha }}", ctx, true},
+		{"expression_without_value", "${{ github.nonexistent }}", ctx, false},
+		{"expression_false", "${{ false }}", ctx, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := EvalIf(tt.cond, tt.ctx)
+			if got != tt.want {
+				t.Errorf("EvalIf(%q, ctx) = %v, want %v", tt.cond, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestBuildStepScript_IfCondition tests BuildStepScript with if: conditions
+func TestBuildStepScript_IfCondition(t *testing.T) {
+	ctx := map[string]string{"GITHUB_SHA": "abc123"}
+
+	t.Run("no_if_runs_normally", func(t *testing.T) {
+		step := Step{Name: "build", Run: "echo hi"}
+		script := BuildStepScript(step, ctx)
+		if !contains(script, "echo hi") {
+			t.Fatalf("expected 'echo hi' in script, got: %s", script)
+		}
+	})
+
+	t.Run("if_true_runs", func(t *testing.T) {
+		step := Step{Name: "build", Run: "echo hi", If: "true"}
+		script := BuildStepScript(step, ctx)
+		if !contains(script, "echo hi") {
+			t.Fatalf("expected 'echo hi' in script, got: %s", script)
+		}
+	})
+
+	t.Run("if_false_skips", func(t *testing.T) {
+		step := Step{Name: "conditional", Run: "echo hi", If: "false"}
+		script := BuildStepScript(step, ctx)
+		if contains(script, "echo hi") {
+			t.Fatalf("should not contain 'echo hi' when if: false, got: %s", script)
+		}
+		if !contains(script, "Skipping") {
+			t.Fatalf("expected skip warning in script, got: %s", script)
+		}
+	})
+
+	t.Run("if_expression_true", func(t *testing.T) {
+		step := Step{Name: "build", Run: "echo hi", If: "${{ github.sha }}"}
+		script := BuildStepScript(step, ctx)
+		if !contains(script, "echo hi") {
+			t.Fatalf("expected 'echo hi' in script, got: %s", script)
+		}
+	})
+
+	t.Run("if_expression_false", func(t *testing.T) {
+		step := Step{Name: "conditional", Run: "echo hi", If: "${{ github.nonexistent }}"}
+		script := BuildStepScript(step, ctx)
+		if contains(script, "echo hi") {
+			t.Fatalf("should not contain 'echo hi' for false expression, got: %s", script)
+		}
+		if !contains(script, "Skipping") {
+			t.Fatalf("expected skip warning, got: %s", script)
+		}
+	})
+
+	t.Run("if_always_runs", func(t *testing.T) {
+		step := Step{Name: "cleanup", Run: "echo done", If: "always()"}
+		script := BuildStepScript(step, ctx)
+		if !contains(script, "echo done") {
+			t.Fatalf("expected 'echo done' in script, got: %s", script)
+		}
+	})
+}
+
+// TestWriteJobScript_IfCondition tests WriteJobScript with conditional steps
+func TestWriteJobScript_IfCondition(t *testing.T) {
+	ctx := map[string]string{"GITHUB_SHA": "abc123"}
+
+	t.Run("mixed_if_conditions", func(t *testing.T) {
+		steps := []Step{
+			{Name: "always_run", Run: "echo step1"},
+			{Name: "never_run", Run: "echo step2", If: "false"},
+			{Name: "conditional_run", Run: "echo step3", If: "${{ github.sha }}"},
+		}
+		script := WriteJobScript(steps, ctx)
+		if !contains(script, "echo step1") {
+			t.Fatal("should contain step1")
+		}
+		if contains(script, "echo step2") {
+			t.Fatal("should NOT contain step2 (if: false)")
+		}
+		if !contains(script, "echo step3") {
+			t.Fatal("should contain step3 (if: expression == true)")
+		}
+		if !contains(script, "Skipping") {
+			t.Fatal("should contain skip warning")
+		}
+	})
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || indexOf(s, sub) >= 0)
 }

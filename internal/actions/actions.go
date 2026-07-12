@@ -15,17 +15,23 @@ type Workflow struct {
 	Jobs  map[string]Job    `yaml:"jobs"`
 }
 
+type Strategy struct {
+	Matrix map[string][]string `yaml:"matrix"`
+}
+
 type Job struct {
-	RunsOn string            `yaml:"runs-on"`
-	Needs  interface{}       `yaml:"needs"`
-	Env    map[string]string `yaml:"env"`
-	Steps  []Step            `yaml:"steps"`
+	RunsOn   string            `yaml:"runs-on"`
+	Needs    interface{}       `yaml:"needs"`
+	Env      map[string]string `yaml:"env"`
+	Steps    []Step            `yaml:"steps"`
+	Strategy *Strategy         `yaml:"strategy"`
 }
 
 type Step struct {
 	Name string            `yaml:"name"`
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
+	If   string            `yaml:"if"`
 	Env  map[string]string `yaml:"env"`
 	With map[string]string `yaml:"with"`
 }
@@ -138,7 +144,8 @@ func EvalExpression(expr string, ctx map[string]string) string {
 	if !strings.HasPrefix(expr, "${{") {
 		return expr
 	}
-	expr = strings.TrimSuffix(strings.TrimPrefix(expr, "${{"), "}}")
+	expr = strings.TrimPrefix(expr, "${{")
+	expr = strings.TrimSuffix(expr, "}}")
 	expr = strings.TrimSpace(expr)
 	parts := strings.Split(expr, ".")
 	if len(parts) >= 2 && parts[0] == "github" {
@@ -153,7 +160,37 @@ func EvalExpression(expr string, ctx map[string]string) string {
 	return ""
 }
 
+// EvalIf evaluates an if: condition. Returns true if the step should run.
+// Supports simple boolean, success(), failure(), always(), and ${{ }} expressions.
+func EvalIf(cond string, ctx map[string]string) bool {
+	cond = strings.TrimSpace(cond)
+	if cond == "" {
+		return true
+	}
+	if cond == "true" || cond == "always()" {
+		return true
+	}
+	if cond == "false" {
+		return false
+	}
+	if cond == "success()" {
+		return true
+	}
+	if cond == "failure()" {
+		return false
+	}
+	// Evaluate expression
+	result := EvalExpression(cond, ctx)
+	if result == "" || result == "false" || result == "0" {
+		return false
+	}
+	return true
+}
+
 func BuildStepScript(step Step, ctx map[string]string) string {
+	if step.If != "" && !EvalIf(step.If, ctx) {
+		return fmt.Sprintf("echo '::warning::Skipping step %q (condition not met)'", step.Name)
+	}
 	if step.Run != "" {
 		return EvalExpression(step.Run, ctx)
 	}
