@@ -1383,6 +1383,35 @@ func (h *Handler) handleCreateLabel(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/"+repository.FullName+"/settings", http.StatusSeeOther)
 }
 
+func (h *Handler) handleDeleteRepo(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	confirmName := r.FormValue("confirm")
+	if confirmName != repository.Name {
+		redirectWithFlash(w, r, "/"+repository.FullName+"/settings", "Repository name does not match", true)
+		return
+	}
+	if err := h.deps.Git.Remove(repository.OwnerName, repository.Name); err != nil {
+		redirectWithFlash(w, r, "/"+repository.FullName+"/settings", "Failed to remove git data: "+err.Error(), true)
+		return
+	}
+	if err := h.deps.Repos.Delete(r.Context(), repository.ID); err != nil {
+		redirectWithFlash(w, r, "/"+repository.FullName+"/settings", "Failed to delete repository: "+err.Error(), true)
+		return
+	}
+	if h.deps.Audit != nil {
+		_ = h.deps.Audit.Record(r.Context(), userFrom(r.Context()).ID, "repo.delete", "repo", repository.ID.String(), map[string]string{
+			"full_name": repository.FullName,
+		})
+	}
+	redirectWithFlash(w, r, "/", "Repository deleted", false)
+}
+
 func (h *Handler) handleUploadReleaseAsset(w http.ResponseWriter, r *http.Request) {
 	if !h.requirePOST(w, r) {
 		return

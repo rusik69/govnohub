@@ -111,6 +111,7 @@ func (h *Handler) Routes() chi.Router {
 			r.Post("/settings/collaborator/{username}/remove", h.handleRemoveCollaborator)
 			r.Post("/settings/protection", h.handleProtectBranch)
 			r.Post("/settings/label", h.handleCreateLabel)
+			r.Post("/settings/delete", h.handleDeleteRepo)
 
 			r.Get("/wiki", h.handleWiki)
 			r.Get("/wiki/{slug}", h.handleWikiPage)
