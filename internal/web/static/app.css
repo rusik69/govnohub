@@ -633,6 +633,196 @@ html.dark .gh-overlay {
   overflow: hidden;
 }
 
+/* === Skeleton Screens === */
+@keyframes gh-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.gh-skeleton {
+  background: var(--border);
+  border-radius: 0.25rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.gh-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.15) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: gh-shimmer 1.5s infinite;
+}
+
+html.dark .gh-skeleton::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.08) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+}
+
+.gh-skeleton-text {
+  height: 0.875rem;
+  margin-bottom: 0.5rem;
+  width: 100%;
+}
+
+.gh-skeleton-text:last-child {
+  width: 60%;
+}
+
+.gh-skeleton-title {
+  height: 1.25rem;
+  margin-bottom: 0.75rem;
+  width: 70%;
+}
+
+.gh-skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.gh-skeleton-avatar-sm {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.gh-skeleton-button {
+  height: 32px;
+  width: 80px;
+  border-radius: 0.375rem;
+}
+
+.gh-skeleton-line {
+  height: 1px;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.gh-skeleton-card {
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+}
+
+.gh-skeleton-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Loading Spinner */
+@keyframes gh-spin {
+  to { transform: rotate(360deg); }
+}
+
+.gh-spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--link);
+  border-radius: 50%;
+  animation: gh-spin 0.6s linear infinite;
+}
+
+.gh-spinner-lg {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-width: 3px;
+}
+
+.gh-spinner-sm {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-width: 1.5px;
+}
+
+/* HTMX loading indicator enhancements */
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity 200ms ease-in;
+  pointer-events: none;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.htmx-request .gh-btn-seg {
+  position: relative;
+  color: transparent;
+}
+
+.htmx-request .gh-btn-seg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Loading overlay for table/list areas */
+.gh-loading-overlay {
+  position: relative;
+}
+
+.gh-loading-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--surface);
+  opacity: 0.7;
+  z-index: 10;
+}
+
+.gh-loading-overlay::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: -0.75rem 0 0 -0.75rem;
+  border: 3px solid var(--border);
+  border-top-color: var(--link);
+  border-radius: 50%;
+  animation: gh-spin 0.6s linear infinite;
+  z-index: 11;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .gh-skeleton::after,
+  .gh-spinner,
+  .gh-loading-overlay::after,
+  .htmx-indicator {
+    animation: none;
+  }
+  .gh-skeleton {
+    opacity: 0.5;
+  }
+}
+
 /* Markdown preview toggle on comment forms */
 .md-preview-container {
   border: 1px solid var(--border);

@@ -43,7 +43,7 @@ templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issu
 				<div class="gh-sidebar-panel">
 					<div class="gh-sidebar-section">
 						<div class="gh-sidebar-label">Assignees</div>
-						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/assignee" } hx-target="#issue-toast" hx-swap="innerHTML">
+						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/assignee" } hx-target="#issue-toast" hx-swap="innerHTML" hx-indicator="#assignee-indicator">
 							@CSRFInput(csrf)
 							<select name="assignee" class="input" onchange="this.form.requestSubmit()">
 								<option value="">No one assigned</option>
@@ -51,11 +51,13 @@ templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issu
 									<option value={ u } selected?={ iss.Assignee == u }>{ u }</option>
 								}
 							</select>
+							@LoadingSpinnerSmall()
+							<span id="assignee-indicator" class="htmx-indicator text-xs text-muted">Updating...</span>
 						</form>
 					</div>
 					<div class="gh-sidebar-section">
 						<div class="gh-sidebar-label">Milestone</div>
-						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/milestone" } hx-target="#issue-toast" hx-swap="innerHTML">
+						<form hx-post={ "/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/milestone" } hx-target="#issue-toast" hx-swap="innerHTML" hx-indicator="#milestone-indicator">
 							@CSRFInput(csrf)
 							<select name="milestone_id" class="input" onchange="this.form.requestSubmit()">
 								<option value="">No milestone</option>
@@ -63,6 +65,8 @@ templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issu
 									<option value={ m.ID.String() } selected?={ iss.MilestoneID != nil && iss.MilestoneID.String() == m.ID.String() }>{ m.Title }</option>
 								}
 							</select>
+							@LoadingSpinnerSmall()
+							<span id="milestone-indicator" class="htmx-indicator text-xs text-muted">Updating...</span>
 						</form>
 					</div>
 					<div class="gh-sidebar-section">

@@ -204,6 +204,7 @@ templ Layout(data LayoutData) {
 										aria-expanded="false"
 										aria-controls="notif-panel"
 										onclick="toggleNotifications(this)"
+										hx-indicator="#notif-loading"
 									>
 										@Icon("bell", "")
 									</button>
@@ -211,6 +212,10 @@ templ Layout(data LayoutData) {
 										<span class="notif-count">{ unreadLabel(data.UnreadNotifs) }</span>
 									}
 									<div id="notif-panel" class="notif-dropdown card hidden" aria-live="polite"></div>
+									<div id="notif-loading" class="htmx-indicator" style="display:inline-flex;align-items:center;gap:0.25rem;padding:0 0.5rem">
+										@LoadingSpinnerSmall()
+										<span class="text-xs">Loading...</span>
+									</div>
 								</div>
 								<details class="gh-user-menu">
 									<summary>

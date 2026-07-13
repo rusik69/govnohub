@@ -72,9 +72,12 @@ templ ActionsContent(header RepoHeaderData, nav RepoNavData, workflows []Workflo
 										hx-get={ "/" + nav.Owner + "/" + nav.Repo + "/actions/runs/" + run.ID + "/logs" }
 										hx-target={ "#logs-" + run.ID }
 										hx-swap="innerHTML"
+										hx-indicator={ "#spinner-" + run.ID }
 									>
 										Show logs
 									</button>
+									@LoadingSpinnerSmall()
+									<span id={ "spinner-" + run.ID } class="htmx-indicator gh-spinner gh-spinner-sm" aria-label="Loading logs"></span>
 								</td>
 							</tr>
 							<tr>

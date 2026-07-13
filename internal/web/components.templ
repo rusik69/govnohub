@@ -178,10 +178,15 @@ templ RepoHeader(data RepoHeaderData) {
 					hx-target="#fork-dialog-container"
 					hx-swap="innerHTML"
 					hx-trigger="click"
+					hx-indicator="#fork-loading"
 				>
 					@Icon("repo-forked", "")
 					Fork
 				</button>
+				<div id="fork-loading" class="htmx-indicator" style="display:inline-flex;align-items:center;gap:0.25rem">
+					@LoadingSpinnerSmall()
+					<span class="text-xs text-muted">Loading...</span>
+				</div>
 				</div>
 				@CloneDropdown(data.CloneHTTPS, data.CloneSSH)
 			</div>
@@ -496,6 +501,99 @@ templ ErrorAlert(msg string) {
 
 templ EmptyState(msg string) {
 	<p class="text-muted text-center py-4">{ msg }</p>
+}
+
+templ SkeletonLine() {
+	<div class="gh-skeleton gh-skeleton-text"></div>
+}
+
+templ SkeletonLines(count int) {
+	for i := 0; i < count; i++ {
+		<div class="gh-skeleton gh-skeleton-text"></div>
+	}
+}
+
+templ SkeletonTitle() {
+	<div class="gh-skeleton gh-skeleton-title"></div>
+}
+
+templ SkeletonAvatar() {
+	<div class="gh-skeleton gh-skeleton-avatar"></div>
+}
+
+templ SkeletonAvatarSmall() {
+	<div class="gh-skeleton gh-skeleton-avatar-sm"></div>
+}
+
+templ SkeletonButton() {
+	<div class="gh-skeleton gh-skeleton-button"></div>
+}
+
+templ SkeletonCard(children ...templ.Component) {
+	<div class="gh-skeleton-card">
+		for _, child := range children {
+			@child
+		}
+	</div>
+}
+
+templ SkeletonListItem(hasTitle bool) {
+	<div class="gh-skeleton-list-item">
+		<div class={ skeletonAvatarClass(hasTitle) }></div>
+		<div style="flex:1; min-width:0">
+			<div class="gh-skeleton gh-skeleton-text" style="width:65%"></div>
+			<div class="gh-skeleton gh-skeleton-text" style="width:40%"></div>
+		</div>
+	</div>
+}
+
+func skeletonAvatarClass(isTitle bool) string {
+	if isTitle {
+		return "gh-skeleton gh-skeleton-avatar-sm"
+	}
+	return "gh-skeleton gh-skeleton-avatar"
+}
+
+templ SkeletonIssueList(count int) {
+	<div class="gh-list">
+		for i := 0; i < count; i++ {
+			@SkeletonListItem(true)
+		}
+	</div>
+}
+
+templ LoadingSpinner() {
+	<span class="gh-spinner" role="status" aria-label="Loading"></span>
+}
+
+templ LoadingSpinnerLarge() {
+	<span class="gh-spinner gh-spinner-lg" role="status" aria-label="Loading"></span>
+}
+
+templ LoadingSpinnerSmall() {
+	<span class="gh-spinner gh-spinner-sm" role="status" aria-label="Loading"></span>
+}
+
+templ HXIndicator(id string) {
+	<div id={ id } class="htmx-indicator flex items-center justify-center py-4">
+		@LoadingSpinnerLarge()
+		<span class="text-muted text-sm ml-2">Loading...</span>
+	</div>
+}
+
+templ SkeletonTable(count int) {
+	<div style="padding:1rem">
+		for i := 0; i < count; i++ {
+			<div class="flex items-center gap-2" style="padding:0.5rem 0">
+				<div class="gh-skeleton gh-skeleton-text" style="flex:2"></div>
+				<div class="gh-skeleton gh-skeleton-text" style="flex:1"></div>
+				<div class="gh-skeleton gh-skeleton-text" style="flex:1"></div>
+			</div>
+			if i < count-1 {
+				<div class="gh-skeleton-line"></div>
+			}
+		}
+	</div>
 }
 
 templ MarkdownTextarea(name, placeholder, value, csrf string) {
