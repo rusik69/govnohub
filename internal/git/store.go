@@ -226,6 +226,48 @@ func (s *Store) ListBranchSHAs(owner, name string) (map[string]string, error) {
 	return refs, nil
 }
 
+// TagInfo represents a git tag with its metadata.
+type TagInfo struct {
+	Name    string `json:"name"`
+	Ref     string `json:"ref"`
+	HeadSHA string `json:"head_sha"`
+}
+
+// ListTags lists all tags in a repository using git for-each-ref.
+func (s *Store) ListTags(owner, name string) ([]TagInfo, error) {
+	path := s.RepoPath(owner, name)
+	cmd := exec.Command("git", "-C", path, "for-each-ref", "refs/tags",
+		"--format=%(refname:short) %(objectname) %(*objectname)")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var tags []TagInfo
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
+		name := parts[0]
+		sha := parts[1]
+		ref := "refs/tags/" + name
+		// For annotated tags: parts[1] is the tag object SHA, parts[2] is the commit SHA
+		// For lightweight tags: parts[1] is the commit SHA, no *objectname
+		headSHA := sha
+		if len(parts) >= 3 && parts[2] != "" {
+			headSHA = parts[2]
+		}
+		tags = append(tags, TagInfo{Name: name, Ref: ref, HeadSHA: headSHA})
+	}
+	if tags == nil {
+		tags = []TagInfo{}
+	}
+	return tags, nil
+}
+
 type TreeEntry struct {
 	Path string `json:"path"`
 	Type string `json:"type"`

@@ -133,6 +133,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/fork", s.handleFork)
 
 			r.Get("/branches", s.handleListBranches)
+			r.Get("/tags", s.handleListTags)
 
 			r.Get("/issues", s.handleListIssues)
 			r.Post("/issues", s.handleCreateIssue)
@@ -637,6 +638,19 @@ func (s *Server) handleListBranches(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, branches)
+}
+
+func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	tags, err := s.git.ListTags(repository.OwnerName, repository.Name)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, tags)
 }
 
 func (s *Server) handleFork(w http.ResponseWriter, r *http.Request) {
