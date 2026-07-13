@@ -189,7 +189,22 @@ func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*Issue, error) {
 }
 
 func (s *Service) List(ctx context.Context, repoID uuid.UUID) ([]Issue, error) {
-	rows, err := s.pool.Query(ctx, issueSelect+issueFrom+` WHERE i.repo_id=$1 ORDER BY i.number DESC`, repoID)
+	return s.ListPaginated(ctx, repoID, 0, 0)
+}
+
+func (s *Service) ListPaginated(ctx context.Context, repoID uuid.UUID, limit, offset int) ([]Issue, error) {
+	query := issueSelect + issueFrom + ` WHERE i.repo_id=$1 ORDER BY i.number DESC`
+	var args []any
+	args = append(args, repoID)
+	if limit > 0 {
+		query += fmt.Sprintf(` LIMIT $%d`, len(args)+1)
+		args = append(args, limit)
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(` OFFSET $%d`, len(args)+1)
+		args = append(args, offset)
+	}
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -206,6 +221,11 @@ func (s *Service) List(ctx context.Context, repoID uuid.UUID) ([]Issue, error) {
 		issues = append(issues, *i)
 	}
 	return issues, rows.Err()
+}
+
+func (s *Service) CountByRepo(ctx context.Context, repoID uuid.UUID) (open, closed int, err error) {
+	err = s.pool.QueryRow(ctx, `SELECT COUNT(*) FILTER (WHERE state='open'), COUNT(*) FILTER (WHERE state='closed') FROM issues WHERE repo_id=$1`, repoID).Scan(&open, &closed)
+	return
 }
 
 func (s *Service) Get(ctx context.Context, repoID uuid.UUID, number int) (*Issue, error) {

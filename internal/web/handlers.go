@@ -467,10 +467,20 @@ func (h *Handler) handleIssues(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	issues, _ := h.deps.Issues.List(r.Context(), repository.ID)
+
 	state := r.URL.Query().Get("state")
+	if state == "" {
+		state = "open"
+	}
+
+	page, limit := parsePageLimit(r, 1, 25)
+	offset := (page - 1) * limit
+
+	issues, _ := h.deps.Issues.ListPaginated(r.Context(), repository.ID, limit, offset)
+	openCount, closedCount, _ := h.deps.Issues.CountByRepo(r.Context(), repository.ID)
+
 	header, nav := h.repoPageCtx(r, repository, "issues")
-	render(w, r, IssuesPage(h.layout(r, "Issues"), header, nav, issues, state, csrfFrom(r.Context())))
+	render(w, r, IssuesPage(h.layout(r, "Issues"), header, nav, issues, state, csrfFrom(r.Context()), page, limit, openCount, closedCount))
 }
 
 func (h *Handler) handleCreateIssue(w http.ResponseWriter, r *http.Request) {

@@ -1,34 +1,65 @@
 package web
 
 import (
+	"fmt"
+	"strconv"
+
 	"github.com/rusik69/govnohub/internal/issue"
 )
 
-templ IssuesPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, issues []issue.Issue, state, csrf string) {
+templ IssuesPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, issues []issue.Issue, state, csrf string, page, limit, openCount, closedCount int) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
 		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
-		Content: IssuesContent(header, nav, issues, state, csrf),
+		Content: IssuesContent(header, nav, issues, state, csrf, page, limit, openCount, closedCount),
 	})
 }
 
-templ IssuesContent(header RepoHeaderData, nav RepoNavData, issues []issue.Issue, state, csrf string) {
+templ IssuesContent(header RepoHeaderData, nav RepoNavData, issues []issue.Issue, state, csrf string, page, limit, openCount, closedCount int) {
 	@RepoPageShell(header, nav)
 	<div class="max-w-7xl mx-auto">
 		<div class="flex justify-between items-center mb-4 gap-3 flex-wrap">
-			@IssueSubhead(nav, issues, state)
+			@IssueSubhead(nav, state, openCount, closedCount)
 			@CollapsibleForm("New issue", IssueCreateForm(nav, csrf))
 		</div>
-		if len(filterIssues(issues, state)) == 0 {
+		if len(issues) == 0 {
 			@EmptyState("No issues found")
 		} else {
-			<div class="gh-list">
-				for _, i := range filterIssues(issues, state) {
+			<div class="gh-list" id="issue-list">
+				for _, i := range issues {
 					@IssueListItem(nav, i)
 				}
 			</div>
+			@issuePagination(nav, state, page, limit, openCount, closedCount)
 		}
 	</div>
+}
+
+templ issuePagination(nav RepoNavData, state string, page, limit, openCount, closedCount int) {
+	if totalPagesForState(openCount, closedCount, limit, state) > 1 {
+		<div class="flex justify-center gap-2 mt-4">
+			if page > 1 {
+				<a href={ templ.SafeURL(fmt.Sprintf("/%s/%s/issues?state=%s&page=%d&limit=%d", nav.Owner, nav.Repo, state, page-1, limit)) } class="btn-secondary text-sm">Previous</a>
+			}
+			<span class="self-center text-sm text-gray-600 dark:text-gray-400">
+				Page { strconv.Itoa(page) } of { strconv.Itoa(totalPagesForState(openCount, closedCount, limit, state)) }
+			</span>
+			if page < totalPagesForState(openCount, closedCount, limit, state) {
+				<a href={ templ.SafeURL(fmt.Sprintf("/%s/%s/issues?state=%s&page=%d&limit=%d", nav.Owner, nav.Repo, state, page+1, limit)) } class="btn-secondary text-sm">Next</a>
+			}
+		</div>
+	}
+}
+
+func totalPagesForState(openCount, closedCount, limit int, state string) int {
+	count := openCount
+	if state == "closed" {
+		count = closedCount
+	}
+	if count <= 0 {
+		return 1
+	}
+	return (count + limit - 1) / limit
 }
 
 templ IssueCreateForm(nav RepoNavData, csrf string) {
@@ -38,17 +69,4 @@ templ IssueCreateForm(nav RepoNavData, csrf string) {
 		@FormField("Description", "issue-body", "textarea", "body", "", false)
 		<button type="submit" class="btn self-start">Create issue</button>
 	</form>
-}
-
-func filterIssues(issues []issue.Issue, state string) []issue.Issue {
-	if state == "" || state == "open" {
-		state = "open"
-	}
-	var out []issue.Issue
-	for _, i := range issues {
-		if i.State == state {
-			out = append(out, i)
-		}
-	}
-	return out
 }

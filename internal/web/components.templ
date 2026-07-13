@@ -262,15 +262,15 @@ func tabClass(active, tab string) string {
 	return ""
 }
 
-templ IssueSubhead(nav RepoNavData, issues []issue.Issue, state string) {
+templ IssueSubhead(nav RepoNavData, state string, openCount, closedCount int) {
 	<div class="gh-subhead">
 		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class={ subheadPillClass(state, "open") } aria-current={ subheadAriaCurrent(state, "open") }>
 			@Icon("issue-opened", "")
-			{ strconv.Itoa(countIssuesByState(issues, "open")) } Open
+			{ strconv.Itoa(openCount) } Open
 		</a>
 		<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues?state=closed") } class={ subheadPillClass(state, "closed") } aria-current={ subheadAriaCurrent(state, "closed") }>
 			@Icon("issue-closed", "")
-			{ strconv.Itoa(countIssuesByState(issues, "closed")) } Closed
+			{ strconv.Itoa(closedCount) } Closed
 		</a>
 	</div>
 }

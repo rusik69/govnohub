@@ -136,6 +136,22 @@ func parseNum(w http.ResponseWriter, r *http.Request, key string) (int, bool) {
 	return n, true
 }
 
+func parsePageLimit(r *http.Request, defaultPage, defaultLimit int) (page, limit int) {
+	page = defaultPage
+	limit = defaultLimit
+	if p := r.URL.Query().Get("page"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil && n >= 1 {
+			page = n
+		}
+	}
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n >= 1 && n <= 100 {
+			limit = n
+		}
+	}
+	return
+}
+
 func parseUUIDParam(w http.ResponseWriter, r *http.Request, key string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, key))
 	if err != nil {
