@@ -632,3 +632,42 @@ html.dark .gh-overlay {
 .gh-no-scroll {
   overflow: hidden;
 }
+
+/* Markdown preview toggle on comment forms */
+.md-preview-container {
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+.md-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--hover);
+}
+.md-tab {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.md-tab:hover {
+  color: var(--text);
+}
+.md-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.md-write textarea {
+  border: none !important;
+  border-radius: 0 !important;
+  resize: vertical;
+}
+.md-preview-content {
+  padding: 0.75rem 1rem;
+  min-height: 6rem;
+}

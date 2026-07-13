@@ -497,3 +497,16 @@ templ ErrorAlert(msg string) {
 templ EmptyState(msg string) {
 	<p class="text-muted text-center py-4">{ msg }</p>
 }
+
+templ MarkdownTextarea(name, placeholder, value, csrf string) {
+	<div class="md-preview-container" data-md-container="true">
+		<div class="md-tabs" data-md-tabs="true">
+			<button type="button" class="md-tab active" data-md-tab="write">Write</button>
+			<button type="button" class="md-tab" data-md-tab="preview" data-csrf={ csrf }>Preview</button>
+		</div>
+		<div class="md-write" data-md-write="true">
+			<textarea name={ name } class="input" rows="4" placeholder={ placeholder }>{ value }</textarea>
+		</div>
+		<div class="md-preview-content markdown" data-md-preview="true" style="display:none"></div>
+	</div>
+}

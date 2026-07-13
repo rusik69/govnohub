@@ -66,7 +66,8 @@ templ IssueCreateForm(nav RepoNavData, csrf string) {
 	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues") } class="flex flex-col gap-3">
 		@CSRFInput(csrf)
 		@FormField("Title", "issue-title", "text", "title", "", true)
-		@FormField("Description", "issue-body", "textarea", "body", "", false)
+		<label class="text-sm">Description</label>
+		@MarkdownTextarea("body", "Add a description for this issue", "", csrf)
 		<button type="submit" class="btn self-start">Create issue</button>
 	</form>
 }

@@ -86,8 +86,8 @@ templ PRDetailContent(data PRDetailData) {
 									<option value="changes_requested">Request changes</option>
 									<option value="commented">Comment</option>
 								</select>
-								<textarea name="body" class="input mb-2" rows="2"></textarea>
-								<button type="submit" class="btn-secondary w-full">Submit review</button>
+								@MarkdownTextarea("body", "Leave a review comment", "", data.CSRF)
+								<button type="submit" class="btn-secondary w-full mt-2">Submit review</button>
 							</form>
 						</div>
 					</div>
@@ -118,8 +118,8 @@ templ PRDetailContent(data PRDetailData) {
 							@CSRFInput(data.CSRF)
 							<input type="hidden" name="path" id="comment-path"/>
 							<input type="hidden" name="line" id="comment-line"/>
-							<textarea name="body" class="input mb-2" rows="3" placeholder="Add inline comment (click or focus a line)"></textarea>
-							<button type="submit" class="btn-secondary w-full">Add comment</button>
+							@MarkdownTextarea("body", "Add inline comment (click or focus a line)", "", data.CSRF)
+							<button type="submit" class="btn-secondary w-full mt-2">Add comment</button>
 						</form>
 					</div>
 				</div>

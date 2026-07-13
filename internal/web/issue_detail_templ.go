@@ -142,7 +142,11 @@ func IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issue
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<textarea name=\"body\" class=\"input mb-3\" rows=\"4\" placeholder=\"Leave a comment\"></textarea> <button type=\"submit\" class=\"btn\">Comment</button></form></div><aside class=\"sidebar\"><div id=\"issue-toast\"></div><div class=\"gh-sidebar-panel\"><div class=\"gh-sidebar-section\"><div class=\"gh-sidebar-label\">Assignees</div><form hx-post=\"")
+		templ_7745c5c3_Err = MarkdownTextarea("body", "Leave a comment", "", csrf).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<button type=\"submit\" class=\"btn mt-2\">Comment</button></form></div><aside class=\"sidebar\"><div id=\"issue-toast\"></div><div class=\"gh-sidebar-panel\"><div class=\"gh-sidebar-section\"><div class=\"gh-sidebar-label\">Assignees</div><form hx-post=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -1548,3 +1548,17 @@ func (h *Handler) handleCompare(w http.ResponseWriter, r *http.Request) {
 		Header: header, Nav: nav, Result: result, Base: baseRef, Head: headRef, CSRF: csrfFrom(r.Context()),
 	}))
 }
+
+func (h *Handler) handlePreviewMarkdown(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	body := r.FormValue("body")
+	html, err := RenderMarkdown(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(html))
+}

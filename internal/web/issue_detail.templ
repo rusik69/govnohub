@@ -34,8 +34,8 @@ templ IssueDetailContent(header RepoHeaderData, nav RepoNavData, iss *issue.Issu
 				</ul>
 				<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/issues/" + strconv.Itoa(iss.Number) + "/comment") } class="mt-4">
 					@CSRFInput(csrf)
-					<textarea name="body" class="input mb-3" rows="4" placeholder="Leave a comment"></textarea>
-					<button type="submit" class="btn">Comment</button>
+					@MarkdownTextarea("body", "Leave a comment", "", csrf)
+					<button type="submit" class="btn mt-2">Comment</button>
 				</form>
 			</div>
 			<aside class="sidebar">

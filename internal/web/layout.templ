@@ -102,6 +102,64 @@ templ Layout(data LayoutData) {
 						if (!menu.contains(e.target)) menu.removeAttribute('open');
 					});
 				});
+
+				/* Markdown preview toggle */
+				function setupMarkdownPreview(container) {
+					if (!container) return;
+					const tabs = container.querySelector('[data-md-tabs]');
+					const writePane = container.querySelector('[data-md-write]');
+					const previewPane = container.querySelector('[data-md-preview]');
+					const textarea = writePane ? writePane.querySelector('textarea') : null;
+					if (!tabs || !writePane || !previewPane || !textarea) return;
+
+					tabs.addEventListener('click', function(e) {
+						const btn = e.target.closest('[data-md-tab]');
+						if (!btn) return;
+
+						const isWrite = btn.getAttribute('data-md-tab') === 'write';
+						const csrf = btn.getAttribute('data-csrf') || '';
+						const metaToken = document.querySelector('meta[name="csrf-token"]');
+						const token = csrf || (metaToken ? metaToken.content : '');
+
+						tabs.querySelectorAll('[data-md-tab]').forEach(function(t) {
+							t.classList.toggle('active', t === btn);
+						});
+
+						if (isWrite) {
+							writePane.style.display = '';
+							previewPane.style.display = 'none';
+						} else {
+							writePane.style.display = 'none';
+							previewPane.style.display = '';
+							const body = textarea.value;
+							if (body.trim() === '') {
+								previewPane.innerHTML = '<p class="text-muted text-sm">Nothing to preview.</p>';
+								return;
+							}
+							previewPane.innerHTML = '<p class="text-muted text-sm">Loading preview...</p>';
+							fetch('/preview-markdown', {
+								method: 'POST',
+								headers: {
+									'Content-Type': 'application/x-www-form-urlencoded',
+									'X-CSRF-Token': token
+								},
+								body: 'body=' + encodeURIComponent(body)
+							})
+							.then(function(r) { return r.text(); })
+							.then(function(html) { previewPane.innerHTML = html; })
+							.catch(function() { previewPane.innerHTML = '<p class="text-red text-sm">Preview failed.</p>'; });
+						}
+					});
+				}
+
+				document.addEventListener('DOMContentLoaded', function() {
+					document.querySelectorAll('[data-md-container]').forEach(setupMarkdownPreview);
+				});
+				document.addEventListener('htmx:afterSwap', function(evt) {
+					if (evt.detail.target) {
+						evt.detail.target.querySelectorAll('[data-md-container]').forEach(setupMarkdownPreview);
+					}
+				});
 			</script>
 		</head>
 		<body class="min-h-screen">

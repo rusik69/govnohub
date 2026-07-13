@@ -19,6 +19,8 @@ func (h *Handler) Routes() chi.Router {
 
 	r.Handle("/static/*", http.StripPrefix("/static/", staticHandler()))
 
+	r.Post("/preview-markdown", h.handlePreviewMarkdown)
+
 	r.Group(func(r chi.Router) {
 		r.Use(h.optionalAuth)
 		r.Get("/login", h.handleLoginGet)
