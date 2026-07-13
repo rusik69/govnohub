@@ -123,6 +123,7 @@ func (s *Server) Router() http.Handler {
 		r.Route("/repos/{owner}/{repo}", func(r chi.Router) {
 			r.Get("/", s.handleGetRepo)
 			r.Patch("/", s.handleUpdateRepo)
+			r.Delete("/", s.handleDeleteRepo)
 			r.Get("/contents/*", s.handleGetContents)
 			r.Get("/commits", s.handleGetCommits)
 			r.Post("/star", s.handleStar)
@@ -498,6 +499,30 @@ func (s *Server) handleUpdateRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, updated)
+}
+
+func (s *Server) handleDeleteRepo(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepoWrite(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireScope(w, r, auth.ScopeRepoWrite) {
+		return
+	}
+	if err := s.git.Remove(chi.URLParam(r, "owner"), chi.URLParam(r, "repo")); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := s.repos.Delete(r.Context(), repository.ID); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if s.audit != nil {
+		_ = s.audit.Record(r.Context(), userIDFrom(r.Context()), "repo.delete", "repo", repository.ID.String(), map[string]string{
+			"full_name": repository.FullName,
+		})
+	}
+	jsonOK(w, map[string]string{"status": "deleted"})
 }
 
 func (s *Server) handleGetContents(w http.ResponseWriter, r *http.Request) {

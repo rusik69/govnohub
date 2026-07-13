@@ -323,6 +323,17 @@ func scanRepos(rows pgx.Rows) ([]Repository, error) {
 	return repos, rows.Err()
 }
 
+func (s *Service) Delete(ctx context.Context, repoID uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM repos WHERE id=$1`, repoID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Service) ResolveOwnerID(ctx context.Context, ownerName string) (string, uuid.UUID, error) {
 	var id uuid.UUID
 	err := s.pool.QueryRow(ctx, `SELECT id FROM users WHERE username=$1`, ownerName).Scan(&id)

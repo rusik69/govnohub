@@ -38,6 +38,12 @@ func (s *Store) Exists(owner, name string) bool {
 	return err == nil
 }
 
+// Remove deletes the bare git repository for the given owner/name from disk.
+func (s *Store) Remove(owner, name string) error {
+	path := s.RepoPath(owner, name)
+	return os.RemoveAll(path)
+}
+
 func (s *Store) Init(ctx context.Context, owner, name string) error {
 	if s.Exists(owner, name) {
 		return nil
