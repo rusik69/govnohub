@@ -198,7 +198,7 @@ func TestForkFlow_GitCommitOnFork(t *testing.T) {
 	repo := owner + "/gitrepo"
 
 	// Fork the repo
-	resp, forkOut := testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+repo+"/fork", forkerToken, nil)
+	resp, _ := testutil.DoJSON(t, http.MethodPost, base+"/api/v1/repos/"+repo+"/fork", forkerToken, nil)
 	requireStatus(t, resp, http.StatusOK, "fork repo for git test")
 	forkRepo := forker + "/gitrepo-fork"
 
@@ -208,8 +208,7 @@ func TestForkFlow_GitCommitOnFork(t *testing.T) {
 	if err := env.Git.Init(ctx, forker, "gitrepo-fork"); err != nil {
 		t.Fatalf("init fork git store: %v", err)
 	}
-	seedSHA, err := env.Git.SeedMainBranch(forker, "gitrepo-fork", "main")
-	if err != nil {
+	if _, err := env.Git.SeedMainBranch(forker, "gitrepo-fork", "main"); err != nil {
 		t.Fatalf("seed fork main branch: %v", err)
 	}
 
