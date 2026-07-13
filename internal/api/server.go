@@ -18,6 +18,7 @@ import (
 	"github.com/rusik69/govnohub/internal/aireview"
 	"github.com/rusik69/govnohub/internal/audit"
 	"github.com/rusik69/govnohub/internal/auth"
+	"github.com/rusik69/govnohub/internal/events"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
 	pkg "github.com/rusik69/govnohub/internal/package"
@@ -42,6 +43,7 @@ type Server struct {
 	packages *pkg.Service
 	webhooks *webhook.Service
 	search   *search.Service
+	events   *events.Service
 	pool     *pgxpool.Pool
 	org      *org.Service
 	aiReview *aireview.Service
@@ -61,6 +63,7 @@ func NewServer(
 	pkgSvc *pkg.Service,
 	webhookSvc *webhook.Service,
 	searchSvc *search.Service,
+	eventsSvc *events.Service,
 	pool *pgxpool.Pool,
 	orgSvc *org.Service,
 	aiReviewSvc *aireview.Service,
@@ -72,6 +75,7 @@ func NewServer(
 		auth: authSvc, repos: repoSvc, git: gitStore,
 		issues: issueSvc, pulls: pullSvc, releases: releaseSvc,
 		packages: pkgSvc, webhooks: webhookSvc, search: searchSvc,
+		events: eventsSvc,
 		pool: pool, org: orgSvc, aiReview: aiReviewSvc,
 		notify: notifySvc, wiki: wikiSvc, audit: auditSvc,
 	}
@@ -103,6 +107,7 @@ func (s *Server) Router() http.Handler {
 	r.Post("/api/v1/auth/login", s.handleLogin)
 	r.Get("/api/v1/rate_limit", s.handleRateLimit)
 	r.Get("/api/v1/meta", s.handleMeta)
+	r.Get("/api/v1/events", s.handleEvents)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(s.authenticate)

@@ -12,6 +12,7 @@ import (
 	"github.com/rusik69/govnohub/internal/aireview"
 	"github.com/rusik69/govnohub/internal/audit"
 	"github.com/rusik69/govnohub/internal/auth"
+	"github.com/rusik69/govnohub/internal/events"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
 	pkg "github.com/rusik69/govnohub/internal/package"
@@ -65,6 +66,7 @@ func New(t *testing.T) *Env {
 		pkg.NewService(pg.Pool, filepath.Join(artifactRoot, "packages")),
 		webhook.NewService(pg.Pool),
 		search.NewService("http://127.0.0.1:1"),
+		events.NewService(pg.Pool),
 		pg.Pool,
 		org.NewService(pg.Pool),
 		aireview.NewService(pg.Pool, aireview.NewClient(aireview.Config{Enabled: false})),

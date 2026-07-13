@@ -15,6 +15,7 @@ import (
 	"github.com/rusik69/govnohub/internal/auth"
 	"github.com/rusik69/govnohub/internal/config"
 	"github.com/rusik69/govnohub/internal/db"
+	"github.com/rusik69/govnohub/internal/events"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
 	pkg "github.com/rusik69/govnohub/internal/package"
@@ -67,6 +68,7 @@ func main() {
 		pkg.NewService(pool, cfg.ArtifactRoot+"/packages"),
 		webhook.NewService(pool),
 		searchSvc,
+		events.NewService(pool),
 		pool,
 		org.NewService(pool),
 		aireview.NewService(pool, aireview.NewClient(aireview.Config{
