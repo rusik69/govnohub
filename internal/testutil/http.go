@@ -91,3 +91,20 @@ func AdminCreateUser(t *testing.T, baseURL, adminToken, username string) {
 		t.Fatalf("admin create user %s: %d", username, resp.StatusCode)
 	}
 }
+
+// RequireOK fails the test immediately if resp status is not 2xx.
+// Useful for assertions like "this call should succeed".
+func RequireOK(t *testing.T, resp *http.Response, msg string) {
+	t.Helper()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		t.Fatalf("%s: unexpected status %d (want 2xx)", msg, resp.StatusCode)
+	}
+}
+
+// RequireStatus fails the test immediately if resp status does not match want.
+func RequireStatus(t *testing.T, resp *http.Response, want int, msg string) {
+	t.Helper()
+	if resp.StatusCode != want {
+		t.Fatalf("%s: got status %d (want %d)", msg, resp.StatusCode, want)
+	}
+}
