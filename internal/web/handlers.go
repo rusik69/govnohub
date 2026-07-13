@@ -1386,3 +1386,28 @@ func (h *Handler) handleCommitDetail(w http.ResponseWriter, r *http.Request) {
 		Header: header, Nav: nav, Commit: commit, CSRF: csrfFrom(r.Context()),
 	}))
 }
+
+func (h *Handler) handleCompare(w http.ResponseWriter, r *http.Request) {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	// Extract {base}...{head} from the wildcard path
+	path := chi.URLParam(r, "*")
+	parts := strings.SplitN(path, "...", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		http.Error(w, "expected {base}...{head} format", http.StatusBadRequest)
+		return
+	}
+	baseRef := parts[0]
+	headRef := parts[1]
+	result, err := h.deps.Git.CompareCommits(repository.OwnerName, repository.Name, baseRef, headRef)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	header, nav := h.repoPageCtx(r, repository, "code")
+	render(w, r, ComparePage(h.layout(r, "Comparing "+baseRef+"..."+headRef+" · "+repository.FullName), CompareData{
+		Header: header, Nav: nav, Result: result, Base: baseRef, Head: headRef, CSRF: csrfFrom(r.Context()),
+	}))
+}

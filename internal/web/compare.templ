@@ -1,0 +1,162 @@
+package web
+
+import (
+	"strconv"
+
+	gitstore "github.com/rusik69/govnohub/internal/git"
+)
+
+type CompareData struct {
+	Header RepoHeaderData
+	Nav    RepoNavData
+	Result *gitstore.CompareResult
+	Base   string
+	Head   string
+	CSRF   string
+}
+
+templ ComparePage(layout LayoutData, data CompareData) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
+		Content: CompareContent(data),
+	})
+}
+
+templ CompareContent(data CompareData) {
+	@RepoPageShell(data.Header, data.Nav)
+	<div class="max-w-7xl mx-auto">
+		<div class="compare-header card mb-4">
+			<div class="compare-header-top flex items-center gap-3 pb-3 border-b mb-3">
+				@Icon("git-compare", "text-muted")
+				<h2 class="text-lg font-bold m-0">Comparing</h2>
+				<code class="font-mono text-sm text-muted bg-gray-100 px-2 py-1 rounded">{ data.Base }</code>
+				<span class="text-muted">...</span>
+				<code class="font-mono text-sm text-muted bg-gray-100 px-2 py-1 rounded">{ data.Head }</code>
+			</div>
+
+			<div class="compare-stats flex flex-wrap gap-6 text-sm mb-3">
+				<div class="compare-status">
+					@compareStatusBadge(data.Result.Status)
+				</div>
+				<div>
+					<span class="font-bold">{ strconv.Itoa(data.Result.AheadBy) }</span>
+					<span class="text-muted"> commits ahead</span>
+				</div>
+				if data.Result.BehindBy > 0 {
+					<div>
+						<span class="font-bold">{ strconv.Itoa(data.Result.BehindBy) }</span>
+						<span class="text-muted"> commits behind</span>
+					</div>
+				}
+			</div>
+
+			if data.Result.MergeBaseCommit.SHA != "" {
+				<div class="text-sm text-muted mb-2">
+					Merge base: <code class="font-mono">{ shortSHA(data.Result.MergeBaseCommit.SHA) }</code>
+				</div>
+			}
+		</div>
+
+		if data.Result.Status != "identical" && len(data.Result.Commits) > 0 {
+			<div class="compare-commits card mb-4">
+				<h3 class="text-md font-bold px-4 py-3 border-b m-0">
+					Commits ({ strconv.Itoa(data.Result.TotalCommits) })
+				</h3>
+				<div class="compare-commit-list">
+					for _, c := range data.Result.Commits {
+						<div class="compare-commit-row flex items-center gap-3 px-4 py-2 border-b last:border-0">
+							@Avatar(c.Author, "")
+							<div class="flex-1 min-w-0">
+								<div class="commit-msg text-sm truncate">{ c.Message }</div>
+							</div>
+							<code class="font-mono text-xs text-muted whitespace-nowrap">{ shortSHA(c.SHA) }</code>
+							<a href={ templ.SafeURL("/" + data.Nav.Owner + "/" + data.Nav.Repo + "/commit/" + c.SHA) } class="gh-header-btn" aria-label="View commit">
+								@Icon("code", "")
+							</a>
+						</div>
+					}
+				</div>
+			</div>
+		}
+
+		if len(data.Result.Files) > 0 {
+			<div class="compare-files">
+				<div class="commit-stats-bar card mb-4 flex items-center gap-4 text-sm">
+					<span class="font-bold">{ strconv.Itoa(len(data.Result.Files)) } files changed</span>
+					<span class="text-green font-bold">++{ totalAdditions(data.Result.Files) }</span>
+					<span class="text-red font-bold">--{ totalDeletions(data.Result.Files) }</span>
+				</div>
+
+				for _, f := range data.Result.Files {
+					<div class="commit-file-row card mb-2">
+						<details class="commit-file-details">
+							<summary class="commit-file-summary flex items-center gap-2 p-3 cursor-pointer">
+								@fileStatusIcon(f.Status)
+								<a href={ templ.SafeURL("/" + data.Nav.Owner + "/" + data.Nav.Repo + "/blob/" + data.Head + "/" + f.Filename) } class="font-mono text-sm">{ f.Filename }</a>
+								<span class="ml-auto text-xs text-muted">
+									if f.Additions > 0 {
+										<span class="text-green">+{ strconv.Itoa(f.Additions) }</span>
+									}
+									if f.Deletions > 0 {
+										<span class="text-red ml-1">-{ strconv.Itoa(f.Deletions) }</span>
+									}
+								</span>
+							</summary>
+							<div class="commit-file-diff p-2 border-t">
+								<pre class="font-mono text-xs overflow-x-auto max-h-48 overflow-y-auto">{ extractFileDiff(data.Result.Diff, f.Filename) }</pre>
+							</div>
+						</details>
+					</div>
+				}
+			</div>
+		}
+
+		if data.Result.Status == "identical" {
+			<div class="card p-4 text-center text-muted">
+				@Icon("git-compare", "text-muted")
+				<p class="mt-2">These branches are identical. There's nothing to compare.</p>
+			</div>
+		}
+	</div>
+}
+
+templ compareStatusBadge(status string) {
+	if status == "ahead" {
+		<span class="gh-state gh-state-open">
+			@Icon("arrow-up", "")
+			Ahead
+		</span>
+	} else if status == "behind" {
+		<span class="gh-state gh-state-closed">
+			@Icon("arrow-down", "")
+			Behind
+		</span>
+	} else if status == "diverged" {
+		<span class="gh-state" style="background:#8250df;color:#fff;">
+			@Icon("git-branch", "")
+			Diverged
+		</span>
+	} else {
+		<span class="gh-state gh-state-merged">
+			@Icon("check", "")
+			Identical
+		</span>
+	}
+}
+
+func totalAdditions(files []gitstore.ChangedFile) string {
+	total := 0
+	for _, f := range files {
+		total += f.Additions
+	}
+	return strconv.Itoa(total)
+}
+
+func totalDeletions(files []gitstore.ChangedFile) string {
+	total := 0
+	for _, f := range files {
+		total += f.Deletions
+	}
+	return strconv.Itoa(total)
+}
