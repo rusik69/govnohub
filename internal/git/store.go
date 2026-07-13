@@ -337,6 +337,36 @@ func (s *Store) GetCommits(owner, name, ref string, limit int) ([]CommitInfo, er
 	return commits, nil
 }
 
+// GetPRCommits returns commits in headBranch that are not reachable from baseBranch.
+func (s *Store) GetPRCommits(owner, name, baseBranch, headBranch string, limit int) ([]CommitInfo, error) {
+	path := s.RepoPath(owner, name)
+	cmd := exec.Command("git", "-C", path, "log",
+		"--format=%H||%s||%an||%aI",
+		fmt.Sprintf("--max-count=%d", limit),
+		baseBranch+".."+headBranch)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var commits []CommitInfo
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "||", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		commits = append(commits, CommitInfo{
+			SHA:     parts[0],
+			Message: parts[1],
+			Author:  parts[2],
+			Date:    parts[3],
+		})
+	}
+	return commits, nil
+}
+
 func (s *Store) UpdateHead(owner, name, branch string) (string, error) {
 	repo, err := s.Open(owner, name)
 	if err != nil {

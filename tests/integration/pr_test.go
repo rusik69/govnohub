@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/testutil"
 	"github.com/rusik69/govnohub/tests/testenv"
 )
@@ -224,6 +225,41 @@ func TestPRFullLifecycle(t *testing.T) {
 	}
 	if comments[0]["body"] != "Great work on this PR!" {
 		t.Fatalf("comment body=%q", comments[0]["body"])
+	}
+
+	// Get PR commits — should include the commit we made on feature-branch
+	req, _ = http.NewRequest(http.MethodGet, env.URL+"/api/v1/repos/"+owner+"/pr-test/pulls/1/commits", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list PR commits status=%d", resp.StatusCode)
+	}
+	var commits []gitstore.CommitInfo
+	if err := json.NewDecoder(resp.Body).Decode(&commits); err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) == 0 {
+		t.Fatal("expected at least 1 commit in PR")
+	}
+	found := false
+	for _, c := range commits {
+		if c.Message == "feat: add new-file.txt" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected to find commit with message %q among %d commits", "feat: add new-file.txt", len(commits))
+	}
+	if commits[0].SHA == "" {
+		t.Error("commit SHA should not be empty")
+	}
+	if commits[0].Author == "" {
+		t.Error("commit author should not be empty")
 	}
 
 	// Merge the PR

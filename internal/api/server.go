@@ -161,6 +161,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/pulls/{number}/reviews", s.handleAddReview)
 			r.Post("/pulls/{number}/merge", s.handleMergePR)
 			r.Get("/pulls/{number}/diff", s.handlePRDiff)
+			r.Get("/pulls/{number}/commits", s.handlePRCommits)
 			r.Get("/pulls/{number}/comments", s.handleListPRComments)
 			r.Post("/pulls/{number}/comments", s.handleAddPRComment)
 			r.Get("/pulls/{number}/ai-reviews", s.handleListAIReviews)
@@ -1010,6 +1011,31 @@ func (s *Server) handlePRDiff(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte(diff))
+}
+
+func (s *Server) handlePRCommits(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	pr, err := s.pulls.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	commits, err := s.git.GetPRCommits(repository.OwnerName, repository.Name, pr.BaseBranch, pr.HeadBranch, 100)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if commits == nil {
+		commits = []gitstore.CommitInfo{}
+	}
+	jsonOK(w, commits)
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
