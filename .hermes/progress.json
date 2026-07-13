@@ -28,7 +28,8 @@
     30,
     31,
     32,
-    34
+    34,
+    35
   ],
   "items_in_progress": [
     4,
@@ -37,12 +38,11 @@
     19,
     23,
     26,
-    33,
-    35
+    33
   ],
   "items_failed": [],
-  "current_item": 35,
-  "last_commit": "2346355",
+  "current_item": 36,
+  "last_commit": "8cd421d",
   "ci_status": "failed (pre-existing milestone tests)",
   "notes": "Cron-driven autonomous improvement. One item per 5-min tick."
 }
