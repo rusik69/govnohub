@@ -1186,7 +1186,30 @@ func (h *Handler) handleFork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	su := userFrom(r.Context())
-	fork, err := h.deps.Repos.Fork(r.Context(), repository, su.ID, su.Username)
+
+	// Determine target namespace from form, default to current user's personal namespace
+	namespace := r.FormValue("namespace")
+
+	ownerType := "user"
+	ownerID := su.ID
+	ownerName := su.Username
+
+	if namespace != "" && namespace != su.Username {
+		// Check if namespace matches an org the user is a member of
+		orgs, err := h.deps.Org.ListForUser(r.Context(), su.ID)
+		if err == nil {
+			for _, o := range orgs {
+				if o.Name == namespace {
+					ownerType = "org"
+					ownerID = o.ID
+					ownerName = o.Name
+					break
+				}
+			}
+		}
+	}
+
+	fork, err := h.deps.Repos.Fork(r.Context(), repository, ownerType, ownerID, ownerName)
 	if err != nil {
 		ref := r.URL.Query().Get("ref")
 		if ref == "" {
@@ -1204,6 +1227,47 @@ func (h *Handler) handleFork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/"+fork.FullName, http.StatusSeeOther)
+}
+
+func (h *Handler) handleForkDialog(w http.ResponseWriter, r *http.Request) {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+	su := userFrom(r.Context())
+	if su == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Build list of namespaces: personal + orgs
+	namespaces := []ForkNamespace{
+		{Kind: "user", Name: su.Username, DisplayName: su.Username},
+	}
+
+	orgs, err := h.deps.Org.ListForUser(r.Context(), su.ID)
+	if err == nil {
+		for _, o := range orgs {
+			display := o.DisplayName
+			if display == "" {
+				display = o.Name
+			}
+			namespaces = append(namespaces, ForkNamespace{
+				Kind:        "org",
+				Name:        o.Name,
+				DisplayName: display,
+			})
+		}
+	}
+
+	render(w, r, ForkDialog(ForkDialogData{
+		Owner:      repository.OwnerName,
+		Repo:       repository.Name,
+		FullName:   repository.FullName,
+		CSRF:       csrfFrom(r.Context()),
+		Namespaces: namespaces,
+	}))
 }
 
 func (h *Handler) handleMilestones(w http.ResponseWriter, r *http.Request) {

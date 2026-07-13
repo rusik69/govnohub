@@ -69,6 +69,7 @@ func (h *Handler) Routes() chi.Router {
 			r.Post("/watch", h.handleWatch)
 			r.Post("/unwatch", h.handleUnwatch)
 			r.Post("/fork", h.handleFork)
+			r.Get("/fork/dialog", h.handleForkDialog)
 
 			r.Get("/actions", h.handleActions)
 			r.Post("/actions/trigger", h.handleTriggerAction)

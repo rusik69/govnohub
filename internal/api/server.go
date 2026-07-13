@@ -713,7 +713,7 @@ func (s *Server) handleFork(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	fork, err := s.repos.Fork(r.Context(), repository, u.ID, u.Username)
+	fork, err := s.repos.Fork(r.Context(), repository, "user", u.ID, u.Username)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return

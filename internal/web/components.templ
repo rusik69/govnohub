@@ -171,13 +171,17 @@ templ RepoHeader(data RepoHeaderData) {
 						</button>
 					</form>
 				}
-				<form method="post" action={ templ.SafeURL("/" + data.Repository.FullName + "/fork") }>
-					@CSRFInput(data.CSRF)
-					<button type="submit" class="gh-btn-seg">
-						@Icon("repo-forked", "")
-						Fork
-					</button>
-				</form>
+				<button
+					type="button"
+					class="gh-btn-seg"
+					hx-get={ templ.SafeURL("/" + data.Repository.FullName + "/fork/dialog") }
+					hx-target="#fork-dialog-container"
+					hx-swap="innerHTML"
+					hx-trigger="click"
+				>
+					@Icon("repo-forked", "")
+					Fork
+				</button>
 				</div>
 				@CloneDropdown(data.CloneHTTPS, data.CloneSSH)
 			</div>

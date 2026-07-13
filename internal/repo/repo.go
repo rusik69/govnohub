@@ -194,9 +194,9 @@ func (s *Service) UpdateBranchHead(ctx context.Context, repoID uuid.UUID, branch
 	return err
 }
 
-func (s *Service) Fork(ctx context.Context, source *Repository, userID uuid.UUID, username string) (*Repository, error) {
+func (s *Service) Fork(ctx context.Context, source *Repository, ownerType string, ownerID uuid.UUID, ownerName string) (*Repository, error) {
 	desc := "Forked from " + source.FullName
-	r, err := s.Create(ctx, "user", userID, username, source.Name+"-fork", desc, source.IsPrivate)
+	r, err := s.Create(ctx, ownerType, ownerID, ownerName, source.Name+"-fork", desc, source.IsPrivate)
 	if err != nil {
 		return nil, err
 	}

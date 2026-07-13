@@ -56,6 +56,8 @@ templ RepoContent(data RepoPageData) {
 			</div>
 		}
 	</div>
+	<div id="fork-dialog-container"></div>
+	@ForkDialogScript()
 }
 
 func repoEntryURL(fullName, ref, basePath string, e gitstore.TreeEntry) string {

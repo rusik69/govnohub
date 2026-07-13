@@ -285,7 +285,7 @@ func TestRepoFork(t *testing.T) {
 	}
 
 	t.Run("fork creates repo with -fork suffix", func(t *testing.T) {
-		fork, err := repoSvc.Fork(ctx, r, forker.ID, forker.Username)
+		fork, err := repoSvc.Fork(ctx, r, "user", forker.ID, forker.Username)
 		if err != nil {
 			t.Fatalf("Fork: %v", err)
 		}
@@ -305,7 +305,7 @@ func TestRepoFork(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fork, err := repoSvc.Fork(ctx, privateRepo, forker.ID, forker.Username)
+		fork, err := repoSvc.Fork(ctx, privateRepo, "user", forker.ID, forker.Username)
 		if err != nil {
 			t.Fatalf("Fork: %v", err)
 		}

@@ -1,0 +1,133 @@
+package web
+
+import (
+	"github.com/rusik69/govnohub/internal/repo"
+)
+
+type ForkNamespace struct {
+	Kind        string // "user" or "org"
+	Name        string
+	DisplayName string
+}
+
+type ForkDialogData struct {
+	Owner      string
+	Repo       string
+	FullName   string
+	CSRF       string
+	Namespaces []ForkNamespace
+	Forks      []*repo.Repository
+}
+
+templ ForkDialog(data ForkDialogData) {
+	<!-- Overlay -->
+	<div class="gh-overlay" onclick="closeForkDialog()" id="fork-overlay"></div>
+	<!-- Dialog -->
+	<div class="gh-dialog" id="fork-dialog" role="dialog" aria-label="Fork repository">
+		<div class="gh-dialog-header">
+			<h3 class="gh-dialog-title">Fork repository</h3>
+			<button type="button" class="gh-dialog-close" onclick="closeForkDialog()" aria-label="Close">
+				<svg class="gh-icon" aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
+					<path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
+				</svg>
+			</button>
+		</div>
+		<form
+			id="fork-form"
+			method="post"
+			action={ templ.SafeURL("/" + data.FullName + "/fork") }
+			hx-post={ templ.SafeURL("/" + data.FullName + "/fork") }
+			hx-target="body"
+			hx-swap="innerHTML"
+			hx-push-url="true"
+			hx-disabled-elt="button[type=submit]"
+		>
+			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+			<input type="hidden" name="from_dialog" value="1"/>
+
+			<div class="gh-dialog-body">
+				<p class="text-sm text-muted mb-3">
+					Create a fork of <strong>{ data.Owner }/{ data.Repo }</strong> in another namespace.
+				</p>
+
+				if len(data.Namespaces) > 0 {
+					<label class="text-sm font-medium mb-1 inline-block">Owner</label>
+					<div class="gh-namespace-list">
+						for _, ns := range data.Namespaces {
+							<label class="gh-namespace-item">
+								<input
+									type="radio"
+									name="namespace"
+									value={ ns.Name }
+									if ns.Kind == "user" {
+										checked
+									}
+									class="gh-namespace-radio"
+								/>
+								<span class="gh-namespace-info">
+									if ns.Kind == "user" {
+										<span class="gh-namespace-kind" aria-label="personal">{ "@" }</span>
+									} else {
+										<span class="gh-namespace-kind" aria-label="organization">{ "O" }</span>
+									}
+									<span class="gh-namespace-name">{ ns.DisplayName }</span>
+									<span class="gh-namespace-type text-xs text-muted">
+										if ns.Kind == "user" {
+											Personal
+										} else {
+											Organization
+										}
+									</span>
+								</span>
+							</label>
+						}
+					</div>
+				} else {
+					<p class="text-sm text-muted">No namespaces available.</p>
+				}
+
+				<div class="text-xs text-muted mt-3">
+					@Icon("repo-forked", "")
+					You can only fork a repository once per namespace.
+				</div>
+			</div>
+
+			<div class="gh-dialog-footer">
+				<button type="button" class="gh-btn" onclick="closeForkDialog()">Cancel</button>
+				<button type="submit" class="gh-btn-primary">
+					@Icon("repo-forked", "")
+					Fork repository
+				</button>
+			</div>
+		</form>
+	</div>
+}
+
+templ ForkDialogScript() {
+	<script>
+		function openForkDialog() {
+			const overlay = document.getElementById('fork-overlay');
+			const dialog = document.getElementById('fork-dialog');
+			if (overlay && dialog) {
+				overlay.classList.remove('hidden');
+				dialog.classList.remove('hidden');
+				document.body.classList.add('gh-no-scroll');
+			}
+		}
+		function closeForkDialog() {
+			const overlay = document.getElementById('fork-overlay');
+			const dialog = document.getElementById('fork-dialog');
+			if (overlay && dialog) {
+				overlay.classList.add('hidden');
+				dialog.classList.add('hidden');
+				document.body.classList.remove('gh-no-scroll');
+			}
+		}
+		// Close on Escape key
+		document.addEventListener('keydown', function(e) {
+			if (e.key === 'Escape') {
+				closeForkDialog();
+			}
+		});
+	</script>
+}
