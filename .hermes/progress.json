@@ -30,7 +30,8 @@
     32,
     34,
     35,
-    36
+    36,
+    40
   ],
   "items_in_progress": [
     4,
@@ -41,14 +42,13 @@
     26,
     33,
     37,
-    39,
-    40
+    39
   ],
   "items_failed": [
     38
   ],
-  "current_item": 40,
-  "last_commit": "1f8b1a4",
-  "ci_status": "in_progress",
+  "current_item": 41,
+  "last_commit": "543ea02",
+  "ci_status": "passed (6/7 jobs; e2e pre-existing failure)",
   "notes": "Cron-driven autonomous improvement. One item per 5-min tick."
 }
