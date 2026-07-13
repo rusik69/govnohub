@@ -159,3 +159,61 @@ func (s *Server) handleMarkNotificationRead(w http.ResponseWriter, r *http.Reque
 	}
 	jsonOK(w, map[string]string{"status": "read"})
 }
+
+func (s *Server) handleSetIssueAssignees(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepoWrite(w, r)
+	if !ok {
+		return
+	}
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	i, err := s.issues.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	var req struct {
+		Assignees []string `json:"assignees"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	var userIDs []uuid.UUID
+	for _, username := range req.Assignees {
+		u, err := s.auth.GetUserByUsername(r.Context(), username)
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, "assignee not found: "+username)
+			return
+		}
+		userIDs = append(userIDs, u.ID)
+	}
+
+	if err := s.issues.SetAssignees(r.Context(), i.ID, userIDs); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Record events
+	for _, username := range req.Assignees {
+		s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "assigned", map[string]interface{}{
+			"assignee": username,
+		})
+	}
+	if len(req.Assignees) == 0 && i.AssigneeID != nil {
+		s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "unassigned", nil)
+	}
+
+	// Notify new assignees
+	for _, username := range req.Assignees {
+		u, err := s.auth.GetUserByUsername(r.Context(), username)
+		if err == nil && u.ID != userIDFrom(r.Context()) {
+			s.notify.NotifyAsync(u.ID, "Issue assigned",
+				"You were assigned to #"+strconv.Itoa(num)+" in "+repository.FullName,
+				"/"+repository.OwnerName+"/"+repository.Name+"/issues/"+strconv.Itoa(num))
+		}
+	}
+
+	updated, _ := s.issues.Get(r.Context(), repository.ID, num)
+	jsonOK(w, updated)
+}

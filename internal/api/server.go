@@ -142,6 +142,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/issues/{number}/close", s.handleCloseIssue)
 			r.Patch("/issues/{number}", s.handlePatchIssue)
 			r.Get("/issues/{number}/timeline", s.handleGetIssueTimeline)
+			r.Put("/issues/{number}/assignees", s.handleSetIssueAssignees)
 			r.Post("/issues/{number}/labels/{labelID}", s.handleAddIssueLabel)
 			r.Delete("/issues/{number}/labels/{labelID}", s.handleRemoveIssueLabel)
 			r.Get("/labels", s.handleListLabels)

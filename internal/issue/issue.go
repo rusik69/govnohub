@@ -23,6 +23,7 @@ type Issue struct {
 	MilestoneID   *uuid.UUID `json:"milestone_id,omitempty"`
 	Milestone     string     `json:"milestone,omitempty"`
 	Labels        []Label    `json:"labels,omitempty"`
+	Assignees     []string   `json:"assignees,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
@@ -119,7 +120,32 @@ func (s *Service) enrich(ctx context.Context, i *Issue) error {
 		return err
 	}
 	i.Labels = labels
+	assignees, err := s.loadAssignees(ctx, i.ID)
+	if err != nil {
+		return err
+	}
+	i.Assignees = assignees
 	return nil
+}
+
+func (s *Service) loadAssignees(ctx context.Context, issueID uuid.UUID) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT u.username FROM issue_assignees ia
+		JOIN users u ON ia.user_id = u.id
+		WHERE ia.issue_id=$1 ORDER BY u.username`, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
 }
 
 func (s *Service) Create(ctx context.Context, repoID, authorID uuid.UUID, title, body string) (*Issue, error) {
@@ -260,6 +286,32 @@ func (s *Service) RemoveLabel(ctx context.Context, issueID, labelID uuid.UUID) e
 func (s *Service) SetAssignee(ctx context.Context, issueID uuid.UUID, assigneeID *uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `UPDATE issues SET assignee_id=$2, updated_at=NOW() WHERE id=$1`, issueID, assigneeID)
 	return err
+}
+
+// SetAssignees replaces all assignees for an issue with the given user IDs.
+func (s *Service) SetAssignees(ctx context.Context, issueID uuid.UUID, userIDs []uuid.UUID) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `DELETE FROM issue_assignees WHERE issue_id=$1`, issueID); err != nil {
+		return err
+	}
+	for _, uid := range userIDs {
+		if _, err := tx.Exec(ctx, `INSERT INTO issue_assignees (issue_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, issueID, uid); err != nil {
+			return err
+		}
+	}
+	// Also sync the legacy single assignee_id field to the first user (or nil)
+	var first *uuid.UUID
+	if len(userIDs) > 0 {
+		first = &userIDs[0]
+	}
+	if _, err := tx.Exec(ctx, `UPDATE issues SET assignee_id=$2, updated_at=NOW() WHERE id=$1`, issueID, first); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Service) SetMilestone(ctx context.Context, issueID uuid.UUID, milestoneID *uuid.UUID) error {
