@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -137,6 +138,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/tags", s.handleCreateTag)
 
 			r.Get("/compare/*", s.handleCompareCommits)
+
+			r.Get("/archive/{ref}.tar.gz", s.handleArchive)
 
 		r.Get("/issues", s.handleListIssues)
 			r.Post("/issues", s.handleCreateIssue)
@@ -1117,6 +1120,26 @@ func (s *Server) handleCompareCommits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, result)
+}
+
+func (s *Server) handleArchive(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	ref := chi.URLParam(r, "ref")
+	if ref == "" {
+		ref = repository.DefaultBranch
+	}
+	archive, err := s.git.Archive(repository.OwnerName, repository.Name, ref)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer archive.Close()
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", "attachment; filename="+repository.Name+"-"+ref+".tar.gz")
+	io.Copy(w, archive)
 }
 
 func (s *Server) handlePRCommits(w http.ResponseWriter, r *http.Request) {

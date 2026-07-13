@@ -809,6 +809,39 @@ func (s *Store) CanMerge(owner, name, baseBranch, headBranch string) (bool, erro
 	return true, nil
 }
 
+// Archive creates a tar.gz archive of the repository at the given ref (branch, tag, or SHA).
+// It returns an io.ReadCloser that streams the archive data. The caller must close it.
+func (s *Store) Archive(owner, name, ref string) (io.ReadCloser, error) {
+	path := s.RepoPath(owner, name)
+	cmd := exec.Command("git", "-C", path, "archive", "--format=tar.gz", ref)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("git archive stdout: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("git archive start: %w", err)
+	}
+	return &archiveReader{rc: stdout, cmd: cmd}, nil
+}
+
+// archiveReader wraps a pipe to wait for the command to finish on Close.
+type archiveReader struct {
+	rc  io.ReadCloser
+	cmd *exec.Cmd
+}
+
+func (a *archiveReader) Read(p []byte) (int, error) {
+	return a.rc.Read(p)
+}
+
+func (a *archiveReader) Close() error {
+	err := a.rc.Close()
+	if werr := a.cmd.Wait(); werr != nil && err == nil {
+		err = werr
+	}
+	return err
+}
+
 func resolveCommit(repo *git.Repository, ref string) (*object.Commit, error) {
 	if ref == "" {
 		head, err := repo.Head()
