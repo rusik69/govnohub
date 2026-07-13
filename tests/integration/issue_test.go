@@ -70,7 +70,9 @@ func TestIssueCRUD(t *testing.T) {
 	}
 
 	// List issues
-	resp, err := http.Get(env.URL + "/api/v1/repos/" + owner + "/testrepo/issues")
+	req, _ := http.NewRequest(http.MethodGet, env.URL+"/api/v1/repos/"+owner+"/testrepo/issues", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,11 +162,16 @@ func TestIssueComments(t *testing.T) {
 	}
 
 	// List comments
-	resp, _ = http.Get(env.URL + "/api/v1/repos/" + owner + "/repo/issues/1/comments")
+	req, _ := http.NewRequest(http.MethodGet, env.URL+"/api/v1/repos/"+owner+"/repo/issues/1/comments", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("list comments status=%d", resp.StatusCode)
 	}
-	defer resp.Body.Close()
 	var comments []map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
 		t.Fatal(err)
@@ -222,11 +229,16 @@ func TestIssueLabels(t *testing.T) {
 	labelID2, _ := out["id"].(string)
 
 	// List labels
-	resp, _ = http.Get(env.URL + "/api/v1/repos/" + owner + "/labels-repo/labels")
+	req, _ := http.NewRequest(http.MethodGet, env.URL+"/api/v1/repos/"+owner+"/labels-repo/labels", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("list labels status=%d", resp.StatusCode)
 	}
-	defer resp.Body.Close()
 	var labels []map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&labels); err != nil {
 		t.Fatal(err)
@@ -335,11 +347,16 @@ func TestIssueMilestones(t *testing.T) {
 	}
 
 	// List milestones
-	resp, _ = http.Get(env.URL + "/api/v1/repos/" + owner + "/ms-repo/milestones")
+	req, _ := http.NewRequest(http.MethodGet, env.URL+"/api/v1/repos/"+owner+"/ms-repo/milestones", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("list milestones status=%d", resp.StatusCode)
 	}
-	defer resp.Body.Close()
 	var milestones []map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&milestones); err != nil {
 		t.Fatal(err)
@@ -358,18 +375,18 @@ func TestIssueMilestones(t *testing.T) {
 	}
 
 	// Verify milestone is closed
-	resp, out = testutil.DoJSON(t, http.MethodGet, env.URL+"/api/v1/repos/"+owner+"/ms-repo/milestones", token, nil)
+	req, _ = http.NewRequest(http.MethodGet, env.URL+"/api/v1/repos/"+owner+"/ms-repo/milestones", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("list milestones after close: %d", resp.StatusCode)
 	}
-	// The response is an array - need to handle differently
-	resp2, _ := http.Get(env.URL + "/api/v1/repos/" + owner + "/ms-repo/milestones")
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("list milestones get: %d", resp2.StatusCode)
-	}
-	defer resp2.Body.Close()
 	var msAfterClose []map[string]any
-	if err := json.NewDecoder(resp2.Body).Decode(&msAfterClose); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&msAfterClose); err != nil {
 		t.Fatal(err)
 	}
 	found := false
