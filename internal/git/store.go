@@ -551,6 +551,165 @@ func (s *Store) Diff(owner, name, baseSHA, headSHA string) (string, error) {
 	return out.String(), nil
 }
 
+// CompareResult holds the result of comparing two commits/branches.
+type CompareResult struct {
+	BaseCommit     CommitInfo    `json:"base_commit"`
+	HeadCommit     CommitInfo    `json:"head_commit"`
+	MergeBaseCommit CommitInfo   `json:"merge_base_commit"`
+	Status         string        `json:"status"` // identical, ahead, behind, diverged
+	AheadBy        int           `json:"ahead_by"`
+	BehindBy       int           `json:"behind_by"`
+	TotalCommits   int           `json:"total_commits"`
+	Commits        []CommitInfo  `json:"commits"`
+	Files          []ChangedFile `json:"files"`
+	Diff           string        `json:"diff,omitempty"`
+}
+
+// CompareCommits compares two refs (branches, tags, or SHAs) and returns
+// a structured result including merge base, ahead/behind counts, commits,
+// changed files, and the unified diff.
+func (s *Store) CompareCommits(owner, name, baseRef, headRef string) (*CompareResult, error) {
+	repo, err := s.Open(owner, name)
+	if err != nil {
+		return nil, err
+	}
+	path := s.RepoPath(owner, name)
+
+	baseCommit, err := resolveCommit(repo, baseRef)
+	if err != nil {
+		return nil, fmt.Errorf("resolve base ref %q: %w", baseRef, err)
+	}
+	headCommit, err := resolveCommit(repo, headRef)
+	if err != nil {
+		return nil, fmt.Errorf("resolve head ref %q: %w", headRef, err)
+	}
+
+	baseSHA := baseCommit.Hash.String()
+	headSHA := headCommit.Hash.String()
+
+	// Merge base
+	mergeBaseSHA := ""
+	mbOut, mbErr := exec.Command("git", "-C", path, "merge-base", baseSHA, headSHA).Output()
+	if mbErr == nil {
+		mergeBaseSHA = strings.TrimSpace(string(mbOut))
+	}
+
+	// Ahead / behind counts
+	ahead, behind := 0, 0
+	abOut, abErr := exec.Command("git", "-C", path, "rev-list", "--count", "--left-right", baseSHA+"..."+headSHA).Output()
+	if abErr == nil {
+		parts := strings.Fields(string(abOut))
+		if len(parts) == 2 {
+			behind, _ = strconv.Atoi(parts[0])
+			ahead, _ = strconv.Atoi(parts[1])
+		}
+	}
+
+	// Status
+	status := "diverged"
+	switch {
+	case ahead > 0 && behind == 0:
+		status = "ahead"
+	case behind > 0 && ahead == 0:
+		status = "behind"
+	case ahead == 0 && behind == 0:
+		status = "identical"
+	}
+
+	// Commits in head not in base
+	var commits []CommitInfo
+	cOut, cErr := exec.Command("git", "-C", path, "log", "--format=%H||%s||%an||%aI", "--max-count=50", baseSHA+".."+headSHA).Output()
+	if cErr == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(cOut)), "\n") {
+			if line == "" {
+				continue
+			}
+			parts := strings.SplitN(line, "||", 4)
+			if len(parts) < 4 {
+				continue
+			}
+			commits = append(commits, CommitInfo{
+				SHA: parts[0], Message: parts[1], Author: parts[2], Date: parts[3],
+			})
+		}
+	}
+	if commits == nil {
+		commits = []CommitInfo{}
+	}
+
+	// Changed files via --numstat
+	var files []ChangedFile
+	fOut, fErr := exec.Command("git", "-C", path, "diff", "--numstat", baseSHA, headSHA).Output()
+	if fErr == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(fOut)), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			parts := strings.Fields(line)
+			if len(parts) < 3 {
+				continue
+			}
+			addsStr, delsStr := parts[0], parts[1]
+			filename := strings.Join(parts[2:], " ")
+
+			status := "modified"
+			adds := atoiSafe(addsStr)
+			dels := atoiSafe(delsStr)
+			if adds > 0 && dels == 0 {
+				status = "added"
+			} else if adds == 0 && dels > 0 {
+				status = "removed"
+			}
+			files = append(files, ChangedFile{
+				Filename:  filename,
+				Status:    status,
+				Additions: adds,
+				Deletions: dels,
+				Changes:   adds + dels,
+			})
+		}
+	}
+	if files == nil {
+		files = []ChangedFile{}
+	}
+
+	// Full diff
+	diffBytes, _ := exec.Command("git", "-C", path, "diff", baseSHA, headSHA).Output()
+	diffStr := string(diffBytes)
+
+	// Merge base commit info
+	var mergeBaseCommitInfo CommitInfo
+	if mergeBaseSHA != "" {
+		if mbc, mbErr := repo.CommitObject(plumbing.NewHash(mergeBaseSHA)); mbErr == nil {
+			mergeBaseCommitInfo = CommitInfo{
+				SHA: mbc.Hash.String(), Message: strings.Split(mbc.Message, "\n")[0],
+				Author: mbc.Author.Name, Date: mbc.Author.When.Format("2006-01-02T15:04:05Z"),
+			}
+		}
+	}
+
+	makeInfo := func(c *object.Commit) CommitInfo {
+		return CommitInfo{
+			SHA: c.Hash.String(), Message: strings.Split(c.Message, "\n")[0],
+			Author: c.Author.Name, Date: c.Author.When.Format("2006-01-02T15:04:05Z"),
+		}
+	}
+
+	return &CompareResult{
+		BaseCommit:      makeInfo(baseCommit),
+		HeadCommit:      makeInfo(headCommit),
+		MergeBaseCommit: mergeBaseCommitInfo,
+		Status:          status,
+		AheadBy:         ahead,
+		BehindBy:        behind,
+		TotalCommits:    len(commits),
+		Commits:         commits,
+		Files:           files,
+		Diff:            diffStr,
+	}, nil
+}
+
 func (s *Store) Merge(owner, name, baseBranch, headBranch string, squash bool) (string, error) {
 	path := s.RepoPath(owner, name)
 	wt, err := os.MkdirTemp("", "govnohub-merge-*")

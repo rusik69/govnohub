@@ -51,14 +51,15 @@
     45,
     46,
     47,
-    50
+    50,
+    51
   ],
   "items_failed": [
     38,
     48
   ],
-  "current_item": 50,
-  "last_commit": "08a601b",
-  "ci_status": "success (all jobs pass except pre-existing e2e milestone failures)",
+  "current_item": 51,
+  "last_commit": "8ecfc08",
+  "ci_status": "running (unit+build+helm+deploy-e2e passed; integration/e2e/k8s still running)",
   "notes": "Cron-driven autonomous improvement. One item per 5-min tick."
 }

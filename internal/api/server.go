@@ -136,7 +136,9 @@ func (s *Server) Router() http.Handler {
 			r.Get("/tags", s.handleListTags)
 			r.Post("/tags", s.handleCreateTag)
 
-			r.Get("/issues", s.handleListIssues)
+			r.Get("/compare/*", s.handleCompareCommits)
+
+		r.Get("/issues", s.handleListIssues)
 			r.Post("/issues", s.handleCreateIssue)
 			r.Get("/issues/{number}", s.handleGetIssue)
 			r.Get("/issues/{number}/comments", s.handleListIssueComments)
@@ -1093,6 +1095,28 @@ func (s *Server) handlePRDiff(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte(diff))
+}
+
+func (s *Server) handleCompareCommits(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	// Extract base...head from the wildcard path
+	path := chi.URLParam(r, "*")
+	parts := strings.SplitN(path, "...", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		jsonError(w, http.StatusBadRequest, "expected {base}...{head} format")
+		return
+	}
+	baseRef := parts[0]
+	headRef := parts[1]
+	result, err := s.git.CompareCommits(repository.OwnerName, repository.Name, baseRef, headRef)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, result)
 }
 
 func (s *Server) handlePRCommits(w http.ResponseWriter, r *http.Request) {
