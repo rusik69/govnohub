@@ -101,6 +101,7 @@ func (s *Server) Router() http.Handler {
 
 	r.Post("/api/v1/users", s.handleRegister)
 	r.Post("/api/v1/auth/login", s.handleLogin)
+	r.Get("/api/v1/rate_limit", s.handleRateLimit)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(s.authenticate)
