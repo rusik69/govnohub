@@ -857,3 +857,184 @@ func resolveCommit(repo *git.Repository, ref string) (*object.Commit, error) {
 	}
 	return repo.CommitObject(refObj.Hash())
 }
+
+// CreateBlob creates a git blob object with the given content and returns its SHA.
+func (s *Store) CreateBlob(owner, name string, content []byte) (string, error) {
+	repo, err := s.Open(owner, name)
+	if err != nil {
+		return "", err
+	}
+	obj := repo.Storer.NewEncodedObject()
+	obj.SetType(plumbing.BlobObject)
+	obj.SetSize(int64(len(content)))
+	w, err := obj.Writer()
+	if err != nil {
+		return "", err
+	}
+	if _, err := w.Write(content); err != nil {
+		return "", err
+	}
+	w.Close()
+	hash, err := repo.Storer.SetEncodedObject(obj)
+	if err != nil {
+		return "", err
+	}
+	return hash.String(), nil
+}
+
+// TreeEntryInput represents a tree entry in a create-tree request.
+type TreeEntryInput struct {
+	Path string `json:"path"`
+	Mode string `json:"mode"` // "100644", "100755", "040000", "120000"
+	Type string `json:"type"` // "blob", "tree", "commit"
+	SHA  string `json:"sha"`
+}
+
+// CreateTree creates a git tree object from the given entries and returns its SHA.
+func (s *Store) CreateTree(owner, name string, entries []TreeEntryInput) (string, error) {
+	repo, err := s.Open(owner, name)
+	if err != nil {
+		return "", err
+	}
+	var treeEntries []object.TreeEntry
+	for _, e := range entries {
+		mode, err := parseFileMode(e.Mode)
+		if err != nil {
+			return "", fmt.Errorf("invalid mode %q: %w", e.Mode, err)
+		}
+		hash := plumbing.NewHash(e.SHA)
+		if hash.IsZero() {
+			return "", fmt.Errorf("invalid sha: %s", e.SHA)
+		}
+		treeEntries = append(treeEntries, object.TreeEntry{
+			Name: e.Path,
+			Mode: mode,
+			Hash: hash,
+		})
+	}
+	tree := &object.Tree{Entries: treeEntries}
+	treeObj := repo.Storer.NewEncodedObject()
+	if err := tree.Encode(treeObj); err != nil {
+		return "", err
+	}
+	hash, err := repo.Storer.SetEncodedObject(treeObj)
+	if err != nil {
+		return "", err
+	}
+	return hash.String(), nil
+}
+
+func parseFileMode(mode string) (filemode.FileMode, error) {
+	switch mode {
+	case "100644":
+		return filemode.Regular, nil
+	case "100755":
+		return filemode.Executable, nil
+	case "040000":
+		return filemode.Dir, nil
+	case "120000":
+		return filemode.Symlink, nil
+	case "160000":
+		return filemode.Submodule, nil
+	default:
+		return filemode.Regular, fmt.Errorf("unknown mode %q", mode)
+	}
+}
+
+// CommitAuthor represents a commit author or committer.
+type CommitAuthor struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Date  string `json:"date,omitempty"`
+}
+
+// CreateCommitRequest holds parameters for creating a commit.
+type CreateCommitRequest struct {
+	Message   string         `json:"message"`
+	Tree      string         `json:"tree"`
+	Parents   []string       `json:"parents"`
+	Author    *CommitAuthor  `json:"author,omitempty"`
+	Committer *CommitAuthor  `json:"committer,omitempty"`
+}
+
+// CreateCommit creates a git commit object and returns its SHA.
+func (s *Store) CreateCommit(owner, name string, req CreateCommitRequest) (string, error) {
+	repo, err := s.Open(owner, name)
+	if err != nil {
+		return "", err
+	}
+
+	treeHash := plumbing.NewHash(req.Tree)
+	if treeHash.IsZero() {
+		return "", fmt.Errorf("invalid tree sha: %s", req.Tree)
+	}
+
+	now := time.Now()
+	author := object.Signature{Name: "govnohub", Email: "govnohub@local", When: now}
+	committer := object.Signature{Name: "govnohub", Email: "govnohub@local", When: now}
+
+	if req.Author != nil {
+		author.Name = req.Author.Name
+		author.Email = req.Author.Email
+		if req.Author.Date != "" {
+			if t, err := time.Parse(time.RFC3339, req.Author.Date); err == nil {
+				author.When = t
+			}
+		}
+	}
+	if req.Committer != nil {
+		committer.Name = req.Committer.Name
+		committer.Email = req.Committer.Email
+		if req.Committer.Date != "" {
+			if t, err := time.Parse(time.RFC3339, req.Committer.Date); err == nil {
+				committer.When = t
+			}
+		}
+	}
+
+	var parentHashes []plumbing.Hash
+	for _, p := range req.Parents {
+		h := plumbing.NewHash(p)
+		if !h.IsZero() {
+			parentHashes = append(parentHashes, h)
+		}
+	}
+
+	commit := &object.Commit{
+		Message:      req.Message,
+		TreeHash:     treeHash,
+		ParentHashes: parentHashes,
+		Author:       author,
+		Committer:    committer,
+	}
+	commitObj := repo.Storer.NewEncodedObject()
+	if err := commit.Encode(commitObj); err != nil {
+		return "", err
+	}
+	hash, err := repo.Storer.SetEncodedObject(commitObj)
+	if err != nil {
+		return "", err
+	}
+	return hash.String(), nil
+}
+
+// CreateRefParams holds parameters for creating or updating a git reference.
+type CreateRefParams struct {
+	Ref string `json:"ref"` // e.g. "refs/heads/new-branch" or "refs/tags/v1.0"
+	SHA string `json:"sha"`
+}
+
+// CreateRef creates or updates a git reference to point to the given SHA.
+func (s *Store) CreateRef(owner, name string, params CreateRefParams) error {
+	repo, err := s.Open(owner, name)
+	if err != nil {
+		return err
+	}
+	hash := plumbing.NewHash(params.SHA)
+	if hash.IsZero() {
+		return fmt.Errorf("invalid sha: %s", params.SHA)
+	}
+	refName := plumbing.ReferenceName(params.Ref)
+	ref := plumbing.NewHashReference(refName, hash)
+	return repo.Storer.SetReference(ref)
+}

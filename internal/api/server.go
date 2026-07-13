@@ -205,6 +205,13 @@ func (s *Server) Router() http.Handler {
 			r.Put("/collaborators/{username}", s.handleAddCollaborator)
 			r.Delete("/collaborators/{username}", s.handleRemoveCollaborator)
 
+			r.Route("/git", func(r chi.Router) {
+				r.Post("/blobs", s.handleCreateGitBlob)
+				r.Post("/trees", s.handleCreateGitTree)
+				r.Post("/commits", s.handleCreateGitCommit)
+				r.Post("/refs", s.handleCreateGitRef)
+			})
+
 			r.Get("/wiki", s.handleListWikiPages)
 			r.Get("/wiki/{slug}", s.handleGetWikiPage)
 			r.Put("/wiki/{slug}", s.handleUpsertWikiPage)
