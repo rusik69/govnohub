@@ -10,7 +10,11 @@ env:
   HELM_RELEASE: govnohub
 
 jobs:
-  backend:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [unit, integration, e2e, deploy-e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,15 +26,22 @@ jobs:
         run: go install github.com/a-h/templ/cmd/templ@latest
       - name: Generate templates
         run: make generate
-      - name: Unit tests
-        run: make test-unit
-      - name: Integration tests
-        run: make test-integration
-      - name: E2E tests
-        run: make test-e2e
-      - name: Deploy E2E tests
-        run: make test-deploy-e2e
-      - name: Build
+      - name: Run ${{ matrix.suite }} tests
+        run: make test-${{ matrix.suite }}
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@latest
+      - name: Generate templates
+        run: make generate
+      - name: Build all binaries
         run: make build
 
   helm:
