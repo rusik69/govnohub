@@ -14,24 +14,40 @@ import (
 	"github.com/rusik69/govnohub/tests/testenv"
 )
 
+// listNotifications performs a GET to /api/v1/notifications and returns the decoded array.
+func listNotifications(t *testing.T, url, token string) []map[string]any {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list do: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list notifications status=%d", resp.StatusCode)
+	}
+	var items []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	return items
+}
+
 func TestNotifications_EmptyList(t *testing.T) {
 	env := testenv.New(t)
 	defer env.Cleanup()
 
 	token := testutil.RegisterAndLogin(t, env.URL, "notifuser1")
-	// Fresh user should have no notifications
-	resp, out := testutil.DoJSON(t, http.MethodGet, env.URL+"/api/v1/notifications", token, nil)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("list notifications status=%d out=%v", resp.StatusCode, out)
+
+	// Fresh user should have no notifications — the API returns a JSON array
+	items := listNotifications(t, env.URL+"/api/v1/notifications", token)
+	if len(items) != 0 {
+		t.Fatalf("expected 0 notifications, got %d", len(items))
 	}
-	var items []map[string]any
-	if err := json.Unmarshal([]byte(out["data"].(string)), &items); err == nil {
-		// If it's wrapped in data field, try that
-	} else {
-		items = nil
-	}
-	// The response is directly a JSON array
-	_ = items
 }
 
 func TestNotifications_ListAndMarkRead(t *testing.T) {
@@ -79,31 +95,17 @@ func TestNotifications_ListAndMarkRead(t *testing.T) {
 	}
 
 	// List notifications
-	req, _ := http.NewRequest(http.MethodGet, env.URL+"/api/v1/notifications", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	respList, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer respList.Body.Close()
-	if respList.StatusCode != http.StatusOK {
-		t.Fatalf("list notifications status=%d", respList.StatusCode)
-	}
-
-	var items []map[string]any
-	if err := json.NewDecoder(respList.Body).Decode(&items); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	items := listNotifications(t, env.URL+"/api/v1/notifications", token)
 	if len(items) != 3 {
 		t.Fatalf("expected 3 notifications, got %d", len(items))
 	}
 
-	// Verify notification fields
-	checkNotificationFields(t, items[0], notifications[0].title, notifications[0].body, notifications[0].link, false)
+	// Verify notification fields (order is newest first)
+	checkNotificationFields(t, items[0], notifications[2].title, notifications[2].body, notifications[2].link, false)
 	checkNotificationFields(t, items[1], notifications[1].title, notifications[1].body, notifications[1].link, false)
-	checkNotificationFields(t, items[2], notifications[2].title, notifications[2].body, notifications[2].link, false)
+	checkNotificationFields(t, items[2], notifications[0].title, notifications[0].body, notifications[0].link, false)
 
-	// Verify order: newest first (compare strings, ISO 8601 sorts lexicographically)
+	// Verify order: newest first (ISO 8601 sorts lexicographically)
 	t0, _ := items[0]["created_at"].(string)
 	t1, _ := items[1]["created_at"].(string)
 	if t0 < t1 {
@@ -125,23 +127,9 @@ func TestNotifications_ListAndMarkRead(t *testing.T) {
 	}
 
 	// Verify the notification is now marked as read
-	req, _ = http.NewRequest(http.MethodGet, env.URL+"/api/v1/notifications", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	respList2, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer respList2.Body.Close()
-	if respList2.StatusCode != http.StatusOK {
-		t.Fatalf("list notifications after mark read: status=%d", respList2.StatusCode)
-	}
-
-	var items2 []map[string]any
-	if err := json.NewDecoder(respList2.Body).Decode(&items2); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	items2 := listNotifications(t, env.URL+"/api/v1/notifications", token)
 	if len(items2) != 3 {
-		t.Fatalf("expected 3 notifications, got %d", len(items2))
+		t.Fatalf("expected 3 notifications after mark read, got %d", len(items2))
 	}
 	if read, _ := items2[0]["read"].(bool); !read {
 		t.Error("expected first notification to be marked as read")
@@ -168,7 +156,6 @@ func TestNotifications_InvalidID(t *testing.T) {
 
 	// Mark with valid UUID but non-existent
 	resp, out = testutil.DoJSON(t, http.MethodPost, env.URL+"/api/v1/notifications/"+uuid.New().String()+"/read", token, nil)
-	// Non-existent notification should not error (idempotent MarkRead)
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("nonexistent id: expected 200, got %d out=%v", resp.StatusCode, out)
 	}
@@ -179,13 +166,18 @@ func TestNotifications_Unauthenticated(t *testing.T) {
 	defer env.Cleanup()
 
 	// List without auth
-	resp, out := testutil.DoJSON(t, http.MethodGet, env.URL+"/api/v1/notifications", "", nil)
+	req, _ := http.NewRequest(http.MethodGet, env.URL+"/api/v1/notifications", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("list without auth: expected 401, got %d out=%v", resp.StatusCode, out)
+		t.Errorf("list without auth: expected 401, got %d", resp.StatusCode)
 	}
 
 	// Mark read without auth
-	resp, out = testutil.DoJSON(t, http.MethodPost, env.URL+"/api/v1/notifications/"+uuid.New().String()+"/read", "", nil)
+	resp, out := testutil.DoJSON(t, http.MethodPost, env.URL+"/api/v1/notifications/"+uuid.New().String()+"/read", "", nil)
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("mark read without auth: expected 401, got %d out=%v", resp.StatusCode, out)
 	}
@@ -212,39 +204,13 @@ func TestNotifications_UserIsolation(t *testing.T) {
 	}
 
 	// Bob should see empty list
-	req, _ := http.NewRequest(http.MethodGet, env.URL+"/api/v1/notifications", nil)
-	req.Header.Set("Authorization", "Bearer "+bobToken)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("bob list notifications: status=%d", resp.StatusCode)
-	}
-	var bobItems []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&bobItems); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	bobItems := listNotifications(t, env.URL+"/api/v1/notifications", bobToken)
 	if len(bobItems) != 0 {
 		t.Errorf("bob saw %d notifications, expected 0", len(bobItems))
 	}
 
 	// Alice should see her notification
-	req, _ = http.NewRequest(http.MethodGet, env.URL+"/api/v1/notifications", nil)
-	req.Header.Set("Authorization", "Bearer "+aliceToken)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("alice list notifications: status=%d", resp.StatusCode)
-	}
-	var aliceItems []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&aliceItems); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	aliceItems := listNotifications(t, env.URL+"/api/v1/notifications", aliceToken)
 	if len(aliceItems) != 1 {
 		t.Fatalf("alice saw %d notifications, expected 1", len(aliceItems))
 	}
@@ -259,17 +225,7 @@ func TestNotifications_UserIsolation(t *testing.T) {
 		t.Fatalf("bob mark alice's notif read: expected 200, got %d out=%v", resp.StatusCode, out)
 	}
 	// Alice's notification should still be unread
-	req, _ = http.NewRequest(http.MethodGet, env.URL+"/api/v1/notifications", nil)
-	req.Header.Set("Authorization", "Bearer "+aliceToken)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	var aliceItems2 []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&aliceItems2); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	aliceItems2 := listNotifications(t, env.URL+"/api/v1/notifications", aliceToken)
 	if len(aliceItems2) != 1 {
 		t.Fatalf("expected 1 notification for alice, got %d", len(aliceItems2))
 	}
@@ -299,24 +255,11 @@ func TestNotifications_CountAndOrder(t *testing.T) {
 	}
 
 	// List and verify count and order
-	req, _ := http.NewRequest(http.MethodGet, env.URL+"/api/v1/notifications", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("list: status=%d", resp.StatusCode)
-	}
-	var items []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	items := listNotifications(t, env.URL+"/api/v1/notifications", token)
 	if len(items) != 5 {
 		t.Fatalf("expected 5 notifications, got %d", len(items))
 	}
-	// Should be ordered newest first
+	// Should be ordered newest first (ISO 8601 string comparison)
 	for i := 1; i < len(items); i++ {
 		t0, _ := items[i-1]["created_at"].(string)
 		t1, _ := items[i]["created_at"].(string)
