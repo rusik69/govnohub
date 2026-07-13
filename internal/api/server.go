@@ -133,7 +133,9 @@ func (s *Server) Router() http.Handler {
 			r.Post("/fork", s.handleFork)
 
 			r.Get("/branches", s.handleListBranches)
+			r.Post("/branches", s.handleCreateBranch)
 			r.Get("/tags", s.handleListTags)
+			r.Post("/tags", s.handleCreateTag)
 
 			r.Get("/issues", s.handleListIssues)
 			r.Post("/issues", s.handleCreateIssue)
@@ -651,6 +653,33 @@ func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, tags)
+}
+
+func (s *Server) handleCreateTag(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepoWrite(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+		Ref  string `json:"ref"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Name == "" {
+		jsonError(w, http.StatusBadRequest, "tag name is required")
+		return
+	}
+	if req.Ref == "" {
+		req.Ref = repository.DefaultBranch
+	}
+	if err := s.git.CreateTag(repository.OwnerName, repository.Name, req.Name, req.Ref); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"tag": req.Name})
 }
 
 func (s *Server) handleFork(w http.ResponseWriter, r *http.Request) {

@@ -508,6 +508,37 @@ func (s *Store) CreateBranch(owner, name, branch, base string) error {
 	return repo.Storer.SetReference(ref)
 }
 
+// CreateTag creates a lightweight tag pointing to the given ref (branch or SHA).
+func (s *Store) CreateTag(owner, name, tagName, ref string) error {
+	repo, err := s.Open(owner, name)
+	if err != nil {
+		return err
+	}
+	// Try to resolve the ref as a branch first, then as a raw SHA.
+	hash, err := s.resolveRef(repo, ref)
+	if err != nil {
+		return err
+	}
+	refName := plumbing.NewTagReferenceName(tagName)
+	tagRef := plumbing.NewHashReference(refName, hash)
+	return repo.Storer.SetReference(tagRef)
+}
+
+// resolveRef resolves a branch name or commit SHA to a hash.
+func (s *Store) resolveRef(repo *git.Repository, ref string) (plumbing.Hash, error) {
+	// Try as a branch reference.
+	br, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+ref), true)
+	if err == nil {
+		return br.Hash(), nil
+	}
+	// Try as a raw SHA.
+	h := plumbing.NewHash(ref)
+	if h.IsZero() {
+		return plumbing.ZeroHash, fmt.Errorf("cannot resolve ref: %s", ref)
+	}
+	return h, nil
+}
+
 func (s *Store) Diff(owner, name, baseSHA, headSHA string) (string, error) {
 	path := s.RepoPath(owner, name)
 	cmd := exec.Command("git", "diff", baseSHA, headSHA)
