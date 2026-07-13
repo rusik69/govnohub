@@ -73,13 +73,72 @@ func TestCloneURL(t *testing.T) {
 
 func TestRequireToken(t *testing.T) {
 	cfg := &Config{}
-	if err := cfg.RequireToken(); err == nil {
+	err := cfg.RequireToken()
+	if err == nil {
 		t.Fatal("expected error")
+	}
+	if err.Error() != "not authenticated: run `govnohub auth login` or set --token" {
+		t.Fatalf("unexpected error message: %q", err.Error())
 	}
 	cfg.Token = "x"
 	if err := cfg.RequireToken(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestMergeFlags_Precedence(t *testing.T) {
+	t.Run("non-empty flags override config", func(t *testing.T) {
+		cfg := &Config{APIURL: "http://default", GitURL: "http://default.git", Token: "old-token"}
+		cfg.MergeFlags("http://override", "http://override.git", "new-token")
+		if cfg.APIURL != "http://override" {
+			t.Fatalf("APIURL = %q, want %q", cfg.APIURL, "http://override")
+		}
+		if cfg.GitURL != "http://override.git" {
+			t.Fatalf("GitURL = %q, want %q", cfg.GitURL, "http://override.git")
+		}
+		if cfg.Token != "new-token" {
+			t.Fatalf("Token = %q, want %q", cfg.Token, "new-token")
+		}
+	})
+
+	t.Run("empty flags do not override config", func(t *testing.T) {
+		cfg := &Config{APIURL: "http://persist", GitURL: "http://persist.git", Token: "persist-token"}
+		cfg.MergeFlags("", "", "")
+		if cfg.APIURL != "http://persist" {
+			t.Fatalf("APIURL = %q, want %q", cfg.APIURL, "http://persist")
+		}
+		if cfg.GitURL != "http://persist.git" {
+			t.Fatalf("GitURL = %q, want %q", cfg.GitURL, "http://persist.git")
+		}
+		if cfg.Token != "persist-token" {
+			t.Fatalf("Token = %q, want %q", cfg.Token, "persist-token")
+		}
+	})
+
+	t.Run("partial override leaves other fields intact", func(t *testing.T) {
+		cfg := &Config{APIURL: "http://api", GitURL: "http://git", Token: "tok"}
+		cfg.MergeFlags("http://new-api", "", "")
+		if cfg.APIURL != "http://new-api" {
+			t.Fatalf("APIURL = %q, want %q", cfg.APIURL, "http://new-api")
+		}
+		if cfg.GitURL != "http://git" {
+			t.Fatalf("GitURL = %q, want %q", cfg.GitURL, "http://git")
+		}
+		if cfg.Token != "tok" {
+			t.Fatalf("Token = %q, want %q", cfg.Token, "tok")
+		}
+	})
+
+	t.Run("defaults in config survive empty flags", func(t *testing.T) {
+		cfg := &Config{APIURL: defaultAPIURL, GitURL: defaultGitURL}
+		cfg.MergeFlags("", "", "")
+		if cfg.APIURL != defaultAPIURL {
+			t.Fatalf("APIURL = %q, want %q", cfg.APIURL, defaultAPIURL)
+		}
+		if cfg.GitURL != defaultGitURL {
+			t.Fatalf("GitURL = %q, want %q", cfg.GitURL, defaultGitURL)
+		}
+	})
 }
 
 func TestConfigPathCreatesDir(t *testing.T) {
