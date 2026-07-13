@@ -133,15 +133,15 @@ func TestSearchFlow_RepoIssuePRContent(t *testing.T) {
 
 	// ---- Test 1: Search for repo content ----
 	t.Run("search repo content", func(t *testing.T) {
-		hits, err := svc.Search(ctx, "PostgreSQL", 10)
+		result, err := svc.Search(ctx, "PostgreSQL", search.SearchOptions{Limit: 10})
 		if err != nil {
 			t.Fatalf("Search 'PostgreSQL': %v", err)
 		}
-		if len(hits) == 0 {
+		if len(result.Hits) == 0 {
 			t.Fatal("expected at least 1 hit for 'PostgreSQL'")
 		}
 		var found bool
-		for _, h := range hits {
+		for _, h := range result.Hits {
 			if h.ID == "repo-"+owner+"_my-project" {
 				found = true
 				if h.Type != "repo" {
@@ -166,15 +166,15 @@ func TestSearchFlow_RepoIssuePRContent(t *testing.T) {
 
 	// ---- Test 2: Search for issue content ----
 	t.Run("search issue content", func(t *testing.T) {
-		hits, err := svc.Search(ctx, "login page crashes", 10)
+		result, err := svc.Search(ctx, "login page crashes", search.SearchOptions{Limit: 10})
 		if err != nil {
 			t.Fatalf("Search 'login page crashes': %v", err)
 		}
-		if len(hits) == 0 {
+		if len(result.Hits) == 0 {
 			t.Fatal("expected at least 1 hit for 'login page crashes'")
 		}
 		var found bool
-		for _, h := range hits {
+		for _, h := range result.Hits {
 			if h.ID == "issue-42" {
 				found = true
 				if h.Type != "issue" {
@@ -196,15 +196,15 @@ func TestSearchFlow_RepoIssuePRContent(t *testing.T) {
 
 	// ---- Test 3: Search for PR content ----
 	t.Run("search PR content", func(t *testing.T) {
-		hits, err := svc.Search(ctx, "CI pipeline", 10)
+		result, err := svc.Search(ctx, "CI pipeline", search.SearchOptions{Limit: 10})
 		if err != nil {
 			t.Fatalf("Search 'CI pipeline': %v", err)
 		}
-		if len(hits) == 0 {
+		if len(result.Hits) == 0 {
 			t.Fatal("expected at least 1 hit for 'CI pipeline'")
 		}
 		var found bool
-		for _, h := range hits {
+		for _, h := range result.Hits {
 			if h.ID == "pr-7" {
 				found = true
 				if h.Type != "pull_request" {
@@ -227,16 +227,16 @@ func TestSearchFlow_RepoIssuePRContent(t *testing.T) {
 	// ---- Test 4: Cross-type search ----
 	t.Run("cross-type search matches multiple types", func(t *testing.T) {
 		// "Go" should match the repo title
-		hits, err := svc.Search(ctx, "Go", 10)
+		result, err := svc.Search(ctx, "Go", search.SearchOptions{Limit: 10})
 		if err != nil {
 			t.Fatalf("Search 'Go': %v", err)
 		}
-		if len(hits) == 0 {
+		if len(result.Hits) == 0 {
 			t.Fatal("expected at least 1 hit for 'Go'")
 		}
 		// Should find the repo document
 		var foundRepo bool
-		for _, h := range hits {
+		for _, h := range result.Hits {
 			if h.ID == "repo-"+owner+"_my-project" {
 				foundRepo = true
 				break
@@ -249,23 +249,23 @@ func TestSearchFlow_RepoIssuePRContent(t *testing.T) {
 
 	// ---- Test 5: Nonexistent search ----
 	t.Run("nonexistent term returns empty", func(t *testing.T) {
-		hits, err := svc.Search(ctx, "nonexistentterm12345searchtest", 10)
+		result, err := svc.Search(ctx, "nonexistentterm12345searchtest", search.SearchOptions{Limit: 10})
 		if err != nil {
 			t.Fatalf("Search 'nonexistentterm12345searchtest': %v", err)
 		}
-		if len(hits) != 0 {
-			t.Errorf("expected 0 hits for nonexistent term, got %d", len(hits))
+		if len(result.Hits) != 0 {
+			t.Errorf("expected 0 hits for nonexistent term, got %d", len(result.Hits))
 		}
 	})
 
 	// ---- Test 6: Result limit ----
 	t.Run("search respects limit", func(t *testing.T) {
-		hits, err := svc.Search(ctx, "Go", 1)
+		result, err := svc.Search(ctx, "Go", search.SearchOptions{Limit: 1})
 		if err != nil {
 			t.Fatalf("Search 'Go' with limit=1: %v", err)
 		}
-		if len(hits) > 1 {
-			t.Errorf("expected at most 1 hit with limit=1, got %d", len(hits))
+		if len(result.Hits) > 1 {
+			t.Errorf("expected at most 1 hit with limit=1, got %d", len(result.Hits))
 		}
 	})
 
@@ -284,11 +284,11 @@ func TestSearchFlow_RepoIssuePRContent(t *testing.T) {
 		}
 		time.Sleep(500 * time.Millisecond)
 
-		hits, err := svc.Search(ctx, "truncated", 10)
+		result, err := svc.Search(ctx, "truncated", search.SearchOptions{Limit: 10})
 		if err != nil {
 			t.Fatalf("Search 'truncated': %v", err)
 		}
-		for _, h := range hits {
+		for _, h := range result.Hits {
 			if h.ID == "long-body-doc" {
 				if len(h.Snippet) > 150 {
 					t.Logf("long body snippet length: %d", len(h.Snippet))
@@ -314,11 +314,11 @@ func TestSearchFlow_RepoIssuePRContent(t *testing.T) {
 
 	// ---- Test 9: Search for code/repo names ----
 	t.Run("search repo by full name", func(t *testing.T) {
-		hits, err := svc.Search(ctx, repoFullName, 10)
+		result, err := svc.Search(ctx, repoFullName, search.SearchOptions{Limit: 10})
 		if err != nil {
 			t.Fatalf("Search by repo name: %v", err)
 		}
-		if len(hits) == 0 {
+		if len(result.Hits) == 0 {
 			t.Fatal("expected hits when searching by repo full name")
 		}
 	})

@@ -119,24 +119,24 @@ func TestSearchService_EnsureIndexAndSearch(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Search for something that should match multiple documents
-	hits, err := svc.Search(ctx, "Go", 10)
+	result, err := svc.Search(ctx, "Go", search.SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("Search 'Go': %v", err)
 	}
-	if len(hits) == 0 {
+	if len(result.Hits) == 0 {
 		t.Fatal("expected at least 1 hit for 'Go'")
 	}
 
 	// Search for something specific to repo document
-	hits, err = svc.Search(ctx, "PostgreSQL", 10)
+	result, err = svc.Search(ctx, "PostgreSQL", search.SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("Search 'PostgreSQL': %v", err)
 	}
-	if len(hits) == 0 {
+	if len(result.Hits) == 0 {
 		t.Fatal("expected at least 1 hit for 'PostgreSQL'")
 	}
 	found := false
-	for _, h := range hits {
+	for _, h := range result.Hits {
 		if h.ID == "repo-1" {
 			found = true
 			if h.Type != "repo" {
@@ -156,15 +156,15 @@ func TestSearchService_EnsureIndexAndSearch(t *testing.T) {
 	}
 
 	// Search for something in issue
-	hits, err = svc.Search(ctx, "login fails", 10)
+	result, err = svc.Search(ctx, "login fails", search.SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("Search 'login fails': %v", err)
 	}
-	if len(hits) == 0 {
+	if len(result.Hits) == 0 {
 		t.Fatal("expected at least 1 hit for 'login fails'")
 	}
 	found = false
-	for _, h := range hits {
+	for _, h := range result.Hits {
 		if h.ID == "issue-42" {
 			found = true
 			if h.Type != "issue" {
@@ -178,15 +178,15 @@ func TestSearchService_EnsureIndexAndSearch(t *testing.T) {
 	}
 
 	// Search for something in PR
-	hits, err = svc.Search(ctx, "CI pipeline", 10)
+	result, err = svc.Search(ctx, "CI pipeline", search.SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("Search 'CI pipeline': %v", err)
 	}
-	if len(hits) == 0 {
+	if len(result.Hits) == 0 {
 		t.Fatal("expected at least 1 hit for 'CI pipeline'")
 	}
 	found = false
-	for _, h := range hits {
+	for _, h := range result.Hits {
 		if h.ID == "pr-7" {
 			found = true
 			if h.Type != "pull" {
@@ -200,21 +200,21 @@ func TestSearchService_EnsureIndexAndSearch(t *testing.T) {
 	}
 
 	// Search for something that should not exist
-	hits, err = svc.Search(ctx, "nonexistentterm12345", 10)
+	result, err = svc.Search(ctx, "nonexistentterm12345", search.SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("Search 'nonexistentterm12345': %v", err)
 	}
-	if len(hits) != 0 {
-		t.Errorf("expected 0 hits for nonexistent term, got %d", len(hits))
+	if len(result.Hits) != 0 {
+		t.Errorf("expected 0 hits for nonexistent term, got %d", len(result.Hits))
 	}
 
 	// Test with limit
-	hits, err = svc.Search(ctx, "Go", 1)
+	result, err = svc.Search(ctx, "Go", search.SearchOptions{Limit: 1})
 	if err != nil {
 		t.Fatalf("Search 'Go' with limit=1: %v", err)
 	}
-	if len(hits) > 1 {
-		t.Errorf("expected at most 1 hit with limit=1, got %d", len(hits))
+	if len(result.Hits) > 1 {
+		t.Errorf("expected at most 1 hit with limit=1, got %d", len(result.Hits))
 	}
 
 	// Snippet truncation test
@@ -231,11 +231,11 @@ func TestSearchService_EnsureIndexAndSearch(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	hits, err = svc.Search(ctx, "long body", 10)
+	result, err = svc.Search(ctx, "long body", search.SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("Search 'long body': %v", err)
 	}
-	for _, h := range hits {
+	for _, h := range result.Hits {
 		if h.ID == "long-body" {
 			if len(h.Snippet) > 150 {
 				t.Logf("long body snippet length: %d", len(h.Snippet))
@@ -243,6 +243,24 @@ func TestSearchService_EnsureIndexAndSearch(t *testing.T) {
 			break
 		}
 	}
+
+	// Test filter by type
+	result, err = svc.Search(ctx, "Go", search.SearchOptions{Limit: 10, Type: "issue"})
+	if err != nil {
+		t.Fatalf("Search 'Go' with type filter: %v", err)
+	}
+	for _, h := range result.Hits {
+		if h.Type != "issue" {
+			t.Errorf("expected only issue type, got %s", h.Type)
+		}
+	}
+
+	// Test pagination offset
+	result, err = svc.Search(ctx, "Go", search.SearchOptions{Limit: 10, Offset: 10})
+	if err != nil {
+		t.Fatalf("Search 'Go' with offset: %v", err)
+	}
+	_ = result.Total // just verify it's accessible
 }
 
 func TestSearchService_ReindexSameDoc(t *testing.T) {
@@ -277,15 +295,15 @@ func TestSearchService_ReindexSameDoc(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	hits, err := svc.Search(ctx, "Updated", 10)
+	result, err := svc.Search(ctx, "Updated", search.SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if len(hits) == 0 {
+	if len(result.Hits) == 0 {
 		t.Fatal("expected hit for 'Updated'")
 	}
-	if hits[0].Title != "Updated Title" {
-		t.Errorf("expected 'Updated Title', got %s", hits[0].Title)
+	if result.Hits[0].Title != "Updated Title" {
+		t.Errorf("expected 'Updated Title', got %s", result.Hits[0].Title)
 	}
 }
 
