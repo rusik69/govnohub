@@ -1,48 +1,167 @@
 package web
 
-import "github.com/rusik69/govnohub/internal/search"
+import (
+	"strconv"
 
-templ SearchPage(layout LayoutData, query string, hits []search.Hit) {
+	"github.com/rusik69/govnohub/internal/search"
+)
+
+type SearchFilter struct {
+	Label string
+	Value string
+}
+
+type SearchSort struct {
+	Label string
+	Value string
+}
+
+templ SearchPage(layout LayoutData, query string, typ string, sort string, hits []search.Hit, total, page, perPage int) {
 	@Layout(LayoutData{
 		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
 		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "search",
-		Content: SearchContent(query, hits),
+		Content: SearchContent(query, typ, sort, hits, total, page, perPage),
 	})
 }
 
-templ SearchContent(query string, hits []search.Hit) {
+templ SearchContent(query string, typ string, sort string, hits []search.Hit, total, page, perPage int) {
 	@PageHeader("Search", templ.NopComponent)
-	<form method="get" action="/search" class="mb-6 flex gap-2 flex-wrap items-center">
-		<input type="search" name="q" value={ query } placeholder="Search repos, issues, pull requests..." class="input max-w-3xl flex-1" autofocus?={ query == "" }/>
-		<button type="submit" class="btn">Search</button>
+	<form method="get" action="/search" class="mb-6">
+		<div class="flex gap-2 flex-wrap items-center">
+			<input type="search" name="q" value={ query } placeholder="Search repos, issues, pull requests..." class="input max-w-3xl flex-1" autofocus?={ query == "" }/>
+			<button type="submit" class="btn">Search</button>
+		</div>
+		<input type="hidden" name="type" value={ typ }/>
+		<input type="hidden" name="sort" value={ sort }/>
 	</form>
-	if query == "" {
-		@EmptyState("Enter a search query to find repositories, issues, and pull requests")
-	} else if len(hits) == 0 {
-		@EmptyState("No results found for \"" + query + "\"")
-	} else {
-		<div class="gh-list">
-			for _, h := range hits {
-				<a href={ templ.SafeURL(searchHitURL(h)) } class="gh-list-item">
-					<span class="gh-list-item-icon">
-						@Icon(searchHitIcon(h.Type), "")
-					</span>
-					<div class="gh-list-item-body">
-						<div class="gh-list-item-title">{ h.Title }</div>
-						<div class="gh-list-item-meta">
-							<span class="badge">{ h.Type }</span>
-							if h.Repo != "" {
-								<span> · { h.Repo }</span>
+	if query != "" {
+		@SearchMeta(query, typ, sort, total, page, perPage)
+		@SearchFilters(typ, query, sort)
+		if len(hits) == 0 {
+			@EmptyState("No results found for \"" + query + "\"")
+		} else {
+			<div class="gh-list">
+				for _, h := range hits {
+					<a href={ templ.SafeURL(searchHitURL(h)) } class="gh-list-item">
+						<span class="gh-list-item-icon">
+							@Icon(searchHitIcon(h.Type), "")
+						</span>
+						<div class="gh-list-item-body">
+							<div class="gh-list-item-title">{ h.Title }</div>
+							<div class="gh-list-item-meta">
+								<span class="badge">{ h.Type }</span>
+								if h.Repo != "" {
+									<span> · { h.Repo }</span>
+								}
+							</div>
+							if h.Snippet != "" {
+								<p class="text-sm m-0 mt-1">{ h.Snippet }</p>
 							}
 						</div>
-						if h.Snippet != "" {
-							<p class="text-sm m-0 mt-1">{ h.Snippet }</p>
-						}
-					</div>
-				</a>
+					</a>
+				}
+			</div>
+			@SearchPagination(query, typ, sort, total, page, perPage)
+		}
+	} else {
+		@EmptyState("Enter a search query to find repositories, issues, and pull requests")
+	}
+}
+
+templ SearchMeta(query, typ, sort string, total, page, perPage int) {
+	<div class="text-sm text-muted mb-4">
+		{ strconv.Itoa(total) } results for "<strong>{ query }</strong>"
+		if typ != "" {
+			<span> in <strong>{ typ }</strong></span>
+		}
+	</div>
+}
+
+templ SearchFilters(currentType, query, sort string) {
+	<div class="flex gap-2 flex-wrap items-center mb-4">
+		@searchFilterPill("All", "", currentType, query, sort)
+		@searchFilterPill("Repositories", "repo", currentType, query, sort)
+		@searchFilterPill("Issues", "issue", currentType, query, sort)
+		@searchFilterPill("Pull Requests", "pull_request", currentType, query, sort)
+		@searchFilterPill("Wiki", "wiki", currentType, query, sort)
+
+		<div class="ml-auto flex items-center gap-2">
+			<label class="text-sm" for="search-sort">Sort:</label>
+			<select
+				id="search-sort"
+				class="input"
+				onchange="window.location = this.value"
+				aria-label="Sort results"
+			>
+				<option value={ searchSortURL(query, currentType, "best_match") } selected?={ sort == "" || sort == "best_match" }>Best match</option>
+				<option value={ searchSortURL(query, currentType, "recently_updated") } selected?={ sort == "recently_updated" }>Recently updated</option>
+			</select>
+		</div>
+	</div>
+}
+
+templ searchFilterPill(label, typeValue, currentType, query, sort string) {
+	<a
+		href={ templ.SafeURL("/search?q=" + query + searchExtraParams(typeValue, sort)) }
+		class={ searchPillClass(currentType, typeValue) }
+		aria-current?={ currentType == typeValue || (currentType == "" && typeValue == "") }
+	>
+		{ label }
+	</a>
+}
+
+templ SearchPagination(query, typ, sort string, total, page, perPage int) {
+	if total > perPage {
+		<div class="flex justify-center gap-4 mt-6">
+			if page > 1 {
+				<a href={ templ.SafeURL(paginationURL(query, typ, sort, page-1)) } class="btn">← Previous</a>
+			}
+			<span class="flex items-center text-sm text-muted">
+				Page { strconv.Itoa(page) } of { strconv.Itoa((total + perPage - 1) / perPage) }
+			</span>
+			if page*perPage < total {
+				<a href={ templ.SafeURL(paginationURL(query, typ, sort, page+1)) } class="btn">Next →</a>
 			}
 		</div>
 	}
+}
+
+func searchPillClass(current, pill string) string {
+	if current == pill || (current == "" && pill == "") {
+		return "gh-subhead-pill active"
+	}
+	return "gh-subhead-pill"
+}
+
+func searchExtraParams(typ, sort string) string {
+	params := ""
+	if typ != "" {
+		params += "&type=" + typ
+	}
+	if sort != "" && sort != "best_match" {
+		params += "&sort=" + sort
+	}
+	return params
+}
+
+func searchSortURL(query, typ, sort string) string {
+	url := "/search?q=" + query
+	if typ != "" {
+		url += "&type=" + typ
+	}
+	url += "&sort=" + sort
+	return url
+}
+
+func paginationURL(query, typ, sort string, page int) string {
+	url := "/search?q=" + query + "&page=" + strconv.Itoa(page)
+	if typ != "" {
+		url += "&type=" + typ
+	}
+	if sort != "" && sort != "best_match" {
+		url += "&sort=" + sort
+	}
+	return url
 }
 
 func searchHitIcon(typ string) string {
@@ -51,6 +170,8 @@ func searchHitIcon(typ string) string {
 		return "issue-opened"
 	case "pull_request":
 		return "git-pull-request"
+	case "wiki":
+		return "book"
 	default:
 		return "repo"
 	}
@@ -65,6 +186,9 @@ func searchHitURL(h search.Hit) string {
 	}
 	if h.Type == "pull_request" && h.Repo != "" && h.Ref != "" {
 		return "/" + h.Repo + "/pulls/" + h.Ref
+	}
+	if h.Type == "wiki" && h.Repo != "" && h.Ref != "" {
+		return "/" + h.Repo + "/wiki/" + h.Ref
 	}
 	return "/search?q=" + h.Title
 }

@@ -31,6 +31,18 @@ type Hit struct {
 	Snippet string  `json:"snippet"`
 }
 
+type SearchOptions struct {
+	Limit  int
+	Offset int
+	Type   string // "repo", "issue", "pull_request", "wiki", or "" for all
+	Sort   string // "best_match" (default) or "recently_updated"
+}
+
+type SearchResult struct {
+	Hits  []Hit
+	Total int
+}
+
 type Service struct {
 	baseURL string
 	client  *http.Client
@@ -80,35 +92,80 @@ func (s *Service) EnsureIndex(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) Search(ctx context.Context, q string, limit int) ([]Hit, error) {
-	if limit <= 0 {
-		limit = 20
+func (s *Service) Search(ctx context.Context, q string, opts SearchOptions) (SearchResult, error) {
+	if opts.Limit <= 0 {
+		opts.Limit = 20
 	}
-	query := map[string]interface{}{
-		"size": limit,
-		"query": map[string]interface{}{
+	if opts.Offset < 0 {
+		opts.Offset = 0
+	}
+	if opts.Sort == "" {
+		opts.Sort = "best_match"
+	}
+
+	// Build the OpenSearch query
+	must := []map[string]interface{}{
+		{
 			"multi_match": map[string]interface{}{
 				"query":  q,
 				"fields": []string{"title^3", "body", "repo", "path"},
 			},
 		},
 	}
-	body, _ := json.Marshal(query)
+
+	filter := []map[string]interface{}{}
+	if opts.Type != "" {
+		filter = append(filter, map[string]interface{}{
+			"term": map[string]interface{}{
+				"type": opts.Type,
+			},
+		})
+	}
+
+	queryBody := map[string]interface{}{
+		"size": opts.Limit,
+		"from": opts.Offset,
+		"track_total_hits": true,
+	}
+
+	// Build bool query
+	boolQuery := map[string]interface{}{
+		"must": must,
+	}
+	if len(filter) > 0 {
+		boolQuery["filter"] = filter
+	}
+	queryBody["query"] = map[string]interface{}{
+		"bool": boolQuery,
+	}
+
+	// Sort
+	if opts.Sort == "recently_updated" {
+		queryBody["sort"] = []map[string]interface{}{
+			{"updated_at": map[string]string{"order": "desc"}},
+		}
+	}
+	// best_match = default scoring (no explicit sort needed, ES uses _score by default)
+
+	body, _ := json.Marshal(queryBody)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/govnohub/_search", bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return SearchResult{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return []Hit{}, nil
+		return SearchResult{}, nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return []Hit{}, nil
+		return SearchResult{}, nil
 	}
 	var result struct {
 		Hits struct {
+			Total struct {
+				Value int `json:"value"`
+			} `json:"total"`
 			Hits []struct {
 				Score  float64  `json:"_score"`
 				Source Document `json:"_source"`
@@ -116,7 +173,7 @@ func (s *Service) Search(ctx context.Context, q string, limit int) ([]Hit, error
 		} `json:"hits"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return []Hit{}, nil
+		return SearchResult{}, nil
 	}
 	var hits []Hit
 	for _, h := range result.Hits.Hits {
@@ -129,5 +186,5 @@ func (s *Service) Search(ctx context.Context, q string, limit int) ([]Hit, error
 			Repo: h.Source.Repo, Ref: h.Source.Ref, Score: h.Score, Snippet: snippet,
 		})
 	}
-	return hits, nil
+	return SearchResult{Hits: hits, Total: result.Hits.Total.Value}, nil
 }

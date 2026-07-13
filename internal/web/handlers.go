@@ -127,11 +127,27 @@ func (h *Handler) handleCreateUserRepo(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
-	var hits []search.Hit
-	if q != "" {
-		hits, _ = h.deps.Search.Search(r.Context(), q, 30)
+	typ := r.URL.Query().Get("type")
+	sort := r.URL.Query().Get("sort")
+	pageStr := r.URL.Query().Get("page")
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
 	}
-	render(w, r, SearchPage(h.layout(r, "Search"), q, hits))
+	const perPage = 20
+	offset := (page - 1) * perPage
+
+	var result search.SearchResult
+	if q != "" {
+		opts := search.SearchOptions{
+			Limit:  perPage,
+			Offset: offset,
+			Type:   typ,
+			Sort:   sort,
+		}
+		result, _ = h.deps.Search.Search(r.Context(), q, opts)
+	}
+	render(w, r, SearchPage(h.layout(r, "Search"), q, typ, sort, result.Hits, result.Total, page, perPage))
 }
 
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {

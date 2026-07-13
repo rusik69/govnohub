@@ -136,20 +136,41 @@ func TestSearch_FoundResults(t *testing.T) {
 		}
 		var reqBody map[string]interface{}
 		json.NewDecoder(r.Body).Decode(&reqBody)
-		query, ok := reqBody["query"].(map[string]interface{})
+
+		// Verify query structure
+		q, ok := reqBody["query"].(map[string]interface{})
 		if !ok {
 			t.Fatal("expected query field")
 		}
-		mm, ok := query["multi_match"].(map[string]interface{})
+		boolQ, ok := q["bool"].(map[string]interface{})
 		if !ok {
-			t.Fatal("expected multi_match")
+			t.Fatal("expected bool query")
 		}
-		if mm["query"] != "test" {
-			t.Errorf("expected query 'test', got %v", mm["query"])
+		must, ok := boolQ["must"].([]interface{})
+		if !ok || len(must) != 1 {
+			t.Fatal("expected must array with one element")
 		}
+		mm, ok := must[0].(map[string]interface{})
+		if !ok {
+			t.Fatal("expected multi_match in must[0]")
+		}
+		mmInner, ok := mm["multi_match"].(map[string]interface{})
+		if !ok {
+			t.Fatal("expected multi_match map")
+		}
+		if mmInner["query"] != "test" {
+			t.Errorf("expected query 'test', got %v", mmInner["query"])
+		}
+
+		// Check track_total_hits is present
+		if reqBody["track_total_hits"] != true {
+			t.Error("expected track_total_hits to be true")
+		}
+
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{
 			"hits": {
+				"total": {"value": 2},
 				"hits": [
 					{
 						"_score": 2.5,
@@ -179,45 +200,128 @@ func TestSearch_FoundResults(t *testing.T) {
 	defer ts.Close()
 
 	s := NewService(ts.URL)
-	hits, err := s.Search(context.Background(), "test", 10)
+	result, err := s.Search(context.Background(), "test", SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(hits) != 2 {
-		t.Fatalf("expected 2 hits, got %d", len(hits))
+	if result.Total != 2 {
+		t.Fatalf("expected total 2, got %d", result.Total)
 	}
-	if hits[0].ID != "repo-1" || hits[0].Score != 2.5 || hits[0].Title != "Test Repo" {
-		t.Errorf("first hit mismatch: %+v", hits[0])
+	if len(result.Hits) != 2 {
+		t.Fatalf("expected 2 hits, got %d", len(result.Hits))
 	}
-	if hits[0].Ref != "main" {
-		t.Errorf("expected ref main, got %s", hits[0].Ref)
+	if result.Hits[0].ID != "repo-1" || result.Hits[0].Score != 2.5 || result.Hits[0].Title != "Test Repo" {
+		t.Errorf("first hit mismatch: %+v", result.Hits[0])
 	}
-	if hits[0].Snippet != "This is a test repository with some content for searching" {
-		t.Errorf("unexpected snippet: %s", hits[0].Snippet)
+	if result.Hits[0].Ref != "main" {
+		t.Errorf("expected ref main, got %s", result.Hits[0].Ref)
 	}
-	if hits[1].ID != "issue-42" || hits[1].Type != "issue" {
-		t.Errorf("second hit mismatch: %+v", hits[1])
+	if result.Hits[0].Snippet != "This is a test repository with some content for searching" {
+		t.Errorf("unexpected snippet: %s", result.Hits[0].Snippet)
+	}
+	if result.Hits[1].ID != "issue-42" || result.Hits[1].Type != "issue" {
+		t.Errorf("second hit mismatch: %+v", result.Hits[1])
 	}
 	// Short body should not be truncated
-	if hits[1].Snippet != "Short body" {
-		t.Errorf("unexpected snippet: %s", hits[1].Snippet)
+	if result.Hits[1].Snippet != "Short body" {
+		t.Errorf("unexpected snippet: %s", result.Hits[1].Snippet)
+	}
+}
+
+func TestSearch_FilterByType(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&reqBody)
+
+		q, ok := reqBody["query"].(map[string]interface{})
+		if !ok {
+			t.Fatal("expected query field")
+		}
+		boolQ, ok := q["bool"].(map[string]interface{})
+		if !ok {
+			t.Fatal("expected bool query")
+		}
+		filter, ok := boolQ["filter"].([]interface{})
+		if !ok {
+			t.Fatal("expected filter array")
+		}
+		if len(filter) != 1 {
+			t.Fatalf("expected 1 filter, got %d", len(filter))
+		}
+		term, ok := filter[0].(map[string]interface{})
+		if !ok {
+			t.Fatal("expected term filter")
+		}
+		termInner, ok := term["term"].(map[string]interface{})
+		if !ok {
+			t.Fatal("expected term inner")
+		}
+		if termInner["type"] != "issue" {
+			t.Errorf("expected type=issue, got %v", termInner["type"])
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"hits": {"total": {"value": 1}, "hits": [{"_score": 1.0, "_source": {"id": "issue-1", "type": "issue", "title": "Bug", "body": "", "repo": "a/b"}}]}}`))
+	}))
+	defer ts.Close()
+
+	s := NewService(ts.URL)
+	result, err := s.Search(context.Background(), "test", SearchOptions{Limit: 10, Type: "issue"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("expected total 1, got %d", result.Total)
+	}
+	if len(result.Hits) != 1 {
+		t.Errorf("expected 1 hit, got %d", len(result.Hits))
+	}
+	if result.Hits[0].Type != "issue" {
+		t.Errorf("expected type issue, got %s", result.Hits[0].Type)
+	}
+}
+
+func TestSearch_WithOffset(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&reqBody)
+
+		if reqBody["from"] != float64(20) {
+			t.Errorf("expected from=20, got %v", reqBody["from"])
+		}
+		if reqBody["size"] != float64(10) {
+			t.Errorf("expected size=10, got %v", reqBody["size"])
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"hits": {"total": {"value": 0}, "hits": []}}`))
+	}))
+	defer ts.Close()
+
+	s := NewService(ts.URL)
+	_, err := s.Search(context.Background(), "test", SearchOptions{Limit: 10, Offset: 20})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestSearch_EmptyResults(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"hits": {"hits": []}}`))
+		w.Write([]byte(`{"hits": {"total": {"value": 0}, "hits": []}}`))
 	}))
 	defer ts.Close()
 
 	s := NewService(ts.URL)
-	hits, err := s.Search(context.Background(), "nonexistent", 10)
+	result, err := s.Search(context.Background(), "nonexistent", SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(hits) != 0 {
-		t.Errorf("expected 0 hits, got %d", len(hits))
+	if result.Total != 0 {
+		t.Errorf("expected total 0, got %d", result.Total)
+	}
+	if len(result.Hits) != 0 {
+		t.Errorf("expected 0 hits, got %d", len(result.Hits))
 	}
 }
 
@@ -228,13 +332,13 @@ func TestSearch_ErrorResponse(t *testing.T) {
 	defer ts.Close()
 
 	s := NewService(ts.URL)
-	hits, err := s.Search(context.Background(), "test", 10)
+	result, err := s.Search(context.Background(), "test", SearchOptions{Limit: 10})
 	// The current implementation returns empty hits on error, no error
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(hits) != 0 {
-		t.Errorf("expected 0 hits on error, got %d", len(hits))
+	if len(result.Hits) != 0 {
+		t.Errorf("expected 0 hits on error, got %d", len(result.Hits))
 	}
 }
 
@@ -243,13 +347,13 @@ func TestSearch_DefaultLimit(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"hits": {"hits": []}}`))
+		w.Write([]byte(`{"hits": {"total": {"value": 0}, "hits": []}}`))
 	}))
 	defer ts.Close()
 
 	s := NewService(ts.URL)
 	// Call with limit <= 0, should default to 20
-	_, err := s.Search(context.Background(), "test", 0)
+	_, err := s.Search(context.Background(), "test", SearchOptions{Limit: 0})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -262,19 +366,19 @@ func TestSearch_TruncatesLongSnippet(t *testing.T) {
 	longBody := strings.Repeat("a", 200)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"hits": {"hits": [{"_score": 1.0, "_source": {"id": "1", "type": "doc", "title": "x", "body": "` + longBody + `", "repo": "a/b"}}]}}`))
+		w.Write([]byte(`{"hits": {"total": {"value": 1}, "hits": [{"_score": 1.0, "_source": {"id": "1", "type": "doc", "title": "x", "body": "` + longBody + `", "repo": "a/b"}}]}}`))
 	}))
 	defer ts.Close()
 
 	s := NewService(ts.URL)
-	hits, err := s.Search(context.Background(), "test", 10)
+	result, err := s.Search(context.Background(), "test", SearchOptions{Limit: 10})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(hits) != 1 {
-		t.Fatalf("expected 1 hit, got %d", len(hits))
+	if len(result.Hits) != 1 {
+		t.Fatalf("expected 1 hit, got %d", len(result.Hits))
 	}
-	snippet := hits[0].Snippet
+	snippet := result.Hits[0].Snippet
 	if len(snippet) != 123 { // 120 + "..."
 		t.Errorf("expected snippet length 123, got %d: %q", len(snippet), snippet)
 	}

@@ -1208,12 +1208,12 @@ func (s *Server) handlePRFiles(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
-	hits, err := s.search.Search(r.Context(), q, 30)
+	result, err := s.search.Search(r.Context(), q, search.SearchOptions{Limit: 30})
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	jsonOK(w, hits)
+	jsonOK(w, result)
 }
 
 func jsonOK(w http.ResponseWriter, v interface{}) {
