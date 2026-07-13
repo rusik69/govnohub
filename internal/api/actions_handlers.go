@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -469,4 +470,99 @@ func (s *Server) handleProtectBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, map[string]string{"status": "protected"})
+}
+
+func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	rows, err := s.pool.Query(r.Context(), `
+		SELECT id, name, created_at, updated_at FROM actions_secrets WHERE repo_id=$1 ORDER BY name`, repository.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rows.Close()
+	type secretResponse struct {
+		ID        uuid.UUID `json:"id"`
+		Name      string    `json:"name"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+	}
+	var secrets []secretResponse
+	for rows.Next() {
+		var s secretResponse
+		if err := rows.Scan(&s.ID, &s.Name, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		secrets = append(secrets, s)
+	}
+	if secrets == nil {
+		secrets = []secretResponse{}
+	}
+	jsonOK(w, secrets)
+}
+
+func (s *Server) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepoWrite(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireScope(w, r, auth.ScopeWorkflow) {
+		return
+	}
+	var req struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.Name == "" {
+		jsonError(w, http.StatusBadRequest, "name required")
+		return
+	}
+	if req.Value == "" {
+		jsonError(w, http.StatusBadRequest, "value required")
+		return
+	}
+	_, err := s.pool.Exec(r.Context(), `
+		INSERT INTO actions_secrets (repo_id, name, value, updated_at)
+		VALUES ($1,$2,$3, NOW())
+		ON CONFLICT (repo_id, name) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
+		repository.ID, req.Name, req.Value)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"status": "created"})
+}
+
+func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepoWrite(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireScope(w, r, auth.ScopeWorkflow) {
+		return
+	}
+	secretName := chi.URLParam(r, "secretName")
+	if secretName == "" {
+		jsonError(w, http.StatusBadRequest, "secret name required")
+		return
+	}
+	res, err := s.pool.Exec(r.Context(), `
+		DELETE FROM actions_secrets WHERE repo_id=$1 AND name=$2`, repository.ID, secretName)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if res.RowsAffected() == 0 {
+		jsonError(w, http.StatusNotFound, "secret not found")
+		return
+	}
+	jsonOK(w, map[string]string{"status": "deleted"})
 }

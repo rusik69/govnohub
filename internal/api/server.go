@@ -189,6 +189,9 @@ func (s *Server) Router() http.Handler {
 			r.Get("/actions/runs", s.handleListRuns)
 			r.Post("/actions/runs", s.handleTriggerRun)
 			r.Get("/actions/runs/{runID}/logs", s.handleRunLogs)
+			r.Get("/actions/secrets", s.handleListSecrets)
+			r.Post("/actions/secrets", s.handleCreateSecret)
+			r.Delete("/actions/secrets/{secretName}", s.handleDeleteSecret)
 
 			r.Get("/releases", s.handleListReleases)
 			r.Post("/releases", s.handleCreateRelease)
