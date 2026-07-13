@@ -3,9 +3,12 @@ package issue
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -51,6 +54,16 @@ type TimelineEvent struct {
 	EventType string          `json:"event_type"`
 	Metadata  json.RawMessage `json:"metadata,omitempty"`
 	CreatedAt time.Time       `json:"created_at"`
+}
+
+type Reaction struct {
+	ID        uuid.UUID `json:"id"`
+	IssueID   uuid.UUID `json:"issue_id"`
+	CommentID *uuid.UUID `json:"comment_id,omitempty"`
+	UserID    uuid.UUID `json:"user_id"`
+	Username  string    `json:"username,omitempty"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Milestone struct {
@@ -432,4 +445,103 @@ func (s *Service) GetTimeline(ctx context.Context, issueID uuid.UUID) ([]Timelin
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// ValidReactionContent returns true if the content is a valid GitHub reaction emoji.
+func ValidReactionContent(content string) bool {
+	switch content {
+	case "+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes":
+		return true
+	}
+	return false
+}
+
+// AddReaction adds a reaction (emoji) to an issue or issue comment.
+// commentID can be nil for issue-level reactions.
+func (s *Service) AddReaction(ctx context.Context, issueID, userID uuid.UUID, commentID *uuid.UUID, content string) (*Reaction, error) {
+	if !ValidReactionContent(content) {
+		return nil, fmt.Errorf("invalid reaction content: %q", content)
+	}
+	// For comment reactions, verify the comment belongs to the same issue
+	if commentID != nil {
+		var exists bool
+		err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM issue_comments WHERE id=$1 AND issue_id=$2)`, *commentID, issueID).Scan(&exists)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, errors.New("comment not found or does not belong to this issue")
+		}
+	}
+	var r Reaction
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO issue_reactions (issue_id, comment_id, user_id, content)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (issue_id, user_id, content) WHERE comment_id IS NULL
+		DO NOTHING
+		RETURNING id, issue_id, comment_id, user_id, content, created_at`,
+		issueID, commentID, userID, content,
+	).Scan(&r.ID, &r.IssueID, &r.CommentID, &r.UserID, &r.Content, &r.CreatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			// ON CONFLICT DO NOTHING returns no rows on conflict; check if it already exists
+			_ = s.pool.QueryRow(ctx, `SELECT id, issue_id, comment_id, user_id, content, created_at FROM issue_reactions WHERE issue_id=$1 AND COALESCE(comment_id,'00000000-0000-0000-0000-000000000000')=COALESCE($2,'00000000-0000-0000-0000-000000000000') AND user_id=$3 AND content=$4`,
+				issueID, commentID, userID, content,
+			).Scan(&r.ID, &r.IssueID, &r.CommentID, &r.UserID, &r.Content, &r.CreatedAt)
+			if err != nil {
+				return nil, errors.New("reaction already exists")
+			}
+		} else {
+			return nil, err
+		}
+	}
+	// Load username
+	_ = s.pool.QueryRow(ctx, `SELECT username FROM users WHERE id=$1`, userID).Scan(&r.Username)
+	return &r, nil
+}
+
+// ListReactions returns all reactions for an issue, optionally filtered to a specific comment.
+func (s *Service) ListReactions(ctx context.Context, issueID uuid.UUID, commentID *uuid.UUID) ([]Reaction, error) {
+	var rows pgx.Rows
+	var err error
+	if commentID != nil {
+		rows, err = s.pool.Query(ctx, `
+			SELECT r.id, r.issue_id, r.comment_id, r.user_id, COALESCE(u.username,''), r.content, r.created_at
+			FROM issue_reactions r
+			LEFT JOIN users u ON r.user_id = u.id
+			WHERE r.issue_id=$1 AND r.comment_id=$2
+			ORDER BY r.created_at ASC`, issueID, *commentID)
+	} else {
+		rows, err = s.pool.Query(ctx, `
+			SELECT r.id, r.issue_id, r.comment_id, r.user_id, COALESCE(u.username,''), r.content, r.created_at
+			FROM issue_reactions r
+			LEFT JOIN users u ON r.user_id = u.id
+			WHERE r.issue_id=$1 AND r.comment_id IS NULL
+			ORDER BY r.created_at ASC`, issueID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Reaction
+	for rows.Next() {
+		var r Reaction
+		if err := rows.Scan(&r.ID, &r.IssueID, &r.CommentID, &r.UserID, &r.Username, &r.Content, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// DeleteReaction removes a reaction by ID, ensuring the requesting user owns it.
+func (s *Service) DeleteReaction(ctx context.Context, reactionID, userID uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM issue_reactions WHERE id=$1 AND user_id=$2`, reactionID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("reaction not found or not owned by user")
+	}
+	return nil
 }

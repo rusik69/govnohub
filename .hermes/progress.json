@@ -33,7 +33,8 @@
     36,
     40,
     41,
-    42
+    42,
+    44
   ],
   "items_in_progress": [
     4,
@@ -46,13 +47,13 @@
     37,
     39,
     43,
-    44
+    45
   ],
   "items_failed": [
     38
   ],
-  "current_item": 44,
-  "last_commit": "ce8cad9",
-  "ci_status": "in_progress (testcontainers-based tests)",
+  "current_item": 45,
+  "last_commit": "49262fd",
+  "ci_status": "failure (e2e pre-existing, unit+integration passed)",
   "notes": "Cron-driven autonomous improvement. One item per 5-min tick."
 }
