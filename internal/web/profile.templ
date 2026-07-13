@@ -1,0 +1,79 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/rusik69/govnohub/internal/auth"
+	"github.com/rusik69/govnohub/internal/repo"
+)
+
+type UserProfileData struct {
+	User    *auth.User
+	Repos   []repo.Repository
+	IsOwner bool
+}
+
+func pluralSuffix(n int, word string) string {
+	if n == 1 {
+		return word
+	}
+	return word + "s"
+}
+
+templ UserProfilePage(layout LayoutData, data UserProfileData) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, ActiveNav: "",
+		Content: UserProfileContent(data),
+	})
+}
+
+templ UserProfileContent(data UserProfileData) {
+	<div class="flex gap-8">
+		<div class="w-64 flex-shrink-0">
+			<div class="text-center mb-6">
+				@Avatar(data.User.Username, "lg")
+				<h1 class="text-2xl font-bold mt-3">{ data.User.Username }</h1>
+				<div class="text-muted text-sm mt-1">{ data.User.Role }</div>
+			</div>
+			<div class="text-sm text-muted space-y-2">
+				<div class="flex items-center gap-2">
+					@Icon("clock", "")
+					<span>Joined { data.User.CreatedAt.Format("Jan 2, 2006") }</span>
+				</div>
+			</div>
+		</div>
+		<div class="flex-1 min-w-0">
+			<h2 class="text-lg font-semibold mb-3">
+				{ strconv.Itoa(len(data.Repos)) + " " + pluralSuffix(len(data.Repos), "repository") }
+			</h2>
+			if len(data.Repos) == 0 {
+				@EmptyState("No repositories yet")
+			} else {
+				<div class="gh-list">
+					for _, r := range data.Repos {
+						<a href={ templ.SafeURL("/" + r.FullName) } class="gh-list-item">
+							<span class="gh-list-item-icon">
+								@Icon("repo", "")
+							</span>
+							<div class="gh-list-item-body">
+								<div class="gh-list-item-title">{ r.FullName }</div>
+								<div class="gh-list-item-meta">
+									if r.IsPrivate {
+										<span class="gh-visibility">Private</span>
+									} else {
+										<span class="gh-visibility">Public</span>
+									}
+									if r.Description != "" {
+										<span> · { r.Description }</span>
+									}
+									<span> · Updated { r.UpdatedAt.Format("Jan 2, 2006") }</span>
+								</div>
+							</div>
+						</a>
+					}
+				</div>
+			}
+		</div>
+	</div>
+}

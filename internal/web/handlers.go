@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/rusik69/govnohub/internal/repo"
 	"github.com/rusik69/govnohub/internal/search"
 	"github.com/rusik69/govnohub/internal/wiki"
 )
@@ -54,6 +55,48 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	repos, _ := h.deps.Repos.ListForUser(r.Context(), su.ID)
 	orgs, _ := h.deps.Org.ListForUser(r.Context(), su.ID)
 	render(w, r, DashboardPage(h.layout(r, "Dashboard"), repos, orgs, csrfFrom(r.Context()), ""))
+}
+
+func (h *Handler) handleUserProfile(w http.ResponseWriter, r *http.Request) {
+	username := chi.URLParam(r, "username")
+	user, err := h.deps.Auth.GetUserByUsername(r.Context(), username)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	su := userFrom(r.Context())
+	isOwner := su != nil && su.ID == user.ID
+	// Show public repos owned by this user; if viewing own profile, show all
+	rows, err := h.deps.Pool.Query(r.Context(), `
+		SELECT r.id, r.owner_type, r.owner_id, r.name, COALESCE(r.description,''),
+		       r.default_branch, r.is_private, r.is_fork, r.star_count, r.created_at, r.updated_at,
+		       COALESCE(u.username, o.name, '') AS owner_name
+		FROM repos r
+		LEFT JOIN users u ON r.owner_type='user' AND r.owner_id=u.id
+		LEFT JOIN orgs o ON r.owner_type='org' AND r.owner_id=o.id
+		WHERE r.owner_id=$1 AND r.owner_type='user'
+		  AND (NOT r.is_private OR $2)
+		ORDER BY r.updated_at DESC`, user.ID, isOwner)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	var repos []repo.Repository
+	for rows.Next() {
+		var r repo.Repository
+		if err := rows.Scan(&r.ID, &r.OwnerType, &r.OwnerID, &r.Name, &r.Description,
+			&r.DefaultBranch, &r.IsPrivate, &r.IsFork, &r.StarCount, &r.CreatedAt, &r.UpdatedAt, &r.OwnerName); err != nil {
+			continue
+		}
+		r.FullName = r.OwnerName + "/" + r.Name
+		repos = append(repos, r)
+	}
+	render(w, r, UserProfilePage(h.layout(r, user.Username), UserProfileData{
+		User:    user,
+		Repos:   repos,
+		IsOwner: isOwner,
+	}))
 }
 
 func (h *Handler) handleCreateUserRepo(w http.ResponseWriter, r *http.Request) {

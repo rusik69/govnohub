@@ -29,6 +29,7 @@ func (h *Handler) Routes() chi.Router {
 	r.Group(func(r chi.Router) {
 		r.Use(h.optionalAuth, h.requireAuth)
 		r.Get("/", h.handleDashboard)
+		r.Get("/u/{username}", h.handleUserProfile)
 		r.Post("/repos/create", h.handleCreateUserRepo)
 		r.Get("/search", h.handleSearch)
 		r.Get("/settings", h.handleSettings)
