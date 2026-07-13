@@ -91,7 +91,6 @@ func TestAddOrgMember(t *testing.T) {
 	env := testenv.New(t)
 	defer env.Cleanup()
 
-	adminToken := testutil.Login(t, env.URL, "admin", "admin")
 	orgOwner := "orgowner"
 	orgMember := "orgmember"
 
@@ -143,9 +142,6 @@ func TestAddOrgMember(t *testing.T) {
 	if out["status"] != "added" {
 		t.Errorf("status=%q want added", out["status"])
 	}
-
-	// Non-admin adding to org should fail — need admin for that
-	_ = adminToken // unused in this test, but kept for reference
 }
 
 func TestCreateTeam(t *testing.T) {
@@ -263,8 +259,8 @@ func TestCreateOrgAndCreateRepo(t *testing.T) {
 	if fullName != "myorg/org-repo" {
 		t.Errorf("full_name=%q want myorg/org-repo", fullName)
 	}
-	if owner, _ := out["owner"].(string); owner != "myorg" {
-		t.Errorf("owner=%q want myorg", owner)
+	if on, _ := out["owner_name"].(string); on != "myorg" {
+		t.Errorf("owner_name=%q want myorg", on)
 	}
 
 	// Get the repo and verify it's accessible
@@ -281,7 +277,6 @@ func TestOrgLifecycle(t *testing.T) {
 	env := testenv.New(t)
 	defer env.Cleanup()
 
-	adminToken := testutil.Login(t, env.URL, "admin", "admin")
 	aliceToken := testutil.RegisterAndLogin(t, env.URL, "alice")
 	bobToken := testutil.RegisterAndLogin(t, env.URL, "bob")
 
@@ -351,12 +346,12 @@ func TestOrgLifecycle(t *testing.T) {
 		t.Fatal("org 'lifecycle' not found in list")
 	}
 
-	// Admin can also add org repo
-	resp, out = testutil.DoJSON(t, http.MethodPost, env.URL+"/api/v1/orgs/lifecycle/repos", adminToken, map[string]any{
+	// Alice can create a repo in her own org
+	resp, out = testutil.DoJSON(t, http.MethodPost, env.URL+"/api/v1/orgs/lifecycle/repos", aliceToken, map[string]any{
 		"name": "main-repo", "description": "Main org repo", "private": false,
 	})
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("admin create org repo status=%d out=%v", resp.StatusCode, out)
+		t.Fatalf("create org repo status=%d out=%v", resp.StatusCode, out)
 	}
 	fullName, _ := out["full_name"].(string)
 	if fullName != "lifecycle/main-repo" {

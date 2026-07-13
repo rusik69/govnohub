@@ -33,7 +33,11 @@ func (s *Server) handleListOrgs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateOrg(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Name, DisplayName, Description string }
+	var req struct {
+		Name        string `json:"name"`
+		DisplayName string `json:"display_name"`
+		Description string `json:"description"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 	o, err := s.org.Create(r.Context(), req.Name, req.DisplayName, req.Description)
 	if err != nil {
