@@ -522,6 +522,47 @@ func (s *Store) Merge(owner, name, baseBranch, headBranch string, squash bool) (
 	return sha, nil
 }
 
+// MergeBaseIntoHead merges the base branch into the head branch (updates head ref).
+// This is used to update a PR branch with the latest changes from the base branch.
+// Returns the new head SHA after merge.
+func (s *Store) MergeBaseIntoHead(owner, name, headBranch, baseBranch string) (string, error) {
+	path := s.RepoPath(owner, name)
+	wt, err := os.MkdirTemp("", "govnohub-merge-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(wt)
+
+	if err := exec.Command("git", "-C", path, "worktree", "add", "--detach", wt, headBranch).Run(); err != nil {
+		return "", fmt.Errorf("worktree add: %w", err)
+	}
+	defer exec.Command("git", "-C", path, "worktree", "remove", "--force", wt).Run()
+
+	env := append(os.Environ(),
+		"GIT_AUTHOR_NAME=govnohub", "GIT_AUTHOR_EMAIL=govnohub@local",
+		"GIT_COMMITTER_NAME=govnohub", "GIT_COMMITTER_EMAIL=govnohub@local",
+	)
+
+	// Merge base into head
+	cmd := exec.Command("git", "-C", wt, "merge", baseBranch)
+	cmd.Env = env
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("merge base into head: %w", err)
+	}
+
+	out, err := exec.Command("git", "-C", wt, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return "", err
+	}
+	sha := strings.TrimSpace(string(out))
+
+	// Update the head branch ref
+	if err := exec.Command("git", "--git-dir", path, "update-ref", "refs/heads/"+headBranch, sha).Run(); err != nil {
+		return "", fmt.Errorf("update-ref head: %w", err)
+	}
+	return sha, nil
+}
+
 func (s *Store) CanMerge(owner, name, baseBranch, headBranch string) (bool, error) {
 	path := s.RepoPath(owner, name)
 	cmd := exec.Command("git", "-C", path, "merge-tree", "--write-tree", baseBranch, headBranch)

@@ -160,6 +160,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/pulls/{number}/reviews", s.handleListPRReviews)
 			r.Post("/pulls/{number}/reviews", s.handleAddReview)
 			r.Post("/pulls/{number}/merge", s.handleMergePR)
+			r.Put("/pulls/{number}/update-branch", s.handleUpdatePRBranch)
 			r.Get("/pulls/{number}/diff", s.handlePRDiff)
 			r.Get("/pulls/{number}/commits", s.handlePRCommits)
 			r.Get("/pulls/{number}/files", s.handlePRFiles)
@@ -984,6 +985,44 @@ func (s *Server) handleMergePR(w http.ResponseWriter, r *http.Request) {
 		"PR #"+strconv.Itoa(num)+" was merged in "+repository.FullName,
 		"/"+repository.OwnerName+"/"+repository.Name+"/pulls/"+strconv.Itoa(num))
 	jsonOK(w, map[string]string{"merge_sha": sha})
+}
+
+func (s *Server) handleUpdatePRBranch(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepoWrite(w, r)
+	if !ok {
+		return
+	}
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	pr, err := s.pulls.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "pull request not found")
+		return
+	}
+	if pr.State != "open" {
+		jsonError(w, http.StatusConflict, "pull request is not open")
+		return
+	}
+
+	// Merge base branch into head branch to update it
+	sha, err := s.git.MergeBaseIntoHead(repository.OwnerName, repository.Name, pr.HeadBranch, pr.BaseBranch)
+	if err != nil {
+		jsonError(w, http.StatusConflict, "failed to update branch: "+err.Error())
+		return
+	}
+
+	// Update the PR's head SHA
+	_, err = s.pool.Exec(r.Context(),
+		`UPDATE pull_requests SET head_sha=$1, updated_at=NOW() WHERE id=$2`,
+		sha, pr.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	jsonOK(w, map[string]string{"head_sha": sha})
 }
 
 func (s *Server) handlePRDiff(w http.ResponseWriter, r *http.Request) {
