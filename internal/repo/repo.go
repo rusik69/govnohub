@@ -148,6 +148,45 @@ func (s *Service) CanAccess(ctx context.Context, repoID, userID uuid.UUID, minPe
 	return !isPrivate, nil
 }
 
+type UpdateRepoInput struct {
+	Description   *string `json:"description,omitempty"`
+	IsPrivate     *bool   `json:"private,omitempty"`
+	DefaultBranch *string `json:"default_branch,omitempty"`
+}
+
+func (s *Service) Update(ctx context.Context, repoID uuid.UUID, input UpdateRepoInput) (*Repository, error) {
+	var r Repository
+	err := s.pool.QueryRow(ctx, `
+		UPDATE repos SET
+			description = COALESCE($2, description),
+			is_private = COALESCE($3, is_private),
+			default_branch = COALESCE($4, default_branch),
+			updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, owner_type, owner_id, name, COALESCE(description,''), default_branch,
+		          is_private, is_fork, star_count, created_at, updated_at`,
+		repoID, input.Description, input.IsPrivate, input.DefaultBranch,
+	).Scan(&r.ID, &r.OwnerType, &r.OwnerID, &r.Name, &r.Description, &r.DefaultBranch,
+		&r.IsPrivate, &r.IsFork, &r.StarCount, &r.CreatedAt, &r.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	// Fetch owner_name to build full_name
+	err = s.pool.QueryRow(ctx, `
+		SELECT COALESCE(u.username, o.name) FROM repos r
+		LEFT JOIN users u ON r.owner_type='user' AND r.owner_id=u.id
+		LEFT JOIN orgs o ON r.owner_type='org' AND r.owner_id=o.id
+		WHERE r.id=$1`, repoID).Scan(&r.OwnerName)
+	if err != nil {
+		return nil, err
+	}
+	r.FullName = r.OwnerName + "/" + r.Name
+	return &r, nil
+}
+
 func (s *Service) UpdateBranchHead(ctx context.Context, repoID uuid.UUID, branch, sha string) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO branches (repo_id, name, head_sha) VALUES ($1, $2, $3)

@@ -122,6 +122,7 @@ func (s *Server) Router() http.Handler {
 
 		r.Route("/repos/{owner}/{repo}", func(r chi.Router) {
 			r.Get("/", s.handleGetRepo)
+			r.Patch("/", s.handleUpdateRepo)
 			r.Get("/contents/*", s.handleGetContents)
 			r.Get("/commits", s.handleGetCommits)
 			r.Post("/star", s.handleStar)
@@ -476,6 +477,27 @@ func (s *Server) handleGetRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, repository)
+}
+
+func (s *Server) handleUpdateRepo(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepoWrite(w, r)
+	if !ok {
+		return
+	}
+	var req repo.UpdateRepoInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if !s.requireScope(w, r, auth.ScopeRepoWrite) {
+		return
+	}
+	updated, err := s.repos.Update(r.Context(), repository.ID, req)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, updated)
 }
 
 func (s *Server) handleGetContents(w http.ResponseWriter, r *http.Request) {

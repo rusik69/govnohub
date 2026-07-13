@@ -630,6 +630,81 @@ func TestRepoDeletedOwner(t *testing.T) {
 	})
 }
 
+func TestRepoUpdate(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	authSvc := auth.NewService(pg.Pool, "secret")
+	repoSvc := NewService(pg.Pool)
+
+	u, _ := authSvc.Register(ctx, "updateuser", "update@test.local", "pass")
+
+	r, err := repoSvc.Create(ctx, "user", u.ID, u.Username, "update-me", "original desc", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("update description", func(t *testing.T) {
+		desc := "new description"
+		updated, err := repoSvc.Update(ctx, r.ID, UpdateRepoInput{Description: &desc})
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if updated.Description != "new description" {
+			t.Errorf("Description = %q, want %q", updated.Description, "new description")
+		}
+		if updated.Name != "update-me" {
+			t.Errorf("Name changed to %q", updated.Name)
+		}
+	})
+
+	t.Run("make repo private", func(t *testing.T) {
+		priv := true
+		updated, err := repoSvc.Update(ctx, r.ID, UpdateRepoInput{IsPrivate: &priv})
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if !updated.IsPrivate {
+			t.Error("expected repo to be private")
+		}
+	})
+
+	t.Run("update default branch", func(t *testing.T) {
+		branch := "develop"
+		updated, err := repoSvc.Update(ctx, r.ID, UpdateRepoInput{DefaultBranch: &branch})
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if updated.DefaultBranch != "develop" {
+			t.Errorf("DefaultBranch = %q, want %q", updated.DefaultBranch, "develop")
+		}
+	})
+
+	t.Run("partial update only changes specified field", func(t *testing.T) {
+		desc := "only desc changed"
+		updated, err := repoSvc.Update(ctx, r.ID, UpdateRepoInput{Description: &desc})
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if updated.Description != "only desc changed" {
+			t.Errorf("Description = %q, want %q", updated.Description, "only desc changed")
+		}
+		if !updated.IsPrivate {
+			t.Error("expected is_private to remain true")
+		}
+		if updated.DefaultBranch != "develop" {
+			t.Errorf("DefaultBranch = %q, want %q", updated.DefaultBranch, "develop")
+		}
+	})
+
+	t.Run("non-existent repo returns ErrNotFound", func(t *testing.T) {
+		_, err := repoSvc.Update(ctx, uuid.New(), UpdateRepoInput{})
+		if err != ErrNotFound {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+}
+
 // mustLoginUserID logs in and returns the user ID; helper for tests.
 func mustLoginUserID(t *testing.T, svc *auth.Service, username string) uuid.UUID {
 	t.Helper()
