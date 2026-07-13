@@ -133,7 +133,6 @@ func (s *Server) Router() http.Handler {
 			r.Post("/fork", s.handleFork)
 
 			r.Get("/branches", s.handleListBranches)
-			r.Post("/branches", s.handleCreateBranch)
 			r.Get("/tags", s.handleListTags)
 			r.Post("/tags", s.handleCreateTag)
 
