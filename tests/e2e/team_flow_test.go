@@ -199,7 +199,7 @@ func TestTeamFlow_MultipleTeamsMultipleMembers(t *testing.T) {
 	member2ID := userID(t, base, member2Token)
 
 	// Create org
-	resp, out := testutil.DoJSON(t, http.MethodPost, base+"/api/v1/orgs", ownerToken, map[string]string{
+	resp, _ := testutil.DoJSON(t, http.MethodPost, base+"/api/v1/orgs", ownerToken, map[string]string{
 		"name": orgName, "display_name": "Multi Team", "description": "",
 	})
 	requireStatus(t, resp, http.StatusOK, "create org")
