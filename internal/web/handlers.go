@@ -966,6 +966,40 @@ func (h *Handler) handleCreateRelease(w http.ResponseWriter, r *http.Request) {
 	redirectWithFlash(w, r, "/"+repository.FullName+"/releases", "Release created", false)
 }
 
+func (h *Handler) handleTags(w http.ResponseWriter, r *http.Request) {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	tags, _ := h.deps.Git.ListTags(repository.OwnerName, repository.Name)
+	header, nav := h.repoPageCtx(r, repository, "tags")
+	render(w, r, TagsPage(h.layout(r, "Tags"), header, nav, tags, csrfFrom(r.Context())))
+}
+
+func (h *Handler) handleCreateTag(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	repository, ok := h.getRepo(w, r, "write")
+	if !ok {
+		return
+	}
+	tagName := r.FormValue("name")
+	ref := r.FormValue("ref")
+	if tagName == "" {
+		redirectWithFlash(w, r, "/"+repository.FullName+"/tags", "Tag name is required", true)
+		return
+	}
+	if ref == "" {
+		ref = repository.DefaultBranch
+	}
+	if err := h.deps.Git.CreateTag(repository.OwnerName, repository.Name, tagName, ref); err != nil {
+		redirectWithFlash(w, r, "/"+repository.FullName+"/tags", err.Error(), true)
+		return
+	}
+	redirectWithFlash(w, r, "/"+repository.FullName+"/tags", "Tag created", false)
+}
+
 func (h *Handler) handlePackages(w http.ResponseWriter, r *http.Request) {
 	repository, ok := h.getRepo(w, r, "read")
 	if !ok {

@@ -1,0 +1,45 @@
+package web
+
+import (
+	gitstore "github.com/rusik69/govnohub/internal/git"
+)
+
+templ TagsPage(layout LayoutData, header RepoHeaderData, nav RepoNavData, tags []gitstore.TagInfo, csrf string) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
+		Content: TagsContent(header, nav, tags, csrf),
+	})
+}
+
+templ TagsContent(header RepoHeaderData, nav RepoNavData, tags []gitstore.TagInfo, csrf string) {
+	@RepoPageShell(header, nav)
+	<div class="max-w-7xl mx-auto">
+		<h1 class="text-xl font-bold mb-4">Tags</h1>
+		@CollapsibleForm("Create tag", TagCreateForm(nav, csrf))
+		if len(tags) == 0 {
+			@EmptyState("No tags")
+		} else {
+			<div class="card">
+				for _, tag := range tags {
+					<div class="gh-file-row">
+						@Icon("tag", "")
+						<div class="flex-1">
+							<strong>{ tag.Name }</strong>
+							<a href={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/commit/" + tag.HeadSHA) } class="text-muted ml-2 font-mono text-sm">{ tag.HeadSHA[:8] }</a>
+						</div>
+					</div>
+				}
+			</div>
+		}
+	</div>
+}
+
+templ TagCreateForm(nav RepoNavData, csrf string) {
+	<form method="post" action={ templ.SafeURL("/" + nav.Owner + "/" + nav.Repo + "/tags") } class="grid grid-cols-2 gap-3">
+		@CSRFInput(csrf)
+		<input type="text" name="name" placeholder="Tag name" required class="input"/>
+		<input type="text" name="ref" placeholder="Target (branch or SHA, defaults to default branch)" class="input"/>
+		<button type="submit" class="btn col-span-2">Create tag</button>
+	</form>
+}

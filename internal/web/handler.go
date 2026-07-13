@@ -98,6 +98,9 @@ func (h *Handler) Routes() chi.Router {
 			r.Post("/releases", h.handleCreateRelease)
 			r.Post("/releases/{tag}/assets", h.handleUploadReleaseAsset)
 
+			r.Get("/tags", h.handleTags)
+			r.Post("/tags", h.handleCreateTag)
+
 			r.Get("/packages", h.handlePackages)
 			r.Post("/packages", h.handlePublishPackage)
 
