@@ -1365,3 +1365,24 @@ func (h *Handler) handleCreateOrgRepo(w http.ResponseWriter, r *http.Request) {
 	_, _ = h.deps.Git.SeedMainBranch(repo.OwnerName, repo.Name, repo.DefaultBranch)
 	http.Redirect(w, r, "/"+repo.FullName, http.StatusSeeOther)
 }
+
+func (h *Handler) handleCommitDetail(w http.ResponseWriter, r *http.Request) {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	sha := chi.URLParam(r, "sha")
+	if sha == "" {
+		http.NotFound(w, r)
+		return
+	}
+	commit, err := h.deps.Git.GetCommitDetail(repository.OwnerName, repository.Name, sha)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	header, nav := h.repoPageCtx(r, repository, "code")
+	render(w, r, CommitDetailPage(h.layout(r, commit.ShortSHA+" · "+repository.FullName), CommitDetailData{
+		Header: header, Nav: nav, Commit: commit, CSRF: csrfFrom(r.Context()),
+	}))
+}

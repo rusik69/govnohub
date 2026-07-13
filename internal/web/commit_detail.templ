@@ -1,0 +1,170 @@
+package web
+
+import (
+	"strconv"
+	"strings"
+
+	gitstore "github.com/rusik69/govnohub/internal/git"
+)
+
+type CommitDetailData struct {
+	Header      RepoHeaderData
+	Nav         RepoNavData
+	Commit      *gitstore.CommitDetail
+	CSRF        string
+}
+
+templ CommitDetailPage(layout LayoutData, data CommitDetailData) {
+	@Layout(LayoutData{
+		Title: layout.Title, User: layout.User, CSRF: layout.CSRF,
+		UnreadNotifs: layout.UnreadNotifs, Flash: layout.Flash, FlashErr: layout.FlashErr, FullWidth: true,
+		Content: CommitDetailContent(data),
+	})
+}
+
+templ CommitDetailContent(data CommitDetailData) {
+	@RepoPageShell(data.Header, data.Nav)
+	<div class="max-w-7xl mx-auto">
+		<div class="commit-overview card mb-4">
+			<div class="commit-header flex items-center gap-2 pb-3 border-b mb-3">
+				@Icon("git-commit", "text-muted")
+				<h2 class="text-lg font-bold m-0">Commit</h2>
+				<code class="commit-sha-full text-sm text-muted">{ data.Commit.SHA }</code>
+				<button type="button" class="gh-clone-copy gh-header-btn" aria-label="Copy SHA"
+					onclick="navigator.clipboard.writeText('{ data.Commit.SHA }')">
+					@Icon("copy", "")
+				</button>
+			</div>
+
+			<div class="commit-message-box mb-4">
+				<pre class="commit-message font-mono whitespace-pre-wrap text-sm m-0">{ data.Commit.Message }</pre>
+			</div>
+
+			<div class="commit-meta flex flex-wrap gap-6 text-sm">
+				<div>
+					<span class="text-muted">Author:</span>
+					<div class="flex items-center gap-2 mt-1">
+						@Avatar(data.Commit.AuthorName, "")
+						<div>
+							<strong>{ data.Commit.AuthorName }</strong>
+							<span class="text-muted">&lt;{ data.Commit.AuthorEmail }&gt;</span>
+							<br/>
+							<span class="text-muted">{ formatTime(data.Commit.AuthorDate) }</span>
+						</div>
+					</div>
+				</div>
+				<div>
+					<span class="text-muted">Committer:</span>
+					<div class="flex items-center gap-2 mt-1">
+						@Avatar(data.Commit.CommitterName, "")
+						<div>
+							<strong>{ data.Commit.CommitterName }</strong>
+							<span class="text-muted">&lt;{ data.Commit.CommitterEmail }&gt;</span>
+							<br/>
+							<span class="text-muted">{ formatTime(data.Commit.CommitterDate) }</span>
+						</div>
+					</div>
+				</div>
+				if len(data.Commit.ParentSHAs) > 0 {
+					<div>
+						<span class="text-muted">Parents:</span>
+						<div class="mt-1">
+							for _, p := range data.Commit.ParentSHAs {
+								<a href={ templ.SafeURL("../" + p) } class="font-mono text-sm text-blue mr-2">{ shortSHA(p) }</a>
+							}
+						</div>
+					</div>
+				}
+			</div>
+		</div>
+
+		<div class="commit-stats-bar card mb-4 flex items-center gap-4 text-sm">
+			<span class="font-bold">{ strconv.Itoa(data.Commit.FilesChanged) } files changed</span>
+			if data.Commit.Additions > 0 {
+				<span class="text-green font-bold">++{ strconv.Itoa(data.Commit.Additions) }</span>
+			}
+			if data.Commit.Deletions > 0 {
+				<span class="text-red font-bold">--{ strconv.Itoa(data.Commit.Deletions) }</span>
+			}
+		</div>
+
+		<div class="commit-files">
+			for _, f := range data.Commit.Files {
+				<div class="commit-file-row card mb-2">
+					<details class="commit-file-details">
+						<summary class="commit-file-summary flex items-center gap-2 p-3 cursor-pointer">
+							@fileStatusIcon(f.Status)
+							<a href={ templ.SafeURL("/" + data.Nav.Owner + "/" + data.Nav.Repo + "/blob/" + data.Commit.SHA + "?ref=" + data.Commit.SHA) } class="font-mono text-sm">{ f.Filename }</a>
+							<span class="ml-auto text-xs text-muted">
+								if f.Additions > 0 {
+									<span class="text-green">+{ strconv.Itoa(f.Additions) }</span>
+								}
+								if f.Deletions > 0 {
+									<span class="text-red ml-1">-{ strconv.Itoa(f.Deletions) }</span>
+								}
+							</span>
+						</summary>
+						<div class="commit-file-diff p-2 border-t">
+							@diffSnippet(data.Commit.Diff, f.Filename)
+						</div>
+					</details>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+templ fileStatusIcon(status string) {
+	if status == "added" {
+		<span class="text-green" title="Added">@Icon("diff-added", "")</span>
+	} else if status == "removed" {
+		<span class="text-red" title="Removed">@Icon("diff-removed", "")</span>
+	} else {
+		<span class="text-muted" title="Modified">@Icon("diff-modified", "")</span>
+	}
+}
+
+templ diffSnippet(diff, filename string) {
+	<pre class="font-mono text-xs overflow-x-auto max-h-48 overflow-y-auto">{ extractFileDiff(diff, filename) }</pre>
+}
+
+// shortSHA returns the first 12 characters of a commit SHA.
+func shortSHA(sha string) string {
+	if len(sha) > 12 {
+		return sha[:12]
+	}
+	return sha
+}
+
+// formatTime parses an RFC3339 time string and returns a human-readable format.
+func formatTime(t string) string {
+	// Just return as-is for now — Go's time formatting can be applied if needed.
+	return t
+}
+
+// extractFileDiff extracts the diff section for a specific file from a unified diff.
+func extractFileDiff(diff, filename string) string {
+	if diff == "" {
+		return ""
+	}
+	lines := strings.Split(diff, "\n")
+	var out []string
+	inFile := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") && strings.Contains(line, filename) {
+			inFile = true
+			out = append(out, line)
+			continue
+		}
+		if strings.HasPrefix(line, "diff --git ") {
+			if inFile {
+				break
+			}
+			continue
+		}
+		if inFile {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
+}

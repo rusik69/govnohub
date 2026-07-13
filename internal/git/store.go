@@ -1018,6 +1018,136 @@ func (s *Store) CreateCommit(owner, name string, req CreateCommitRequest) (strin
 	return hash.String(), nil
 }
 
+// CommitDetail holds full information about a single commit for the detail view.
+type CommitDetail struct {
+	SHA            string        `json:"sha"`
+	ShortSHA       string        `json:"short_sha"`
+	Message        string        `json:"message"`
+	AuthorName     string        `json:"author_name"`
+	AuthorEmail    string        `json:"author_email"`
+	AuthorDate     string        `json:"author_date"`
+	CommitterName  string        `json:"committer_name"`
+	CommitterEmail string        `json:"committer_email"`
+	CommitterDate  string        `json:"committer_date"`
+	ParentSHAs     []string      `json:"parent_shas"`
+	TreeSHA        string        `json:"tree_sha"`
+	FilesChanged   int           `json:"files_changed"`
+	Additions      int           `json:"additions"`
+	Deletions      int           `json:"deletions"`
+	Files          []ChangedFile `json:"files"`
+	Diff           string        `json:"diff,omitempty"`
+}
+
+// GetCommitDetail returns full details for a single commit identified by ref (branch name or SHA).
+func (s *Store) GetCommitDetail(owner, name, ref string) (*CommitDetail, error) {
+	repo, err := s.Open(owner, name)
+	if err != nil {
+		return nil, err
+	}
+	commit, err := resolveCommit(repo, ref)
+	if err != nil {
+		return nil, err
+	}
+
+	path := s.RepoPath(owner, name)
+	sha := commit.Hash.String()
+
+	// Get parent SHAs
+	var parentSHAs []string
+	for _, p := range commit.ParentHashes {
+		parentSHAs = append(parentSHAs, p.String())
+	}
+
+	// Stat against first parent (or initial commit stats)
+	filesChanged, additions, deletions := 0, 0, 0
+	var files []ChangedFile
+	diffStr := ""
+
+	if len(commit.ParentHashes) > 0 {
+		parentSHA := commit.ParentHashes[0].String()
+
+		// Changed files via --numstat
+		fOut, fErr := exec.Command("git", "-C", path, "diff", "--numstat", parentSHA, sha).Output()
+		if fErr == nil {
+			for _, line := range strings.Split(strings.TrimSpace(string(fOut)), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				parts := strings.Fields(line)
+				if len(parts) < 3 {
+					continue
+				}
+				addsStr, delsStr := parts[0], parts[1]
+				filename := strings.Join(parts[2:], " ")
+
+				status := "modified"
+				adds := atoiSafe(addsStr)
+				dels := atoiSafe(delsStr)
+				if adds > 0 && dels == 0 {
+					status = "added"
+				} else if adds == 0 && dels > 0 {
+					status = "removed"
+				}
+				files = append(files, ChangedFile{
+					Filename:  filename,
+					Status:    status,
+					Additions: adds,
+					Deletions: dels,
+					Changes:   adds + dels,
+				})
+				filesChanged++
+				additions += adds
+				deletions += dels
+			}
+		}
+
+		// Full diff
+		dBytes, _ := exec.Command("git", "-C", path, "diff", parentSHA, sha).Output()
+		diffStr = string(dBytes)
+	} else {
+		// Initial commit: count all files in the tree
+		tree, err := commit.Tree()
+		if err == nil {
+			_ = tree.Files().ForEach(func(f *object.File) error {
+				files = append(files, ChangedFile{
+					Filename:  f.Name,
+					Status:    "added",
+					Additions: 1,
+					Deletions: 0,
+					Changes:   1,
+				})
+				filesChanged++
+				additions++
+				return nil
+			})
+		}
+	}
+
+	if files == nil {
+		files = []ChangedFile{}
+	}
+
+	return &CommitDetail{
+		SHA:            sha,
+		ShortSHA:       sha[:12],
+		Message:        commit.Message,
+		AuthorName:     commit.Author.Name,
+		AuthorEmail:    commit.Author.Email,
+		AuthorDate:     commit.Author.When.Format(time.RFC3339),
+		CommitterName:  commit.Committer.Name,
+		CommitterEmail: commit.Committer.Email,
+		CommitterDate:  commit.Committer.When.Format(time.RFC3339),
+		ParentSHAs:     parentSHAs,
+		TreeSHA:        commit.TreeHash.String(),
+		FilesChanged:   filesChanged,
+		Additions:      additions,
+		Deletions:      deletions,
+		Files:          files,
+		Diff:           diffStr,
+	}, nil
+}
+
 // CreateRefParams holds parameters for creating or updating a git reference.
 type CreateRefParams struct {
 	Ref string `json:"ref"` // e.g. "refs/heads/new-branch" or "refs/tags/v1.0"

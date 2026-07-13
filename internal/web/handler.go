@@ -62,6 +62,7 @@ func (h *Handler) Routes() chi.Router {
 			r.Get("/", h.handleRepo)
 			r.Get("/tree/*", h.handleRepoTree)
 			r.Get("/blob/*", h.handleRepoBlob)
+			r.Get("/commit/{sha}", h.handleCommitDetail)
 			r.Post("/star", h.handleStar)
 			r.Post("/unstar", h.handleUnstar)
 			r.Post("/watch", h.handleWatch)
