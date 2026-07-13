@@ -113,16 +113,30 @@ func (s *Server) handlePatchIssue(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		if assigneeID != nil {
+			s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "assigned", map[string]interface{}{
+				"assignee": *req.Assignee,
+			})
+		} else {
+			s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "unassigned", nil)
+		}
 	}
 	if req.ClearMilestone {
 		if err := s.issues.SetMilestone(r.Context(), i.ID, nil); err != nil {
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "demilestoned", nil)
 	} else if req.Milestone != nil {
 		if err := s.issues.SetMilestone(r.Context(), i.ID, req.Milestone); err != nil {
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
+		}
+		m, _ := s.issues.GetMilestone(r.Context(), repository.ID, *req.Milestone)
+		if m != nil {
+			s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "milestoned", map[string]interface{}{
+				"milestone_title": m.Title,
+			})
 		}
 	}
 	updated, _ := s.issues.Get(r.Context(), repository.ID, num)
@@ -152,6 +166,13 @@ func (s *Server) handleAddIssueLabel(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	label, _ := s.issues.GetLabelByID(r.Context(), labelID)
+	if label != nil {
+		s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "labeled", map[string]interface{}{
+			"label_name": label.Name,
+			"label_color": label.Color,
+		})
+	}
 	updated, _ := s.issues.Get(r.Context(), repository.ID, num)
 	jsonOK(w, updated)
 }
@@ -175,10 +196,42 @@ func (s *Server) handleRemoveIssueLabel(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, http.StatusBadRequest, "invalid label id")
 		return
 	}
+	label, _ := s.issues.GetLabelByID(r.Context(), labelID)
 	if err := s.issues.RemoveLabel(r.Context(), i.ID, labelID); err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if label != nil {
+		s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "unlabeled", map[string]interface{}{
+			"label_name": label.Name,
+			"label_color": label.Color,
+		})
+	}
 	updated, _ := s.issues.Get(r.Context(), repository.ID, num)
 	jsonOK(w, updated)
+}
+
+func (s *Server) handleGetIssueTimeline(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	i, err := s.issues.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	events, err := s.issues.GetTimeline(r.Context(), i.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if events == nil {
+		events = []issue.TimelineEvent{}
+	}
+	jsonOK(w, events)
 }

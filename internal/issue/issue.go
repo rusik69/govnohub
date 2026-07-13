@@ -2,6 +2,7 @@ package issue
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +40,16 @@ type Label struct {
 	ID    uuid.UUID `json:"id"`
 	Name  string    `json:"name"`
 	Color string    `json:"color"`
+}
+
+type TimelineEvent struct {
+	ID        uuid.UUID       `json:"id"`
+	IssueID   uuid.UUID       `json:"issue_id"`
+	ActorID   *uuid.UUID      `json:"actor_id,omitempty"`
+	Actor     string          `json:"actor,omitempty"`
+	EventType string          `json:"event_type"`
+	Metadata  json.RawMessage `json:"metadata,omitempty"`
+	CreatedAt time.Time       `json:"created_at"`
 }
 
 type Milestone struct {
@@ -319,6 +330,54 @@ func (s *Service) ListRepoUsers(ctx context.Context, repoID uuid.UUID) ([]string
 			return nil, err
 		}
 		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+// GetLabelByID returns a label by its ID within a repo.
+func (s *Service) GetLabelByID(ctx context.Context, id uuid.UUID) (*Label, error) {
+	var l Label
+	err := s.pool.QueryRow(ctx, `SELECT id, name, color FROM labels WHERE id=$1`, id).Scan(&l.ID, &l.Name, &l.Color)
+	if err != nil {
+		return nil, err
+	}
+	return &l, nil
+}
+
+// RecordEvent records a timeline event for an issue.
+func (s *Service) RecordEvent(ctx context.Context, issueID, actorID uuid.UUID, eventType string, metadata map[string]interface{}) error {
+	var meta json.RawMessage
+	if len(metadata) > 0 {
+		b, err := json.Marshal(metadata)
+		if err != nil {
+			return err
+		}
+		meta = b
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO issue_events (issue_id, actor_id, event_type, metadata)
+		VALUES ($1, $2, $3, $4)`, issueID, actorID, eventType, meta)
+	return err
+}
+
+// GetTimeline returns timeline events for an issue, ordered chronologically.
+func (s *Service) GetTimeline(ctx context.Context, issueID uuid.UUID) ([]TimelineEvent, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT e.id, e.issue_id, e.actor_id, COALESCE(u.username,''), e.event_type, COALESCE(e.metadata,'null'::jsonb), e.created_at
+		FROM issue_events e
+		LEFT JOIN users u ON e.actor_id = u.id
+		WHERE e.issue_id=$1 ORDER BY e.created_at ASC`, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TimelineEvent
+	for rows.Next() {
+		var e TimelineEvent
+		if err := rows.Scan(&e.ID, &e.IssueID, &e.ActorID, &e.Actor, &e.EventType, &e.Metadata, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
 	}
 	return out, rows.Err()
 }

@@ -141,6 +141,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/issues/{number}/comments", s.handleAddIssueComment)
 			r.Post("/issues/{number}/close", s.handleCloseIssue)
 			r.Patch("/issues/{number}", s.handlePatchIssue)
+			r.Get("/issues/{number}/timeline", s.handleGetIssueTimeline)
 			r.Post("/issues/{number}/labels/{labelID}", s.handleAddIssueLabel)
 			r.Delete("/issues/{number}/labels/{labelID}", s.handleRemoveIssueLabel)
 			r.Get("/labels", s.handleListLabels)
@@ -674,6 +675,10 @@ func (s *Server) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "opened", map[string]interface{}{
+		"title": i.Title,
+		"body":  i.Body,
+	})
 	s.search.Index(r.Context(), search.Document{
 		ID: "issue-" + i.ID.String(), Type: "issue", Title: i.Title, Body: i.Body,
 		Repo: repository.FullName, Ref: strconv.Itoa(i.Number),
@@ -719,6 +724,9 @@ func (s *Server) handleAddIssueComment(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "commented", map[string]interface{}{
+		"comment_id": c.ID.String(),
+	})
 	if i.AuthorID != userIDFrom(r.Context()) {
 		s.notify.NotifyAsync(i.AuthorID, "Issue comment",
 			"New comment on #"+strconv.Itoa(num)+" in "+repository.FullName,
@@ -770,6 +778,7 @@ func (s *Server) handleCloseIssue(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.issues.RecordEvent(r.Context(), i.ID, userIDFrom(r.Context()), "closed", nil)
 	if i.AuthorID != userIDFrom(r.Context()) {
 		s.notify.NotifyAsync(i.AuthorID, "Issue closed",
 			"Issue #"+strconv.Itoa(num)+" was closed in "+repository.FullName,
