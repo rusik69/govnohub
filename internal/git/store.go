@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -335,6 +336,78 @@ func (s *Store) GetCommits(owner, name, ref string, limit int) ([]CommitInfo, er
 		return nil, err
 	}
 	return commits, nil
+}
+
+// ChangedFile represents a file changed in a pull request.
+type ChangedFile struct {
+	Filename  string `json:"filename"`
+	Status    string `json:"status"` // added, modified, removed
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Changes   int    `json:"changes"`
+}
+
+// GetPRFiles returns the list of files changed between baseBranch and headBranch.
+func (s *Store) GetPRFiles(owner, name, baseBranch, headBranch string) ([]ChangedFile, error) {
+	path := s.RepoPath(owner, name)
+	cmd := exec.Command("git", "-C", path, "diff", "--numstat", baseBranch, headBranch)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff --numstat: %w", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var files []ChangedFile
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) < 3 {
+			continue
+		}
+		// Handle binary files: "-" "-" filename
+		addsStr := parts[0]
+		delsStr := parts[1]
+		filename := strings.Join(parts[2:], " ")
+		// Determine status: if filename contains " => ", it's a rename
+		status := "modified"
+		if addsStr == "-" || delsStr == "-" {
+			status = "modified"
+			if addsStr == "0" && delsStr != "0" {
+				status = "removed"
+			} else if delsStr == "0" && addsStr != "0" {
+				status = "added"
+			}
+		} else {
+			adds, _ := strconv.Atoi(addsStr)
+			dels, _ := strconv.Atoi(delsStr)
+			if adds > 0 && dels == 0 {
+				status = "added"
+			} else if adds == 0 && dels > 0 {
+				status = "removed"
+			}
+		}
+		files = append(files, ChangedFile{
+			Filename:  filename,
+			Status:    status,
+			Additions: atoiSafe(addsStr),
+			Deletions: atoiSafe(delsStr),
+			Changes:   atoiSafe(addsStr) + atoiSafe(delsStr),
+		})
+	}
+	if files == nil {
+		files = []ChangedFile{}
+	}
+	return files, nil
+}
+
+func atoiSafe(s string) int {
+	if s == "-" {
+		return 0
+	}
+	n, _ := strconv.Atoi(s)
+	return n
 }
 
 // GetPRCommits returns commits in headBranch that are not reachable from baseBranch.

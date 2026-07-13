@@ -358,3 +358,82 @@ func TestCanMerge(t *testing.T) {
 		t.Fatal("expected mergeable")
 	}
 }
+
+func TestGetPRFiles(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Init(context.Background(), "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	path := store.RepoPath("alice", "demo")
+
+	// Seed main with initial commit
+	mainSHA := bareCommitOn(t, path, "", "main", "init")
+
+	// Create a second commit on feature that "adds" a file
+	// We'll create a real commit with a file change using worktree
+	wt, err := os.MkdirTemp("", "govnohub-test-prfiles-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(wt)
+
+	// Use a worktree to make a real file change on the feature branch
+	exec.Command("git", "-C", path, "worktree", "add", "--detach", wt, mainSHA).Run()
+	defer exec.Command("git", "-C", path, "worktree", "remove", "--force", wt).Run()
+
+	runGit(t, wt, "config", "user.email", "test@test.local")
+	runGit(t, wt, "config", "user.name", "test")
+
+	// Create two files and commit
+	if err := os.WriteFile(filepath.Join(wt, "new-file.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, "README.md"), []byte("# Demo\n\nUpdated.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, wt, "add", ".")
+	runGit(t, wt, "commit", "-m", "feat: add new-file.go and update README")
+	runGit(t, wt, "push", path, "HEAD:refs/heads/feature")
+
+	// Get PR files between main and feature
+	files, err := store.GetPRFiles("alice", "demo", "main", "feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("expected at least 1 changed file")
+	}
+	// Check we see both files — new-file.go (added) and README.md (modified)
+	foundNew := false
+	foundReadme := false
+	for _, f := range files {
+		if f.Filename == "new-file.go" {
+			foundNew = true
+			if f.Status != "added" && f.Status != "modified" {
+				t.Fatalf("expected new-file.go to be added or modified, got %s", f.Status)
+			}
+		}
+		if f.Filename == "README.md" {
+			foundReadme = true
+		}
+	}
+	if !foundNew {
+		t.Fatal("expected new-file.go in changed files")
+	}
+	if !foundReadme {
+		t.Fatal("expected README.md in changed files")
+	}
+	// Verify additions/deletions are tracked
+	var totalAdds, totalDels int
+	for _, f := range files {
+		totalAdds += f.Additions
+		totalDels += f.Deletions
+	}
+	if totalAdds == 0 && totalDels == 0 {
+		t.Fatal("expected non-zero additions or deletions")
+	}
+}

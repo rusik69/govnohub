@@ -262,6 +262,37 @@ func TestPRFullLifecycle(t *testing.T) {
 		t.Error("commit author should not be empty")
 	}
 
+	// Get PR files — should include the files changed
+	req, _ = http.NewRequest(http.MethodGet, env.URL+"/api/v1/repos/"+owner+"/pr-test/pulls/1/files", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list PR files status=%d", resp.StatusCode)
+	}
+	var files []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&files); err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("expected at least 1 changed file in PR")
+	}
+	foundNewFile := false
+	if len(files) > 0 {
+		for _, f := range files {
+			if fn, _ := f["filename"].(string); fn == "new-file.txt" {
+				foundNewFile = true
+				break
+			}
+		}
+	}
+	if !foundNewFile {
+		t.Fatalf("expected to find new-file.txt among changed files, got %v", files)
+	}
+
 	// Merge the PR
 	resp, out = testutil.DoJSON(t, http.MethodPost, env.URL+"/api/v1/repos/"+owner+"/pr-test/pulls/1/merge", token, map[string]any{
 		"squash": true,

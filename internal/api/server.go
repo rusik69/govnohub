@@ -162,6 +162,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/pulls/{number}/merge", s.handleMergePR)
 			r.Get("/pulls/{number}/diff", s.handlePRDiff)
 			r.Get("/pulls/{number}/commits", s.handlePRCommits)
+			r.Get("/pulls/{number}/files", s.handlePRFiles)
 			r.Get("/pulls/{number}/comments", s.handleListPRComments)
 			r.Post("/pulls/{number}/comments", s.handleAddPRComment)
 			r.Get("/pulls/{number}/ai-reviews", s.handleListAIReviews)
@@ -1036,6 +1037,28 @@ func (s *Server) handlePRCommits(w http.ResponseWriter, r *http.Request) {
 		commits = []gitstore.CommitInfo{}
 	}
 	jsonOK(w, commits)
+}
+
+func (s *Server) handlePRFiles(w http.ResponseWriter, r *http.Request) {
+	repository, ok := s.getRepo(w, r)
+	if !ok {
+		return
+	}
+	num, ok := parseNumber(w, r, "number")
+	if !ok {
+		return
+	}
+	pr, err := s.pulls.Get(r.Context(), repository.ID, num)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	files, err := s.git.GetPRFiles(repository.OwnerName, repository.Name, pr.BaseBranch, pr.HeadBranch)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, files)
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
