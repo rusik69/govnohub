@@ -45,6 +45,17 @@ func main() {
 		log.Fatalf("git store: %v", err)
 	}
 
+	// Set up pack-objects cache for popular repos
+	if cfg.PackCacheDir != "" {
+		packCache, err := gitstore.NewPackCache(cfg.PackCacheDir, cfg.PackCacheMaxSize, 0)
+		if err != nil {
+			log.Printf("warning: pack cache not available: %v", err)
+		} else {
+			gitStore.SetPackCache(packCache)
+			log.Printf("pack-objects cache enabled at %s (max %d bytes)", cfg.PackCacheDir, cfg.PackCacheMaxSize)
+		}
+	}
+
 	s := &server{
 		git:     gitStore,
 		auth:    auth.NewService(pool, cfg.JWTSecret),

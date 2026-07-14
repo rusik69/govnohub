@@ -20,7 +20,8 @@ import (
 )
 
 type Store struct {
-	root string
+	root      string
+	packCache *PackCache // optional pack-objects cache
 }
 
 func NewStore(root string) (*Store, error) {
@@ -28,6 +29,23 @@ func NewStore(root string) (*Store, error) {
 		return nil, err
 	}
 	return &Store{root: root}, nil
+}
+
+// SetPackCache attaches a pack-objects cache to the store.
+func (s *Store) SetPackCache(c *PackCache) {
+	s.packCache = c
+}
+
+// InvalidatePackCache removes cache entries for the given repo.
+func (s *Store) InvalidatePackCache(owner, name string) {
+	if s.packCache != nil {
+		// Get all current branch SHAs to compute the old key
+		branches, err := s.ListBranchSHAs(owner, name)
+		if err == nil && len(branches) > 0 {
+			key := s.packCache.Key(owner, name, branches)
+			s.packCache.Delete(key)
+		}
+	}
 }
 
 func (s *Store) RepoPath(owner, name string) string {
@@ -138,10 +156,42 @@ func (s *Store) ReceivePackSSH(owner, name string, r io.Reader, w io.Writer, ext
 }
 
 func (s *Store) ReceivePack(owner, name string, r io.Reader, w io.Writer) error {
-	return s.runGit(owner, name, "receive-pack", true, r, w)
+	err := s.runGit(owner, name, "receive-pack", true, r, w)
+	if err == nil {
+		s.InvalidatePackCache(owner, name)
+	}
+	return err
 }
 
 func (s *Store) UploadPack(owner, name string, r io.Reader, w io.Writer) error {
+	// If cache is configured, try to serve from cache
+	if s.packCache != nil {
+		body, err := io.ReadAll(r)
+		if err != nil {
+			return s.runGit(owner, name, "upload-pack", true, bytes.NewReader(body), w)
+		}
+
+		branches, listErr := s.ListBranchSHAs(owner, name)
+		if listErr == nil && len(branches) > 0 {
+			key := s.packCache.Key(owner, name, branches)
+			if data, ok := s.packCache.Get(key); ok {
+				_, err := w.Write(data)
+				return err
+			}
+
+			// Cache miss: run git, capture output, cache it
+			var buf bytes.Buffer
+			mw := io.MultiWriter(w, &buf)
+			runErr := s.runGit(owner, name, "upload-pack", true, bytes.NewReader(body), mw)
+			if runErr == nil {
+				s.packCache.Set(key, buf.Bytes()) // best effort
+			}
+			return runErr
+		}
+
+		// Could not list branches, fall through to uncached
+		return s.runGit(owner, name, "upload-pack", true, bytes.NewReader(body), w)
+	}
 	return s.runGit(owner, name, "upload-pack", true, r, w)
 }
 

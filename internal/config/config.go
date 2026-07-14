@@ -11,6 +11,8 @@ type Config struct {
 	DatabaseMaxConns int
 	JWTSecret      string
 	GitRoot        string
+	PackCacheDir   string
+	PackCacheMaxSize int64
 	ArtifactRoot   string
 	RunnerNS       string
 	OpenSearchURL  string
@@ -41,6 +43,8 @@ func Load() Config {
 		DatabaseMaxConns: GetEnvInt("DATABASE_MAX_CONNS", 4),
 		JWTSecret:     getEnv("JWT_SECRET", "dev-secret-change-me"),
 		GitRoot:       getEnv("GIT_ROOT", "/data/git"),
+		PackCacheDir:  getEnv("GIT_PACK_CACHE_DIR", "/data/pack-cache"),
+		PackCacheMaxSize: int64(GetEnvInt("GIT_PACK_CACHE_MAX_SIZE", 1073741824)), // 1GB default
 		ArtifactRoot:  getEnv("ARTIFACT_ROOT", "/data/artifacts"),
 		RunnerNS:      getEnv("RUNNER_NAMESPACE", "govnohub-runners"),
 		OpenSearchURL: getEnv("OPENSEARCH_URL", "http://localhost:9200"),
