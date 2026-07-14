@@ -135,6 +135,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/user/ssh-keys", s.handleCreateSSHKey)
 		r.Get("/user/ssh-keys", s.handleListSSHKeys)
 		r.Delete("/user/ssh-keys/{keyID}", s.handleDeleteSSHKey)
+		r.Post("/user/password", s.handleChangePassword)
 		r.Get("/user/repos", s.handleListUserRepos)
 		r.Get("/search", s.handleSearch)
 		r.Get("/notifications", s.handleListNotifications)
@@ -281,7 +282,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, scopesKey, scopes)
 			ctx = context.WithValue(ctx, isPATKey, true)
 		} else {
-			userID, _, err = s.auth.ValidateToken(token)
+			userID, _, err = s.auth.ValidateToken(ctx, token)
 		}
 		if err != nil {
 			jsonError(w, http.StatusUnauthorized, "invalid token")
@@ -375,6 +376,30 @@ func (s *Server) handleCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, u)
+}
+
+func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.OldPassword == "" || req.NewPassword == "" {
+		jsonError(w, http.StatusBadRequest, "old_password and new_password are required")
+		return
+	}
+	if err := s.auth.ChangePassword(r.Context(), userIDFrom(r.Context()), req.OldPassword, req.NewPassword); err != nil {
+		if errors.Is(err, auth.ErrInvalidCredentials) {
+			jsonError(w, http.StatusUnauthorized, "old password is incorrect")
+			return
+		}
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"status": "password changed"})
 }
 
 func (s *Server) handleCreatePAT(w http.ResponseWriter, r *http.Request) {

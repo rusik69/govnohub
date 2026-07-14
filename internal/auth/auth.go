@@ -197,7 +197,7 @@ func (s *Service) issueJWT(userID uuid.UUID, username string) (string, error) {
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.jwtSecret)
 }
 
-func (s *Service) ValidateToken(tokenStr string) (uuid.UUID, string, error) {
+func (s *Service) ValidateToken(ctx context.Context, tokenStr string) (uuid.UUID, string, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		if t.Method != jwt.SigningMethodHS256 {
 			return nil, fmt.Errorf("unexpected signing method")
@@ -217,6 +217,19 @@ func (s *Service) ValidateToken(tokenStr string) (uuid.UUID, string, error) {
 	if err != nil {
 		return uuid.Nil, "", ErrUnauthorized
 	}
+
+	// Check if password was changed after this token was issued.
+	iat, ok := claims["iat"].(float64)
+	if ok {
+		var pwdAt time.Time
+		err := s.pool.QueryRow(ctx, `SELECT password_changed_at FROM users WHERE id=$1`, id).Scan(&pwdAt)
+		if err == nil && !pwdAt.IsZero() {
+			if int64(iat) < pwdAt.Unix() {
+				return uuid.Nil, "", ErrUnauthorized
+			}
+		}
+	}
+
 	return id, username, nil
 }
 
@@ -559,4 +572,27 @@ func (s *Service) UnlockUser(ctx context.Context, userID uuid.UUID) error {
 		return ErrUnauthorized
 	}
 	return nil
+}
+
+// ChangePassword changes the user's password and updates password_changed_at
+// to invalidate all existing JWT sessions.
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error {
+	var hash string
+	err := s.pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE id=$1`, userID).Scan(&hash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUnauthorized
+		}
+		return err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(oldPassword)); err != nil {
+		return ErrInvalidCredentials
+	}
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE users SET password_hash=$1, password_changed_at=NOW() WHERE id=$2`,
+		string(newHash), userID)
+	return err
 }

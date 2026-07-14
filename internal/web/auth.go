@@ -62,7 +62,7 @@ func (h *Handler) withUser(ctx context.Context, token string) (context.Context, 
 	if token == "" {
 		return ctx, nil
 	}
-	id, username, err := h.deps.Auth.ValidateToken(token)
+	id, username, err := h.deps.Auth.ValidateToken(ctx, token)
 	if err != nil {
 		return ctx, nil
 	}

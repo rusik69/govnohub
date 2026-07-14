@@ -295,7 +295,7 @@ func (s *server) authenticate(r *http.Request) (uuid.UUID, string, []string, boo
 				return id, "", scopes, true, true
 			}
 		}
-		if id, username, err := s.auth.ValidateToken(token); err == nil {
+		if id, username, err := s.auth.ValidateToken(r.Context(), token); err == nil {
 			return id, username, nil, false, true
 		}
 	}

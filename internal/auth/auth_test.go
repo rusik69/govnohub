@@ -24,7 +24,7 @@ func TestRegisterLoginPAT(t *testing.T) {
 		t.Fatalf("login failed: %v", err)
 	}
 
-	id, name, err := svc.ValidateToken(token)
+	id, name, err := svc.ValidateToken(ctx, token)
 	if err != nil || id != u.ID || name != "alice" {
 		t.Fatalf("validate token: %v", err)
 	}
@@ -186,23 +186,24 @@ func TestValidateTokenInvalid(t *testing.T) {
 	pg := testutil.NewPostgres(t)
 	defer pg.Cleanup()
 	svc := NewService(pg.Pool, "test-secret")
+	ctx := context.Background()
 
 	t.Run("empty token", func(t *testing.T) {
-		_, _, err := svc.ValidateToken("")
+		_, _, err := svc.ValidateToken(ctx, "")
 		if err != ErrUnauthorized {
 			t.Fatalf("expected ErrUnauthorized, got %v", err)
 		}
 	})
 
 	t.Run("garbage token", func(t *testing.T) {
-		_, _, err := svc.ValidateToken("not-a-valid-jwt-token")
+		_, _, err := svc.ValidateToken(ctx, "not-a-valid-jwt-token")
 		if err != ErrUnauthorized {
 			t.Fatalf("expected ErrUnauthorized, got %v", err)
 		}
 	})
 
 	t.Run("expired-like malformed token", func(t *testing.T) {
-		_, _, err := svc.ValidateToken("eyJhbGciOiJIUzI1NiJ9.not.valid")
+		_, _, err := svc.ValidateToken(ctx, "eyJhbG...NiJ9.not.valid")
 		if err != ErrUnauthorized {
 			t.Fatalf("expected ErrUnauthorized, got %v", err)
 		}
@@ -210,7 +211,7 @@ func TestValidateTokenInvalid(t *testing.T) {
 
 	t.Run("token signed with different key", func(t *testing.T) {
 		// This is a JWT with alg=none, which should be rejected
-		_, _, err := svc.ValidateToken("eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIn0.")
+		_, _, err := svc.ValidateToken(ctx, "eyJhbG...xIn0.")
 		if err != ErrUnauthorized {
 			t.Fatalf("expected ErrUnauthorized, got %v", err)
 		}
