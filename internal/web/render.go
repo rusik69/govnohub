@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -207,6 +208,12 @@ func (h *Handler) requirePOST(w http.ResponseWriter, r *http.Request) bool {
 	if !h.validateCSRF(r) {
 		http.Error(w, "invalid csrf", http.StatusForbidden)
 		return false
+	}
+	// Rotate CSRF token after successful validation to prevent replay attacks.
+	// Update the request context so handlers that render a response use the new token.
+	if newToken, err := h.rotateCSRF(w, r); err == nil {
+		ctx := context.WithValue(r.Context(), ctxCSRFKey, newToken)
+		*r = *r.WithContext(ctx)
 	}
 	return true
 }
