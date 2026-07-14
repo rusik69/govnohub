@@ -15,6 +15,7 @@ import (
 	"github.com/rusik69/govnohub/internal/events"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
+	"github.com/rusik69/govnohub/internal/jobqueue"
 	pkg "github.com/rusik69/govnohub/internal/package"
 	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
@@ -77,6 +78,7 @@ func New(t *testing.T) *Env {
 		presence.NewTracker(),
 		artifactRoot+"/uploads",
 		[]string{"*"},
+		jobqueue.New(10, 2),
 	)
 
 	ts := httptest.NewServer(srv.Router())

@@ -19,6 +19,7 @@ import (
 	"github.com/rusik69/govnohub/internal/events"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
+	"github.com/rusik69/govnohub/internal/jobqueue"
 	pkg "github.com/rusik69/govnohub/internal/package"
 	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
@@ -63,6 +64,9 @@ func main() {
 	presenceTracker := presence.NewTracker()
 	defer presenceTracker.Stop()
 
+	jobQ := jobqueue.New(100, 4)
+	defer jobQ.Stop()
+
 	var corsOrigins []string
 	if o := cfg.CORSAllowedOrigins; o != "" {
 		for _, origin := range strings.Split(o, ",") {
@@ -98,6 +102,7 @@ func main() {
 		presenceTracker,
 		cfg.ArtifactRoot+"/uploads",
 		corsOrigins,
+		jobQ,
 	)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: srv.Router()}

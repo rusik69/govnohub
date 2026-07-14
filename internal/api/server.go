@@ -22,6 +22,7 @@ import (
 	"github.com/rusik69/govnohub/internal/events"
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/issue"
+	"github.com/rusik69/govnohub/internal/jobqueue"
 	pkg "github.com/rusik69/govnohub/internal/package"
 	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
@@ -54,6 +55,7 @@ type Server struct {
 	audit    *audit.Service
 	presence *presence.Tracker
 	web      *web.Handler
+	jobQueue *jobqueue.Queue
 
 	anonLimiter   *RateLimiter
 	coreLimiter   *RateLimiter
@@ -82,6 +84,7 @@ func NewServer(
 	presenceTracker *presence.Tracker,
 	uploadDir string,
 	corsAllowedOrigins []string,
+	jobQ *jobqueue.Queue,
 ) *Server {
 	s := &Server{
 		auth: authSvc, repos: repoSvc, git: gitStore,
@@ -90,6 +93,7 @@ func NewServer(
 		events: eventsSvc,
 		pool: pool, org: orgSvc, aiReview: aiReviewSvc,
 		notify: notifySvc, wiki: wikiSvc, audit: auditSvc, presence: presenceTracker,
+		jobQueue: jobQ,
 		anonLimiter:   NewRateLimiter(anonLimit, anonWindow),
 		coreLimiter:   NewRateLimiter(defaultLimit, defaultWindow),
 		searchLimiter: NewRateLimiter(searchLimit, searchWindow),
@@ -151,6 +155,8 @@ func (s *Server) Router() http.Handler {
 		r.Post("/notifications/{id}/read", s.handleMarkNotificationRead)
 		s.registerOrgRoutes(r)
 		s.registerAdminRoutes(r)
+
+		r.Get("/system/jobs", s.handleJobQueueStats)
 
 		r.Post("/orgs/{org}/repos", s.handleCreateOrgRepo)
 		r.Post("/users/{user}/repos", s.handleCreateUserRepo)
@@ -1312,6 +1318,24 @@ func parseNumber(w http.ResponseWriter, r *http.Request, param string) (int, boo
 		return 0, false
 	}
 	return n, true
+}
+
+// handleJobQueueStats returns current job queue statistics.
+func (s *Server) handleJobQueueStats(w http.ResponseWriter, r *http.Request) {
+	if s.jobQueue == nil {
+		jsonOK(w, map[string]interface{}{"enabled": false})
+		return
+	}
+	stats := s.jobQueue.Stats()
+	jsonOK(w, map[string]interface{}{
+		"enabled":     true,
+		"enqueued":    stats.Enqueued,
+		"started":     stats.Started,
+		"completed":   stats.Completed,
+		"failed":      stats.Failed,
+		"queued":      stats.Queued,
+		"worker_busy": stats.WorkerBusy,
+	})
 }
 
 // Workflow handlers are in actions_handlers.go
