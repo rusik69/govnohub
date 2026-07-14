@@ -65,6 +65,7 @@ func (h *Handler) Routes() chi.Router {
 			r.Get("/", h.handleRepo)
 			r.Get("/tree/*", h.handleRepoTree)
 			r.Get("/blob/*", h.handleRepoBlob)
+		r.Get("/blame/*", h.handleRepoBlame)
 			r.Get("/commit/{sha}", h.handleCommitDetail)
 			r.Get("/compare/*", h.handleCompare)
 			r.Get("/file-finder-data", h.handleFileFinder)

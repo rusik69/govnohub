@@ -469,6 +469,32 @@ func (h *Handler) handleRepoBlob(w http.ResponseWriter, r *http.Request) {
 	}))
 }
 
+func (h *Handler) handleRepoBlame(w http.ResponseWriter, r *http.Request) {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	ref := r.URL.Query().Get("ref")
+	if ref == "" {
+		ref = repository.DefaultBranch
+	}
+	path := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
+	blameLines, err := h.deps.Git.GetBlame(repository.OwnerName, repository.Name, ref, path)
+	if err != nil {
+		// If blame fails (e.g. binary file, empty repo), fall back to blob view
+		h.handleRepoBlob(w, r)
+		return
+	}
+	header, nav := h.repoPageCtx(r, repository, "code")
+	render(w, r, RepoPage(RepoPageData{
+		Layout:     h.layout(r, repository.FullName),
+		Header:     header, Nav: nav,
+		Repo:       repository, Path: path, Ref: ref,
+		BlameLines: blameLines,
+		Branches:   h.repoBranches(r, repository),
+	}))
+}
+
 func (h *Handler) handleFileFinder(w http.ResponseWriter, r *http.Request) {
 	repository, ok := h.getRepo(w, r, "read")
 	if !ok {

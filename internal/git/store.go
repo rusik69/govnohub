@@ -1050,6 +1050,103 @@ func (s *Store) CreateCommit(owner, name string, req CreateCommitRequest) (strin
 	return hash.String(), nil
 }
 
+// BlameLine represents a single line in a git blame result.
+type BlameLine struct {
+	LineNumber int    `json:"line_number"`
+	SHA        string `json:"sha"`
+	ShortSHA   string `json:"short_sha"`
+	Author     string `json:"author"`
+	AuthorDate string `json:"author_date"`
+	Content    string `json:"content"`
+}
+
+// GetBlame returns blame information for a file at the given ref.
+// It uses `git blame --porcelain` and returns one BlameLine per line.
+func (s *Store) GetBlame(owner, name, ref, path string) ([]BlameLine, error) {
+	repoPath := s.RepoPath(owner, name)
+	args := []string{"-C", repoPath, "blame", "--porcelain"}
+	if ref != "" {
+		args = append(args, ref)
+	}
+	args = append(args, "--", path)
+	cmd := exec.Command("git", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git blame: %w", err)
+	}
+
+	lines := strings.Split(string(out), "\n")
+	var result []BlameLine
+	i := 0
+	lineNum := 1
+	for i < len(lines) {
+		line := lines[i]
+		if line == "" {
+			i++
+			continue
+		}
+
+		// Header line format: <sha> <orig-lineno> <final-lineno> <nlines>
+		parts := strings.Fields(line)
+		if len(parts) < 4 {
+			// If it doesn't match header format, skip
+			i++
+			continue
+		}
+		sha := parts[0]
+		nlines, _ := strconv.Atoi(parts[3])
+		i++
+
+		// Read metadata lines until we hit the content line (starts with \t)
+		author := ""
+		authorDate := ""
+		for i < len(lines) {
+			meta := lines[i]
+			if meta == "" {
+				i++
+				continue
+			}
+			if strings.HasPrefix(meta, "\t") {
+				// Content line(s)
+				for j := 0; j < nlines && i < len(lines); j++ {
+					content := strings.TrimPrefix(lines[i], "\t")
+					i++
+					result = append(result, BlameLine{
+						LineNumber: lineNum,
+						SHA:        sha,
+						ShortSHA:   shortSHA(sha),
+						Author:     author,
+						AuthorDate: authorDate,
+						Content:    content,
+					})
+					lineNum++
+				}
+				break
+			}
+			if strings.HasPrefix(meta, "author ") {
+				author = strings.TrimPrefix(meta, "author ")
+			} else if strings.HasPrefix(meta, "author-time ") {
+				ts := strings.TrimPrefix(meta, "author-time ")
+				if sec, err := strconv.ParseInt(ts, 10, 64); err == nil {
+					authorDate = time.Unix(sec, 0).Format("2006-01-02")
+				}
+			}
+			i++
+		}
+	}
+	if result == nil {
+		result = []BlameLine{}
+	}
+	return result, nil
+}
+
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
+}
+
 // CommitDetail holds full information about a single commit for the detail view.
 type CommitDetail struct {
 	SHA            string        `json:"sha"`

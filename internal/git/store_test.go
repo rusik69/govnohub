@@ -437,3 +437,101 @@ func TestGetPRFiles(t *testing.T) {
 		t.Fatal("expected non-zero additions or deletions")
 	}
 }
+
+func TestGetBlame(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := store.Init(ctx, "alice", "demo"); err != nil {
+		t.Fatal(err)
+	}
+	path := store.RepoPath("alice", "demo")
+
+	// Create a commit with a real file using worktree
+	mainSHA := bareCommitOn(t, path, "", "main", "init")
+
+	wt, err := os.MkdirTemp("", "govnohub-test-blame-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(wt)
+
+	exec.Command("git", "-C", path, "worktree", "add", "--detach", wt, mainSHA).Run()
+	defer exec.Command("git", "-C", path, "worktree", "remove", "--force", wt).Run()
+
+	runGit(t, wt, "config", "user.email", "blame@test.local")
+	runGit(t, wt, "config", "user.name", "Blame Tester")
+
+	if err := os.WriteFile(filepath.Join(wt, "main.go"), []byte("package main\n\nfunc main() {\n	println(\"hello\")\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, wt, "add", ".")
+	// Commit with env vars to ensure correct author
+	commitCmd := exec.Command("git", "commit", "-m", "add main.go")
+	commitCmd.Dir = wt
+	commitCmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Blame Tester",
+		"GIT_AUTHOR_EMAIL=blame@test.local",
+		"GIT_COMMITTER_NAME=Blame Tester",
+		"GIT_COMMITTER_EMAIL=blame@test.local",
+	)
+	if out, err := commitCmd.CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v: %s", err, out)
+	}
+	runGit(t, wt, "push", path, "HEAD:refs/heads/main")
+
+	// Get blame for main.go
+	blameLines, err := store.GetBlame("alice", "demo", "main", "main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blameLines) == 0 {
+		t.Fatal("expected blame lines")
+	}
+	// Should have 5 lines
+	if len(blameLines) != 5 {
+		t.Fatalf("expected 5 blame lines, got %d", len(blameLines))
+	}
+	// Check line content
+	if blameLines[0].Content != "package main" {
+		t.Fatalf("expected 'package main', got '%s'", blameLines[0].Content)
+	}
+	if blameLines[0].ShortSHA == "" {
+		t.Fatal("expected non-empty short SHA")
+	}
+	if blameLines[0].Author != "Blame Tester" {
+		t.Fatalf("expected author 'Blame Tester', got '%s'", blameLines[0].Author)
+	}
+	if blameLines[0].AuthorDate == "" {
+		t.Fatal("expected non-empty author date")
+	}
+
+	// Non-existent file should error
+	_, err = store.GetBlame("alice", "demo", "main", "NONEXISTENT.go")
+	if err == nil {
+		t.Fatal("expected error for non-existent file")
+	}
+}
+
+func TestGetBlameEmpty(t *testing.T) {
+	tmp := t.TempDir()
+	store, err := NewStore(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := store.Init(ctx, "alice", "empty"); err != nil {
+		t.Fatal(err)
+	}
+	path := store.RepoPath("alice", "empty")
+	bareCommitOn(t, path, "", "main", "init")
+
+	// Empty repo with no files — blame should fail
+	_, err = store.GetBlame("alice", "empty", "main", "nonexistent.go")
+	if err == nil {
+		t.Fatal("expected error for non-existent file in empty repo")
+	}
+}

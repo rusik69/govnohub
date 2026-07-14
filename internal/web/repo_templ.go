@@ -9,23 +9,26 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
+	"strconv"
+
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/repo"
 )
 
 type RepoPageData struct {
-	Layout   LayoutData
-	Header   RepoHeaderData
-	Nav      RepoNavData
-	Repo     *repo.Repository
-	Path     string
-	Ref      string
-	Branches []RepoBranchOption
-	Entries  []gitstore.TreeEntry
-	Content  string
-	IsBinary bool
-	Flash    string
-	FlashErr bool
+	Layout     LayoutData
+	Header     RepoHeaderData
+	Nav        RepoNavData
+	Repo       *repo.Repository
+	Path       string
+	Ref        string
+	Branches   []RepoBranchOption
+	Entries    []gitstore.TreeEntry
+	Content    string
+	IsBinary   bool
+	BlameLines []gitstore.BlameLine
+	Flash      string
+	FlashErr   bool
 }
 
 func RepoPage(data RepoPageData) templ.Component {
@@ -107,39 +110,184 @@ func RepoContent(data RepoPageData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if data.IsBinary {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"card p-4\"><p class=\"m-0 text-sm\">Binary file not shown.</p><a href=\"")
+		if len(data.BlameLines) > 0 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"gh-blame-header\"><div class=\"flex items-center gap-2 mb-2 text-sm\"><a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var3 templ.SafeURL
-			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/api/v1/repos/" + data.Repo.FullName + "/contents/" + data.Path + "?ref=" + data.Ref))
+			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/" + data.Repo.FullName + "/blob/" + data.Path + "?ref=" + data.Ref))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 45, Col: 114}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 48, Col: 98}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" class=\"btn-secondary mt-3 inline-flex\">Download</a></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" class=\"text-link\">Source</a> <span class=\"text-subtle\">|</span> <span class=\"font-semibold\">Blame</span></div></div><div class=\"gh-code-block gh-blame-wrapper\"><table class=\"gh-blame-table\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, line := range data.BlameLines {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<tr class=\"gh-blame-row\"><td class=\"gh-blame-commit font-mono text-xs text-subtle whitespace-nowrap\"><a href=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var4 templ.SafeURL
+				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/" + data.Repo.FullName + "/commit/" + line.SHA))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 58, Col: 81}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" class=\"text-link hover:underline\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var5 string
+				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(line.ShortSHA)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 58, Col: 133}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</a></td><td class=\"gh-blame-author text-xs text-subtle whitespace-nowrap\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var6 string
+				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(line.Author)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 60, Col: 86}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</td><td class=\"gh-blame-date text-xs text-subtle whitespace-nowrap\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var7 string
+				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(line.AuthorDate)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 61, Col: 88}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</td><td class=\"gh-blame-lineno font-mono text-xs text-subtle text-right select-none\"><a href=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var8 templ.SafeURL
+				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/" + data.Repo.FullName + "/blob/" + data.Path + "?ref=" + data.Ref + "#L" + strconv.Itoa(line.LineNumber)))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 63, Col: 140}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\" class=\"text-link\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var9 string
+				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(line.LineNumber)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 63, Col: 178}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</a></td><td class=\"gh-blame-content font-mono whitespace-pre-wrap\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var10 string
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(line.Content)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 65, Col: 80}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</td></tr>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</table></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else if data.IsBinary {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<div class=\"card p-4\"><p class=\"m-0 text-sm\">Binary file not shown.</p><a href=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var11 templ.SafeURL
+			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/api/v1/repos/" + data.Repo.FullName + "/contents/" + data.Path + "?ref=" + data.Ref))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 73, Col: 114}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\" class=\"btn-secondary mt-3 inline-flex\">Download</a></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else if data.Content != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"gh-code-block\"><pre class=\"font-mono whitespace-pre-wrap\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"gh-code-block-header\"><div class=\"flex items-center gap-2 text-sm\"><span class=\"font-semibold\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var4 string
-			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(data.Content)
+			var templ_7745c5c3_Var12 string
+			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(data.Path)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 49, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 78, Col: 44}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</pre></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</span> <a href=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var13 templ.SafeURL
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/" + data.Repo.FullName + "/blame/" + data.Path + "?ref=" + data.Ref))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 79, Col: 99}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" class=\"text-link\">Blame</a></div></div><div class=\"gh-code-block\"><pre class=\"font-mono whitespace-pre-wrap\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var14 string
+			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(data.Content)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/repo.templ`, Line: 83, Col: 61}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</pre></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -149,7 +297,7 @@ func RepoContent(data RepoPageData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div class=\"gh-file-table\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div class=\"gh-file-table\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -157,12 +305,12 @@ func RepoContent(data RepoPageData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div><div id=\"fork-dialog-container\"></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</div><div id=\"fork-dialog-container\"></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -205,12 +353,12 @@ func FileFinder(fullName string, ref string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var5 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var5 == nil {
-			templ_7745c5c3_Var5 = templ.NopComponent
+		templ_7745c5c3_Var15 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var15 == nil {
+			templ_7745c5c3_Var15 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<!-- File finder modal — triggered by pressing `t` on repo page --><div id=\"file-finder-overlay\" class=\"gh-overlay\" style=\"display:none\" onclick=\"closeFileFinder()\"></div><div id=\"file-finder-modal\" class=\"gh-modal gh-file-finder\" role=\"dialog\" aria-label=\"Find file\" style=\"display:none\"><div class=\"gh-modal-header\"><input type=\"text\" id=\"file-finder-input\" class=\"input\" placeholder=\"Find file...\" aria-label=\"Find file\" autocomplete=\"off\" spellcheck=\"false\" oninput=\"filterFiles()\" onkeydown=\"handleFileFinderKeydown(event)\"> <button type=\"button\" class=\"gh-header-btn\" onclick=\"closeFileFinder()\" aria-label=\"Close\"><svg class=\"gh-icon\" aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z\"></path></svg></button></div><div id=\"file-finder-results\" class=\"gh-file-finder-results\"><div class=\"gh-file-finder-empty\">Type to filter files...</div></div></div><script>\n\t\tvar _fileFinderData = null;\n\t\tvar _fileFinderFullName = { templ.JSScript(fullName) };\n\t\tvar _fileFinderRef = { templ.JSScript(ref) };\n\t\tvar _fileFinderSelected = 0;\n\n\t\tfunction openFileFinder() {\n\t\t\tvar overlay = document.getElementById('file-finder-overlay');\n\t\t\tvar modal = document.getElementById('file-finder-modal');\n\t\t\tvar input = document.getElementById('file-finder-input');\n\t\t\tvar results = document.getElementById('file-finder-results');\n\t\t\tif (!overlay || !modal || !input) return;\n\n\t\t\tif (_fileFinderData === null) {\n\t\t\t\tresults.innerHTML = '<div class=\"gh-file-finder-empty\">Loading files...</div>';\n\t\t\t\tmodal.style.display = '';\n\t\t\t\toverlay.style.display = '';\n\t\t\t\tfetch('/' + _fileFinderFullName + '/file-finder-data?ref=' + encodeURIComponent(_fileFinderRef))\n\t\t\t\t\t.then(function(r) { return r.json(); })\n\t\t\t\t\t.then(function(data) {\n\t\t\t\t\t\t_fileFinderData = data;\n\t\t\t\t\t\tinput.value = '';\n\t\t\t\t\t\t_fileFinderSelected = 0;\n\t\t\t\t\t\trenderFiles(data);\n\t\t\t\t\t\tinput.focus();\n\t\t\t\t\t})\n\t\t\t\t\t.catch(function() {\n\t\t\t\t\t\tresults.innerHTML = '<div class=\"gh-file-finder-empty\">Failed to load files.</div>';\n\t\t\t\t\t});\n\t\t\t} else {\n\t\t\t\tmodal.style.display = '';\n\t\t\t\toverlay.style.display = '';\n\t\t\t\tinput.value = '';\n\t\t\t\t_fileFinderSelected = 0;\n\t\t\t\trenderFiles(_fileFinderData);\n\t\t\t\tsetTimeout(function() { input.focus(); }, 50);\n\t\t\t}\n\t\t}\n\n\t\tfunction closeFileFinder() {\n\t\t\tvar overlay = document.getElementById('file-finder-overlay');\n\t\t\tvar modal = document.getElementById('file-finder-modal');\n\t\t\tif (overlay) overlay.style.display = 'none';\n\t\t\tif (modal) modal.style.display = 'none';\n\t\t}\n\n\t\tfunction renderFiles(files) {\n\t\t\tvar results = document.getElementById('file-finder-results');\n\t\t\tif (!results) return;\n\t\t\tif (!files || files.length === 0) {\n\t\t\t\tresults.innerHTML = '<div class=\"gh-file-finder-empty\">No files found.</div>';\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tvar html = '<div class=\"gh-file-finder-list\">';\n\t\t\tfor (var i = 0; i < files.length; i++) {\n\t\t\t\tvar cls = i === _fileFinderSelected ? 'gh-file-finder-item active' : 'gh-file-finder-item';\n\t\t\t\thtml += '<div class=\"' + cls + '\" data-index=\"' + i + '\" onclick=\"navigateToFile(' + i + ')\" onmouseover=\"selectFileFinderIndex(' + i + ')\">';\n\t\t\t\thtml += '<svg class=\"gh-icon\" aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zM3.75 1.5a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V5.5h-2.25A1.75 1.75 0 018.5 3.75V1.5H3.75z\"/></svg>';\n\t\t\t\thtml += '<span class=\"gh-file-finder-name\">' + escapeHtml(files[i]) + '</span>';\n\t\t\t\thtml += '</div>';\n\t\t\t}\n\t\t\thtml += '</div>';\n\t\t\tresults.innerHTML = html;\n\t\t}\n\n\t\tfunction filterFiles() {\n\t\t\tif (!_fileFinderData) return;\n\t\t\tvar q = document.getElementById('file-finder-input').value.toLowerCase();\n\t\t\tvar filtered;\n\t\t\tif (q === '') {\n\t\t\t\tfiltered = _fileFinderData.slice(0, 200);\n\t\t\t} else {\n\t\t\t\tfiltered = [];\n\t\t\t\tfor (var i = 0; i < _fileFinderData.length; i++) {\n\t\t\t\t\tvar path = _fileFinderData[i].toLowerCase();\n\t\t\t\t\tif (path.indexOf(q) !== -1) {\n\t\t\t\t\t\tfiltered.push(_fileFinderData[i]);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\t_fileFinderSelected = 0;\n\t\t\trenderFiles(filtered);\n\t\t}\n\n\t\tfunction handleFileFinderKeydown(e) {\n\t\t\tif (e.key === 'Escape') {\n\t\t\t\te.preventDefault();\n\t\t\t\tcloseFileFinder();\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tif (e.key === 'ArrowDown') {\n\t\t\t\te.preventDefault();\n\t\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\t\tif (items.length === 0) return;\n\t\t\t\t_fileFinderSelected = Math.min(_fileFinderSelected + 1, items.length - 1);\n\t\t\t\titems.forEach(function(el, i) {\n\t\t\t\t\tel.classList.toggle('active', i === _fileFinderSelected);\n\t\t\t\t});\n\t\t\t\titems[_fileFinderSelected].scrollIntoView({ block: 'nearest' });\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tif (e.key === 'ArrowUp') {\n\t\t\t\te.preventDefault();\n\t\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\t\tif (items.length === 0) return;\n\t\t\t\t_fileFinderSelected = Math.max(_fileFinderSelected - 1, 0);\n\t\t\t\titems.forEach(function(el, i) {\n\t\t\t\t\tel.classList.toggle('active', i === _fileFinderSelected);\n\t\t\t\t});\n\t\t\t\titems[_fileFinderSelected].scrollIntoView({ block: 'nearest' });\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tif (e.key === 'Enter') {\n\t\t\t\te.preventDefault();\n\t\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\t\tif (items.length > 0 && _fileFinderSelected < items.length) {\n\t\t\t\t\tnavigateToFile(_fileFinderSelected);\n\t\t\t\t}\n\t\t\t\treturn;\n\t\t\t}\n\t\t}\n\n\t\tfunction selectFileFinderIndex(idx) {\n\t\t\t_fileFinderSelected = idx;\n\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\titems.forEach(function(el, i) {\n\t\t\t\tel.classList.toggle('active', i === idx);\n\t\t\t});\n\t\t}\n\n\t\tfunction navigateToFile(idx) {\n\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\tif (idx < items.length) {\n\t\t\t\tvar nameEl = items[idx].querySelector('.gh-file-finder-name');\n\t\t\t\tif (nameEl) {\n\t\t\t\t\tvar path = nameEl.textContent;\n\t\t\t\t\twindow.location.href = '/' + _fileFinderFullName + '/blob/' + path + '?ref=' + encodeURIComponent(_fileFinderRef);\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\n\t\tfunction escapeHtml(s) {\n\t\t\treturn s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n\t\t}\n\n\t\t/* Add 't' key handler to existing keyboard shortcuts */\n\t\tdocument.addEventListener('keydown', function(e) {\n\t\t\tvar tag = e.target.tagName;\n\t\t\tif (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;\n\t\t\tif (e.ctrlKey || e.altKey || e.metaKey) return;\n\t\t\t/* t → open file finder (only on repo pages that have the file-finder-data route) */\n\t\t\tif (e.key === 't' && !e.shiftKey) {\n\t\t\t\t/* Check we are on a repo page by looking for the file-finder element */\n\t\t\t\tif (document.getElementById('file-finder-modal')) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\topenFileFinder();\n\t\t\t\t}\n\t\t\t}\n\t\t});\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<!-- File finder modal — triggered by pressing `t` on repo page --><div id=\"file-finder-overlay\" class=\"gh-overlay\" style=\"display:none\" onclick=\"closeFileFinder()\"></div><div id=\"file-finder-modal\" class=\"gh-modal gh-file-finder\" role=\"dialog\" aria-label=\"Find file\" style=\"display:none\"><div class=\"gh-modal-header\"><input type=\"text\" id=\"file-finder-input\" class=\"input\" placeholder=\"Find file...\" aria-label=\"Find file\" autocomplete=\"off\" spellcheck=\"false\" oninput=\"filterFiles()\" onkeydown=\"handleFileFinderKeydown(event)\"> <button type=\"button\" class=\"gh-header-btn\" onclick=\"closeFileFinder()\" aria-label=\"Close\"><svg class=\"gh-icon\" aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z\"></path></svg></button></div><div id=\"file-finder-results\" class=\"gh-file-finder-results\"><div class=\"gh-file-finder-empty\">Type to filter files...</div></div></div><script>\n\t\tvar _fileFinderData = null;\n\t\tvar _fileFinderFullName = { templ.JSScript(fullName) };\n\t\tvar _fileFinderRef = { templ.JSScript(ref) };\n\t\tvar _fileFinderSelected = 0;\n\n\t\tfunction openFileFinder() {\n\t\t\tvar overlay = document.getElementById('file-finder-overlay');\n\t\t\tvar modal = document.getElementById('file-finder-modal');\n\t\t\tvar input = document.getElementById('file-finder-input');\n\t\t\tvar results = document.getElementById('file-finder-results');\n\t\t\tif (!overlay || !modal || !input) return;\n\n\t\t\tif (_fileFinderData === null) {\n\t\t\t\tresults.innerHTML = '<div class=\"gh-file-finder-empty\">Loading files...</div>';\n\t\t\t\tmodal.style.display = '';\n\t\t\t\toverlay.style.display = '';\n\t\t\t\tfetch('/' + _fileFinderFullName + '/file-finder-data?ref=' + encodeURIComponent(_fileFinderRef))\n\t\t\t\t\t.then(function(r) { return r.json(); })\n\t\t\t\t\t.then(function(data) {\n\t\t\t\t\t\t_fileFinderData = data;\n\t\t\t\t\t\tinput.value = '';\n\t\t\t\t\t\t_fileFinderSelected = 0;\n\t\t\t\t\t\trenderFiles(data);\n\t\t\t\t\t\tinput.focus();\n\t\t\t\t\t})\n\t\t\t\t\t.catch(function() {\n\t\t\t\t\t\tresults.innerHTML = '<div class=\"gh-file-finder-empty\">Failed to load files.</div>';\n\t\t\t\t\t});\n\t\t\t} else {\n\t\t\t\tmodal.style.display = '';\n\t\t\t\toverlay.style.display = '';\n\t\t\t\tinput.value = '';\n\t\t\t\t_fileFinderSelected = 0;\n\t\t\t\trenderFiles(_fileFinderData);\n\t\t\t\tsetTimeout(function() { input.focus(); }, 50);\n\t\t\t}\n\t\t}\n\n\t\tfunction closeFileFinder() {\n\t\t\tvar overlay = document.getElementById('file-finder-overlay');\n\t\t\tvar modal = document.getElementById('file-finder-modal');\n\t\t\tif (overlay) overlay.style.display = 'none';\n\t\t\tif (modal) modal.style.display = 'none';\n\t\t}\n\n\t\tfunction renderFiles(files) {\n\t\t\tvar results = document.getElementById('file-finder-results');\n\t\t\tif (!results) return;\n\t\t\tif (!files || files.length === 0) {\n\t\t\t\tresults.innerHTML = '<div class=\"gh-file-finder-empty\">No files found.</div>';\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tvar html = '<div class=\"gh-file-finder-list\">';\n\t\t\tfor (var i = 0; i < files.length; i++) {\n\t\t\t\tvar cls = i === _fileFinderSelected ? 'gh-file-finder-item active' : 'gh-file-finder-item';\n\t\t\t\thtml += '<div class=\"' + cls + '\" data-index=\"' + i + '\" onclick=\"navigateToFile(' + i + ')\" onmouseover=\"selectFileFinderIndex(' + i + ')\">';\n\t\t\t\thtml += '<svg class=\"gh-icon\" aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zM3.75 1.5a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V5.5h-2.25A1.75 1.75 0 018.5 3.75V1.5H3.75z\"/></svg>';\n\t\t\t\thtml += '<span class=\"gh-file-finder-name\">' + escapeHtml(files[i]) + '</span>';\n\t\t\t\thtml += '</div>';\n\t\t\t}\n\t\t\thtml += '</div>';\n\t\t\tresults.innerHTML = html;\n\t\t}\n\n\t\tfunction filterFiles() {\n\t\t\tif (!_fileFinderData) return;\n\t\t\tvar q = document.getElementById('file-finder-input').value.toLowerCase();\n\t\t\tvar filtered;\n\t\t\tif (q === '') {\n\t\t\t\tfiltered = _fileFinderData.slice(0, 200);\n\t\t\t} else {\n\t\t\t\tfiltered = [];\n\t\t\t\tfor (var i = 0; i < _fileFinderData.length; i++) {\n\t\t\t\t\tvar path = _fileFinderData[i].toLowerCase();\n\t\t\t\t\tif (path.indexOf(q) !== -1) {\n\t\t\t\t\t\tfiltered.push(_fileFinderData[i]);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\t_fileFinderSelected = 0;\n\t\t\trenderFiles(filtered);\n\t\t}\n\n\t\tfunction handleFileFinderKeydown(e) {\n\t\t\tif (e.key === 'Escape') {\n\t\t\t\te.preventDefault();\n\t\t\t\tcloseFileFinder();\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tif (e.key === 'ArrowDown') {\n\t\t\t\te.preventDefault();\n\t\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\t\tif (items.length === 0) return;\n\t\t\t\t_fileFinderSelected = Math.min(_fileFinderSelected + 1, items.length - 1);\n\t\t\t\titems.forEach(function(el, i) {\n\t\t\t\t\tel.classList.toggle('active', i === _fileFinderSelected);\n\t\t\t\t});\n\t\t\t\titems[_fileFinderSelected].scrollIntoView({ block: 'nearest' });\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tif (e.key === 'ArrowUp') {\n\t\t\t\te.preventDefault();\n\t\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\t\tif (items.length === 0) return;\n\t\t\t\t_fileFinderSelected = Math.max(_fileFinderSelected - 1, 0);\n\t\t\t\titems.forEach(function(el, i) {\n\t\t\t\t\tel.classList.toggle('active', i === _fileFinderSelected);\n\t\t\t\t});\n\t\t\t\titems[_fileFinderSelected].scrollIntoView({ block: 'nearest' });\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tif (e.key === 'Enter') {\n\t\t\t\te.preventDefault();\n\t\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\t\tif (items.length > 0 && _fileFinderSelected < items.length) {\n\t\t\t\t\tnavigateToFile(_fileFinderSelected);\n\t\t\t\t}\n\t\t\t\treturn;\n\t\t\t}\n\t\t}\n\n\t\tfunction selectFileFinderIndex(idx) {\n\t\t\t_fileFinderSelected = idx;\n\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\titems.forEach(function(el, i) {\n\t\t\t\tel.classList.toggle('active', i === idx);\n\t\t\t});\n\t\t}\n\n\t\tfunction navigateToFile(idx) {\n\t\t\tvar items = document.querySelectorAll('.gh-file-finder-item');\n\t\t\tif (idx < items.length) {\n\t\t\t\tvar nameEl = items[idx].querySelector('.gh-file-finder-name');\n\t\t\t\tif (nameEl) {\n\t\t\t\t\tvar path = nameEl.textContent;\n\t\t\t\t\twindow.location.href = '/' + _fileFinderFullName + '/blob/' + path + '?ref=' + encodeURIComponent(_fileFinderRef);\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\n\t\tfunction escapeHtml(s) {\n\t\t\treturn s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n\t\t}\n\n\t\t/* Add 't' key handler to existing keyboard shortcuts */\n\t\tdocument.addEventListener('keydown', function(e) {\n\t\t\tvar tag = e.target.tagName;\n\t\t\tif (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;\n\t\t\tif (e.ctrlKey || e.altKey || e.metaKey) return;\n\t\t\t/* t → open file finder (only on repo pages that have the file-finder-data route) */\n\t\t\tif (e.key === 't' && !e.shiftKey) {\n\t\t\t\t/* Check we are on a repo page by looking for the file-finder element */\n\t\t\t\tif (document.getElementById('file-finder-modal')) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\topenFileFinder();\n\t\t\t\t}\n\t\t\t}\n\t\t});\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

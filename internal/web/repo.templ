@@ -1,23 +1,26 @@
 package web
 
 import (
+	"strconv"
+
 	gitstore "github.com/rusik69/govnohub/internal/git"
 	"github.com/rusik69/govnohub/internal/repo"
 )
 
 type RepoPageData struct {
-	Layout   LayoutData
-	Header   RepoHeaderData
-	Nav      RepoNavData
-	Repo     *repo.Repository
-	Path     string
-	Ref      string
-	Branches []RepoBranchOption
-	Entries  []gitstore.TreeEntry
-	Content  string
-	IsBinary bool
-	Flash    string
-	FlashErr bool
+	Layout     LayoutData
+	Header     RepoHeaderData
+	Nav        RepoNavData
+	Repo       *repo.Repository
+	Path       string
+	Ref        string
+	Branches   []RepoBranchOption
+	Entries    []gitstore.TreeEntry
+	Content    string
+	IsBinary   bool
+	BlameLines []gitstore.BlameLine
+	Flash      string
+	FlashErr   bool
 }
 
 templ RepoPage(data RepoPageData) {
@@ -39,12 +42,43 @@ templ RepoContent(data RepoPageData) {
 			}
 		}
 		@BranchBar(data.Repo.FullName, data.Ref, data.Path, data.Branches)
-		if data.IsBinary {
+		if len(data.BlameLines) > 0 {
+			<div class="gh-blame-header">
+				<div class="flex items-center gap-2 mb-2 text-sm">
+					<a href={ templ.SafeURL("/" + data.Repo.FullName + "/blob/" + data.Path + "?ref=" + data.Ref) } class="text-link">Source</a>
+					<span class="text-subtle">|</span>
+					<span class="font-semibold">Blame</span>
+				</div>
+			</div>
+			<div class="gh-code-block gh-blame-wrapper">
+				<table class="gh-blame-table">
+					for _, line := range data.BlameLines {
+						<tr class="gh-blame-row">
+							<td class="gh-blame-commit font-mono text-xs text-subtle whitespace-nowrap">
+								<a href={ templ.SafeURL("/" + data.Repo.FullName + "/commit/" + line.SHA) } class="text-link hover:underline">{ line.ShortSHA }</a>
+							</td>
+							<td class="gh-blame-author text-xs text-subtle whitespace-nowrap">{ line.Author }</td>
+							<td class="gh-blame-date text-xs text-subtle whitespace-nowrap">{ line.AuthorDate }</td>
+							<td class="gh-blame-lineno font-mono text-xs text-subtle text-right select-none">
+								<a href={ templ.SafeURL("/" + data.Repo.FullName + "/blob/" + data.Path + "?ref=" + data.Ref + "#L" + strconv.Itoa(line.LineNumber)) } class="text-link">{ line.LineNumber }</a>
+							</td>
+							<td class="gh-blame-content font-mono whitespace-pre-wrap">{ line.Content }</td>
+						</tr>
+					}
+				</table>
+			</div>
+		} else if data.IsBinary {
 			<div class="card p-4">
 				<p class="m-0 text-sm">Binary file not shown.</p>
 				<a href={ templ.SafeURL("/api/v1/repos/" + data.Repo.FullName + "/contents/" + data.Path + "?ref=" + data.Ref) } class="btn-secondary mt-3 inline-flex">Download</a>
 			</div>
 		} else if data.Content != "" {
+			<div class="gh-code-block-header">
+				<div class="flex items-center gap-2 text-sm">
+					<span class="font-semibold">{ data.Path }</span>
+					<a href={ templ.SafeURL("/" + data.Repo.FullName + "/blame/" + data.Path + "?ref=" + data.Ref) } class="text-link">Blame</a>
+				</div>
+			</div>
 			<div class="gh-code-block">
 				<pre class="font-mono whitespace-pre-wrap">{ data.Content }</pre>
 			</div>
