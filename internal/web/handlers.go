@@ -126,6 +126,27 @@ func (h *Handler) handleCreateUserRepo(w http.ResponseWriter, r *http.Request) {
 	render(w, r, DashboardPage(h.layout(r, "Dashboard"), repos, orgs, csrfFrom(r.Context()), errMsg))
 }
 
+func (h *Handler) handleUserSearch(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" || len(q) < 1 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]string{})
+		return
+	}
+	users, err := h.deps.Auth.SearchUsers(r.Context(), q, 10)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]string{})
+		return
+	}
+	names := make([]string, 0, len(users))
+	for _, u := range users {
+		names = append(names, u.Username)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(names)
+}
+
 func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	typ := r.URL.Query().Get("type")

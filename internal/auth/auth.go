@@ -311,6 +311,25 @@ func (s *Service) BootstrapAdmin(ctx context.Context, username, email, password 
 	return err
 }
 
+func (s *Service) SearchUsers(ctx context.Context, prefix string, limit int) ([]User, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, username, email, role, COALESCE(avatar_url,''), created_at
+		FROM users WHERE username ILIKE $1 || '%' ORDER BY username ASC LIMIT $2`, prefix, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.AvatarURL, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, username, email, role, COALESCE(avatar_url,''), created_at

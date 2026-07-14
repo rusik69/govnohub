@@ -252,6 +252,133 @@ templ Layout(data LayoutData) {
 					_clickNewIssue();
 				}
 			});
+			/* --- User mention (@username) autocomplete --- */
+			var _mentionData = null;
+			function setupMentionAutocomplete(container) {
+				if (!container) return;
+				var ta = container.querySelector('textarea[data-mention-enabled]');
+				if (!ta || ta._mentionSetup) return;
+				ta._mentionSetup = true;
+				ta.addEventListener('input', function(e) {
+					var pos = ta.selectionStart;
+					var val = ta.value;
+					/* Find the @ before cursor: look backwards from cursor */
+					var start = val.lastIndexOf('@', pos - 1);
+					if (start === -1 || (start > 0 && val[start-1] !== ' ' && val[start-1] !== '	' && val[start-1] !== '\n' && val[start-1] !== '\r')) {
+						_removeMentionDropdown();
+						return;
+					}
+					var query = val.substring(start + 1, pos);
+					/* Must match word characters only */
+					if (query.length === 0 || !/^[a-zA-Z0-9_]+$/.test(query)) {
+						_removeMentionDropdown();
+						return;
+					}
+					_mentionData = { ta: ta, start: start, pos: pos, query: query };
+					_fetchMentionSuggestions(query, ta);
+				});
+				ta.addEventListener('blur', function() {
+					setTimeout(_removeMentionDropdown, 200);
+				});
+				ta.addEventListener('keydown', function(e) {
+					var dd = document.getElementById('mention-dropdown');
+					if (!dd || !dd._visible) return;
+					var items = dd.querySelectorAll('.mention-item');
+					var idx = Array.prototype.indexOf.call(items, dd.querySelector('.mention-item.active'));
+					if (e.key === 'ArrowDown') {
+						e.preventDefault();
+						var next = idx < items.length - 1 ? idx + 1 : 0;
+						items.forEach(function(i) { i.classList.remove('active'); });
+						items[next].classList.add('active');
+					} else if (e.key === 'ArrowUp') {
+						e.preventDefault();
+						var prev = idx > 0 ? idx - 1 : items.length - 1;
+						items.forEach(function(i) { i.classList.remove('active'); });
+						items[prev].classList.add('active');
+					} else if (e.key === 'Enter' || e.key === 'Tab') {
+						if (idx >= 0 && items[idx]) {
+							e.preventDefault();
+							_applyMention(items[idx].textContent.trim());
+						}
+					} else if (e.key === 'Escape') {
+						_removeMentionDropdown();
+					}
+				});
+			}
+			function _fetchMentionSuggestions(query, ta) {
+				fetch('/users/search?q=' + encodeURIComponent(query))
+					.then(function(r) { return r.json(); })
+					.then(function(users) {
+						if (!_mentionData || _mentionData.ta !== ta) return;
+						if (!users || users.length === 0) {
+							_removeMentionDropdown();
+							return;
+						}
+						_showMentionDropdown(users, ta);
+					})
+					.catch(function() { _removeMentionDropdown(); });
+			}
+			function _showMentionDropdown(users, ta) {
+				_removeMentionDropdown();
+				var dd = document.createElement('div');
+				dd.id = 'mention-dropdown';
+				dd._visible = true;
+				dd.className = 'mention-dropdown';
+				users.forEach(function(u, i) {
+					var item = document.createElement('div');
+					item.className = 'mention-item' + (i === 0 ? ' active' : '');
+					item.textContent = '@' + u;
+					item.setAttribute('role', 'option');
+					item.setAttribute('data-username', u);
+					item.addEventListener('mousedown', function(e) {
+						e.preventDefault();
+						_applyMention(u);
+					});
+					item.addEventListener('mouseenter', function() {
+						dd.querySelectorAll('.mention-item').forEach(function(el) { el.classList.remove('active'); });
+						item.classList.add('active');
+					});
+					dd.appendChild(item);
+				});
+				/* Position below the textarea */
+				var rect = ta.getBoundingClientRect();
+				dd.style.position = 'fixed';
+				dd.style.left = rect.left + 'px';
+				dd.style.top = (rect.bottom + window.scrollY) + 'px';
+				dd.style.minWidth = Math.max(rect.width * 0.4, 160) + 'px';
+				dd.style.zIndex = '9999';
+				document.body.appendChild(dd);
+			}
+			function _applyMention(username) {
+				if (!_mentionData) return;
+				var ta = _mentionData.ta;
+				var start = _mentionData.start;
+				var pos = _mentionData.pos;
+				var val = ta.value;
+				ta.value = val.substring(0, start) + '@' + username + ' ' + val.substring(pos);
+				ta.selectionStart = ta.selectionEnd = start + username.length + 2;
+				ta.focus();
+				_removeMentionDropdown();
+				_mentionData = null;
+				/* Trigger input event for HTMX bindings */
+				var evt = new Event('input', { bubbles: true });
+				ta.dispatchEvent(evt);
+			}
+			function _removeMentionDropdown() {
+				var dd = document.getElementById('mention-dropdown');
+				if (dd) {
+					dd._visible = false;
+					dd.remove();
+				}
+			}
+			document.addEventListener('DOMContentLoaded', function() {
+				document.querySelectorAll('[data-md-container]').forEach(setupMentionAutocomplete);
+			});
+			document.addEventListener('htmx:afterSwap', function(evt) {
+				if (evt.detail.target) {
+					evt.detail.target.querySelectorAll('[data-md-container]').forEach(setupMentionAutocomplete);
+				}
+			});
 			</script>
 		</head>
 		<body class="min-h-screen">

@@ -34,6 +34,7 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/u/{username}", h.handleUserProfile)
 		r.Post("/repos/create", h.handleCreateUserRepo)
 		r.Get("/search", h.handleSearch)
+		r.Get("/users/search", h.handleUserSearch)
 		r.Get("/settings", h.handleSettings)
 		r.Post("/settings/pat", h.handleCreatePAT)
 		r.Post("/settings/pat/{id}/revoke", h.handleRevokePAT)
