@@ -415,6 +415,98 @@ func TestValidatePATWithExpiredToken(t *testing.T) {
 	})
 }
 
+func TestIntrospectPAT(t *testing.T) {
+	pg := testutil.NewPostgres(t)
+	defer pg.Cleanup()
+	ctx := context.Background()
+	svc := NewService(pg.Pool, "test-secret")
+
+	u, err := svc.Register(ctx, "introspectuser", "introspect@test.local", "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("valid token", func(t *testing.T) {
+		pat, err := svc.CreatePAT(ctx, u.ID, "my-ci-token", []string{"repo", "workflow"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		info, err := svc.IntrospectPAT(ctx, pat)
+		if err != nil {
+			t.Fatalf("IntrospectPAT: %v", err)
+		}
+		if !info.Active {
+			t.Fatal("token should be active")
+		}
+		if info.UserID != u.ID {
+			t.Fatalf("user_id = %v, want %v", info.UserID, u.ID)
+		}
+		if info.Username != "introspectuser" {
+			t.Fatalf("username = %q, want %q", info.Username, "introspectuser")
+		}
+		if info.Name != "my-ci-token" {
+			t.Fatalf("name = %q, want %q", info.Name, "my-ci-token")
+		}
+		if len(info.Scopes) != 2 || info.Scopes[0] != "repo" || info.Scopes[1] != "workflow" {
+			t.Fatalf("scopes = %v, want [repo workflow]", info.Scopes)
+		}
+		if info.TokenID == uuid.Nil {
+			t.Fatal("token_id should not be nil")
+		}
+		if info.CreatedAt.IsZero() {
+			t.Fatal("created_at should not be zero")
+		}
+	})
+
+	t.Run("invalid token", func(t *testing.T) {
+		info, err := svc.IntrospectPAT(ctx, "ghp_invalidtoken1234567890abcdef")
+		if err != nil {
+			t.Fatalf("IntrospectPAT should not error on invalid token: %v", err)
+		}
+		if info.Active {
+			t.Fatal("invalid token should not be active")
+		}
+	})
+
+	t.Run("revoked token", func(t *testing.T) {
+		pat, err := svc.CreatePAT(ctx, u.ID, "revoke-me", []string{"repo"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		pats, err := svc.ListPATs(ctx, u.ID)
+		if err != nil || len(pats) == 0 {
+			t.Fatal("no PATs found")
+		}
+		svc.RevokePAT(ctx, u.ID, pats[0].ID)
+
+		info, err := svc.IntrospectPAT(ctx, pat)
+		if err != nil {
+			t.Fatalf("IntrospectPAT should not error on revoked token: %v", err)
+		}
+		if info.Active {
+			t.Fatal("revoked token should not be active")
+		}
+	})
+
+	t.Run("no prefix still works", func(t *testing.T) {
+		pat, err := svc.CreatePAT(ctx, u.ID, "noprefix", []string{"repo"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		withoutPrefix := pat[4:] // strip "ghp_"
+
+		info, err := svc.IntrospectPAT(ctx, withoutPrefix)
+		if err != nil {
+			t.Fatalf("IntrospectPAT without prefix: %v", err)
+		}
+		if !info.Active {
+			t.Fatal("token without prefix should be active")
+		}
+	})
+}
+
 func mustLoginUserID(t *testing.T, svc *Service, username string) uuid.UUID {
 	t.Helper()
 	_, u, err := svc.Login(context.Background(), username, "adminpass")

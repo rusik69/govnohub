@@ -36,6 +36,18 @@ const (
 	ScopeReadUser  = "read:user"
 )
 
+// PATIntrospection is the detailed result of token introspection.
+type PATIntrospection struct {
+	Active    bool       `json:"active"`
+	TokenID   uuid.UUID  `json:"token_id,omitempty"`
+	UserID    uuid.UUID  `json:"user_id,omitempty"`
+	Username  string     `json:"username,omitempty"`
+	Name      string     `json:"name,omitempty"`
+	Scopes    []string   `json:"scopes,omitempty"`
+	CreatedAt time.Time  `json:"created_at,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
 type PATInfo struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
@@ -243,6 +255,40 @@ func (s *Service) ValidatePATWithScopes(ctx context.Context, token string) (uuid
 		return uuid.Nil, nil, err
 	}
 	return userID, scopes, nil
+}
+
+// IntrospectPAT validates a PAT and returns detailed token information
+// suitable for client-side validation. Returns inactive=false for invalid/expired tokens.
+func (s *Service) IntrospectPAT(ctx context.Context, token string) (*PATIntrospection, error) {
+	token = strings.TrimPrefix(token, "ghp_")
+	hash := hashToken(token)
+
+	var info PATIntrospection
+	var userID uuid.UUID
+	err := s.pool.QueryRow(ctx, `
+		SELECT pat.id, pat.user_id, pat.name, pat.scopes, pat.created_at, pat.expires_at,
+		       u.username
+		FROM personal_access_tokens pat
+		JOIN users u ON u.id = pat.user_id
+		WHERE pat.token_hash=$1`, hash,
+	).Scan(&info.TokenID, &userID, &info.Name, &info.Scopes, &info.CreatedAt, &info.ExpiresAt, &info.Username)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return &PATIntrospection{Active: false}, nil
+		}
+		return nil, err
+	}
+
+	info.UserID = userID
+	// Check if token is expired
+	if info.ExpiresAt != nil && time.Now().After(*info.ExpiresAt) {
+		return &PATIntrospection{Active: false, TokenID: info.TokenID, UserID: userID,
+			Username: info.Username, Name: info.Name, Scopes: info.Scopes,
+			CreatedAt: info.CreatedAt, ExpiresAt: info.ExpiresAt}, nil
+	}
+
+	info.Active = true
+	return &info, nil
 }
 
 func HasScope(scopes []string, required string) bool {

@@ -122,6 +122,7 @@ func (s *Server) Router() http.Handler {
 	r.With(RateLimitMiddleware(s.anonLimiter)).Get("/api/v1/rate_limit", s.handleRateLimit)
 	r.With(RateLimitMiddleware(s.anonLimiter)).Get("/api/v1/meta", s.handleMeta)
 	r.With(RateLimitMiddleware(s.anonLimiter)).Get("/api/v1/events", s.handleEvents)
+	r.With(RateLimitMiddleware(s.anonLimiter)).Post("/api/v1/token/introspect", s.handleIntrospectToken)
 
 	// Authenticated routes: core rate limiting (per-user).
 	r.Route("/api/v1", func(r chi.Router) {
@@ -413,6 +414,23 @@ func (s *Server) handleRevokePAT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, map[string]string{"status": "revoked"})
+}
+
+func (s *Server) handleIntrospectToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+		jsonError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+
+	info, err := s.auth.IntrospectPAT(r.Context(), req.Token)
+	if err != nil {
+		jsonOK(w, auth.PATIntrospection{Active: false})
+		return
+	}
+	jsonOK(w, info)
 }
 
 func (s *Server) handleListUserRepos(w http.ResponseWriter, r *http.Request) {
