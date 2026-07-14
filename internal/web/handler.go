@@ -19,6 +19,13 @@ func (h *Handler) Routes() chi.Router {
 
 	r.Handle("/static/*", http.StripPrefix("/static/", staticHandler()))
 
+	// Serve uploaded images
+	uploadsDir := h.deps.UploadDir
+	if uploadsDir == "" {
+		uploadsDir = "/data/uploads"
+	}
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadsDir))))
+
 	r.Post("/preview-markdown", h.handlePreviewMarkdown)
 
 	r.Group(func(r chi.Router) {
@@ -125,6 +132,9 @@ func (h *Handler) Routes() chi.Router {
 			r.Get("/wiki/{slug}/edit", h.handleWikiEdit)
 			r.Post("/wiki/{slug}", h.handleWikiSave)
 			r.Post("/wiki/{slug}/delete", h.handleWikiDelete)
+
+			// Inline image upload for issue/PR body paste
+			r.Post("/upload-image", h.handleUploadImage)
 		})
 
 		r.Post("/orgs/{org}/repos", h.handleCreateOrgRepo)

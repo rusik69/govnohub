@@ -70,6 +70,7 @@ func NewServer(
 	notifySvc *notification.Service,
 	wikiSvc *wiki.Service,
 	auditSvc *audit.Service,
+	uploadDir string,
 ) *Server {
 	s := &Server{
 		auth: authSvc, repos: repoSvc, git: gitStore,
@@ -84,7 +85,7 @@ func NewServer(
 		Pulls: pullSvc, Releases: releaseSvc, Packages: pkgSvc,
 		Webhooks: webhookSvc, Search: searchSvc, Pool: pool,
 		Org: orgSvc, AIReview: aiReviewSvc, Notify: notifySvc, Wiki: wikiSvc,
-		Audit: auditSvc,
+		Audit: auditSvc, UploadDir: uploadDir,
 	})
 	return s
 }

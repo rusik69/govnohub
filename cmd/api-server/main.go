@@ -81,6 +81,7 @@ func main() {
 		notification.NewService(pool),
 		wiki.NewService(pool),
 		audit.NewService(pool),
+		cfg.ArtifactRoot+"/uploads",
 	)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: srv.Router()}

@@ -616,6 +616,87 @@ templ Layout(data LayoutData) {
 					highlightCodeBlocks();
 				}
 			});
+			/* --- Inline image paste support --- */
+			function setupImagePaste(container) {
+				if (!container) return;
+				var ta = container.querySelector('textarea');
+				if (!ta || ta._pasteSetup) return;
+				ta._pasteSetup = true;
+				ta.addEventListener('paste', function(e) {
+					var items = e.clipboardData && e.clipboardData.items;
+					if (!items) return;
+					var imageItem = null;
+					for (var i = 0; i < items.length; i++) {
+						if (items[i].type.indexOf('image/') === 0) {
+							imageItem = items[i];
+							break;
+						}
+					}
+					if (!imageItem) return;
+					e.preventDefault();
+					var file = imageItem.getAsFile();
+					if (!file) return;
+					/* Show an uploading indicator */
+					var pos = ta.selectionStart;
+					var placeholder = '[Uploading image...]';
+					ta.value = ta.value.substring(0, pos) + placeholder + ta.value.substring(ta.selectionEnd);
+					ta.selectionStart = ta.selectionEnd = pos + placeholder.length;
+					/* Determine repo context from URL path: /{owner}/{repo}/... */
+					var m = window.location.pathname.match(/^\/([^\/]+)\/([^\/]+)\//);
+					var uploadUrl = m ? '/' + m[1] + '/' + m[2] + '/upload-image' : '/upload-image';
+					var formData = new FormData();
+					formData.append('file', file, file.name || 'pasted-image.png');
+					var token = document.querySelector('meta[name="csrf-token"]');
+					var headers = {};
+					if (token) headers['X-CSRF-Token'] = token.content;
+					fetch(uploadUrl, {
+						method: 'POST',
+						headers: headers,
+						body: formData
+					})
+					.then(function(resp) {
+						if (!resp.ok) throw new Error('Upload failed: ' + resp.status);
+						return resp.text();
+					})
+					.then(function(url) {
+						var markdown = '![' + (file.name || 'image') + '](' + url + ')';
+						var val = ta.value;
+						var idx = val.indexOf(placeholder);
+						if (idx !== -1) {
+							ta.value = val.substring(0, idx) + markdown + val.substring(idx + placeholder.length);
+							ta.selectionStart = ta.selectionEnd = idx + markdown.length;
+						} else {
+							/* Fallback: append at end */
+							ta.value = val + '\n' + markdown;
+							ta.selectionStart = ta.selectionEnd = ta.value.length;
+						}
+						ta.focus();
+					})
+					.catch(function(err) {
+						var val = ta.value;
+						var idx = val.indexOf(placeholder);
+						if (idx !== -1) {
+							ta.value = val.substring(0, idx) + val.substring(idx + placeholder.length);
+						}
+						ta.focus();
+						/* Brief error flash */
+						var errEl = document.createElement('div');
+						errEl.className = 'text-red text-xs mt-1';
+						errEl.textContent = 'Image upload failed: ' + err.message;
+						var parent = ta.closest('[data-md-container]');
+						if (parent) parent.appendChild(errEl);
+						setTimeout(function() { if (errEl.parentNode) errEl.parentNode.removeChild(errEl); }, 3000);
+					});
+				});
+			}
+			document.addEventListener('DOMContentLoaded', function() {
+				document.querySelectorAll('[data-md-container]').forEach(setupImagePaste);
+			});
+			document.addEventListener('htmx:afterSwap', function(evt) {
+				if (evt.detail.target) {
+					evt.detail.target.querySelectorAll('[data-md-container]').forEach(setupImagePaste);
+				}
+			});
 			</script>
 		</head>
 		<body class="min-h-screen">

@@ -35,4 +35,5 @@ type Deps struct {
 	Notify   *notification.Service
 	Wiki     *wiki.Service
 	Audit    *audit.Service
+	UploadDir string
 }

@@ -1551,6 +1551,88 @@ func (h *Handler) handleUploadReleaseAsset(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/"+repository.FullName+"/releases", http.StatusSeeOther)
 }
 
+// handleUploadImage handles inline image paste in issue/PR comment forms.
+// It accepts a multipart file upload, saves it as a uniquely-named image,
+// and returns the public URL path as plain text so the client can insert
+// it as ![alt](url) into the Markdown textarea.
+func (h *Handler) handleUploadImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10 MB max
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "missing file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Validate content type is an image
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		buf := make([]byte, 512)
+		n, _ := io.ReadFull(file, buf)
+		contentType = http.DetectContentType(buf[:n])
+		// Reconstruct the file reader with the buffered bytes
+		var rdr io.Reader = io.MultiReader(bytes.NewReader(buf[:n]), file)
+		file = newMultiFile(rdr)
+	}
+	if !strings.HasPrefix(contentType, "image/") {
+		http.Error(w, "file must be an image", http.StatusBadRequest)
+		return
+	}
+
+	// Create upload directory if needed
+	dir := h.deps.UploadDir
+	if dir == "" {
+		dir = "/data/uploads"
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Generate unique filename preserving extension
+	ext := ".png"
+	if idx := strings.LastIndex(header.Filename, "."); idx >= 0 {
+		ext = header.Filename[idx:]
+	}
+	name := uuid.New().String() + ext
+	dst, err := os.Create(dir + "/" + name)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, file); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the public URL path for the image
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write([]byte("/uploads/" + name))
+}
+
+// multiFile wraps an io.Reader to satisfy multipart.File interface.
+type multiFile struct {
+	io.Reader
+}
+
+func newMultiFile(r io.Reader) *multiFile {
+	return &multiFile{Reader: r}
+}
+
+func (m *multiFile) Close() error { return nil }
+func (m *multiFile) Read(p []byte) (int, error) { return m.Reader.Read(p) }
+func (m *multiFile) ReadAt(p []byte, off int64) (int, error) { return 0, nil }
+func (m *multiFile) Seek(offset int64, whence int) (int64, error) { return 0, nil }
+
 func (h *Handler) handlePublishPackage(w http.ResponseWriter, r *http.Request) {
 	if !h.requirePOST(w, r) {
 		return
