@@ -8,6 +8,7 @@ import (
 type Config struct {
 	HTTPAddr       string
 	DatabaseURL    string
+	DatabaseMaxConns int
 	JWTSecret      string
 	GitRoot        string
 	ArtifactRoot   string
@@ -36,7 +37,8 @@ func Load() Config {
 	enabled := getEnvBool("AI_REVIEW_ENABLED", apiKey != "")
 	return Config{
 		HTTPAddr:      getEnv("HTTP_ADDR", ":8080"),
-		DatabaseURL:   getEnv("DATABASE_URL", "postgres://govnohub:govnohub@localhost:5432/govnohub?sslmode=disable"),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgres://govnohub:***@localhost:5432/govnohub?sslmode=disable"),
+		DatabaseMaxConns: GetEnvInt("DATABASE_MAX_CONNS", 4),
 		JWTSecret:     getEnv("JWT_SECRET", "dev-secret-change-me"),
 		GitRoot:       getEnv("GIT_ROOT", "/data/git"),
 		ArtifactRoot:  getEnv("ARTIFACT_ROOT", "/data/artifacts"),

@@ -59,7 +59,7 @@ func NewPostgres(t *testing.T) *Postgres {
 
 func connectPostgres(t *testing.T, ctx context.Context, connStr string, afterClose func()) *Postgres {
 	t.Helper()
-	pool, err := db.Connect(ctx, connStr)
+	pool, err := db.Connect(ctx, connStr, 0)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}

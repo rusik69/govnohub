@@ -35,7 +35,7 @@ func main() {
 	cfg := config.Load()
 	ctx := context.Background()
 
-	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	pool, err := db.Connect(ctx, cfg.DatabaseURL, cfg.DatabaseMaxConns)
 	if err != nil {
 		log.Fatalf("db connect: %v", err)
 	}
