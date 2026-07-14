@@ -28,7 +28,9 @@ templ Layout(data LayoutData) {
 			<meta name="csrf-token" content={ data.CSRF }/>
 			<title>{ data.Title } · Govnohub</title>
 			<link rel="stylesheet" href="/static/app.css"/>
+			<link rel="stylesheet" href="/static/github-hl.css" id="hljs-theme"/>
 			<script src="/static/htmx.min.js"></script>
+			<script src="/static/highlight.min.js"></script>
 			<script>
 				(function() {
 					const stored = localStorage.getItem('theme');
@@ -43,6 +45,11 @@ templ Layout(data LayoutData) {
 					document.documentElement.classList.toggle('dark', dark);
 					localStorage.setItem('theme', dark ? 'dark' : 'light');
 					updateThemeIcon();
+					updateHLTheme(dark);
+				}
+				function updateHLTheme(dark) {
+					const link = document.getElementById('hljs-theme');
+					if (link) link.href = dark ? '/static/github-dark-hl.css' : '/static/github-hl.css';
 				}
 				function updateThemeIcon() {
 					const dark = document.documentElement.classList.contains('dark');
@@ -50,6 +57,15 @@ templ Layout(data LayoutData) {
 					document.querySelectorAll('.theme-icon-moon').forEach(el => el.classList.toggle('hidden', !dark));
 					const btn = document.getElementById('theme-toggle');
 					if (btn) btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+					updateHLTheme(dark);
+				}
+				function highlightCodeBlocks() {
+					document.querySelectorAll('.markdown pre code, .gh-code-block pre code').forEach(function(block) {
+						if (!block.dataset.highlighted) {
+							hljs.highlightElement(block);
+							block.dataset.highlighted = 'yes';
+						}
+					});
 				}
 				function toggleNotifications(btn) {
 					const drawer = document.getElementById('notif-drawer');
@@ -72,6 +88,7 @@ templ Layout(data LayoutData) {
 				}
 				document.addEventListener('DOMContentLoaded', function() {
 					updateThemeIcon();
+					highlightCodeBlocks();
 					/* Start auto-polling for new notification count */
 					if (document.querySelector('.notif-bell')) {
 						setInterval(function() {
@@ -596,6 +613,7 @@ templ Layout(data LayoutData) {
 				if (evt.detail.target) {
 					evt.detail.target.querySelectorAll('[data-md-container]').forEach(setupMentionAutocomplete);
 					evt.detail.target.querySelectorAll('[data-md-container]').forEach(setupEmojiAutocomplete);
+					highlightCodeBlocks();
 				}
 			});
 			</script>

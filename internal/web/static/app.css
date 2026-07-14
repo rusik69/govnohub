@@ -207,8 +207,9 @@ html.dark .diff-hunk { background: #051d4d; color: #58a6ff; }
 /* Markdown */
 .markdown { line-height: 1.6; }
 .markdown h1, .markdown h2, .markdown h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
-.markdown pre { background: var(--hover); padding: 1rem; overflow: auto; border-radius: 0.375rem; }
-.markdown code { font-family: monospace; font-size: 0.875em; }
+.markdown pre { padding: 0; overflow: auto; border-radius: 0.375rem; border: 1px solid var(--border); }
+.markdown pre code { display: block; padding: 1rem; font-family: monospace; font-size: 0.875em; line-height: 1.45; }
+.markdown p code, .markdown li code, .markdown h1 code, .markdown h2 code, .markdown h3 code { background: var(--hover); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875em; }
 .markdown p { margin: 0.5rem 0; }
 
 /* Markdown task list checkboxes */
