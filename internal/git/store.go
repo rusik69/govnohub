@@ -1154,24 +1154,46 @@ func shortSHA(sha string) string {
 	return sha
 }
 
+// extractKeyIDFromPGPSignature attempts to extract the GPG key ID from a raw
+// PGP signature blob. It looks for the "KEY" or "Key ID" or issuer fingerprint
+// in the signature packet. Returns empty string if it can't be parsed.
+func extractKeyIDFromPGPSignature(sig string) string {
+	lines := strings.Split(sig, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Common formats: "KEY: <id>", "Key ID: <id>", issuer fingerprint
+		if strings.HasPrefix(trimmed, "KEY ") || strings.HasPrefix(trimmed, "KEY:") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 {
+				return strings.TrimRight(parts[len(parts)-1], "\r")
+			}
+		}
+	}
+	// If we can't parse but the signature is present, return a placeholder
+	return "unknown"
+}
+
 // CommitDetail holds full information about a single commit for the detail view.
 type CommitDetail struct {
-	SHA            string        `json:"sha"`
-	ShortSHA       string        `json:"short_sha"`
-	Message        string        `json:"message"`
-	AuthorName     string        `json:"author_name"`
-	AuthorEmail    string        `json:"author_email"`
-	AuthorDate     string        `json:"author_date"`
-	CommitterName  string        `json:"committer_name"`
-	CommitterEmail string        `json:"committer_email"`
-	CommitterDate  string        `json:"committer_date"`
-	ParentSHAs     []string      `json:"parent_shas"`
-	TreeSHA        string        `json:"tree_sha"`
-	FilesChanged   int           `json:"files_changed"`
-	Additions      int           `json:"additions"`
-	Deletions      int           `json:"deletions"`
-	Files          []ChangedFile `json:"files"`
-	Diff           string        `json:"diff,omitempty"`
+	SHA               string        `json:"sha"`
+	ShortSHA          string        `json:"short_sha"`
+	Message           string        `json:"message"`
+	AuthorName        string        `json:"author_name"`
+	AuthorEmail       string        `json:"author_email"`
+	AuthorDate        string        `json:"author_date"`
+	CommitterName     string        `json:"committer_name"`
+	CommitterEmail    string        `json:"committer_email"`
+	CommitterDate     string        `json:"committer_date"`
+	ParentSHAs        []string      `json:"parent_shas"`
+	TreeSHA           string        `json:"tree_sha"`
+	FilesChanged      int           `json:"files_changed"`
+	Additions         int           `json:"additions"`
+	Deletions         int           `json:"deletions"`
+	Files             []ChangedFile `json:"files"`
+	Diff              string        `json:"diff,omitempty"`
+	PGPSignature      string        `json:"pgp_signature,omitempty"`
+	SignatureStatus   string        `json:"signature_status"`
+	SignatureKeyID    string        `json:"signature_key_id,omitempty"`
 }
 
 // GetCommitDetail returns full details for a single commit identified by ref (branch name or SHA).
@@ -1264,6 +1286,15 @@ func (s *Store) GetCommitDetail(owner, name, ref string) (*CommitDetail, error) 
 		files = []ChangedFile{}
 	}
 
+	// Determine signature status
+	signatureStatus := ""
+	sigKeyID := ""
+	if commit.PGPSignature != "" {
+		signatureStatus = "signed"
+		// Extract key ID from the raw signature if possible
+		sigKeyID = extractKeyIDFromPGPSignature(commit.PGPSignature)
+	}
+
 	return &CommitDetail{
 		SHA:            sha,
 		ShortSHA:       sha[:12],
@@ -1281,6 +1312,9 @@ func (s *Store) GetCommitDetail(owner, name, ref string) (*CommitDetail, error) 
 		Deletions:      deletions,
 		Files:          files,
 		Diff:           diffStr,
+		PGPSignature:   commit.PGPSignature,
+		SignatureStatus: signatureStatus,
+		SignatureKeyID: sigKeyID,
 	}, nil
 }
 

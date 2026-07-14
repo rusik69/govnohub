@@ -70,6 +70,27 @@ templ CommitDetailContent(data CommitDetailData) {
 						</div>
 					</div>
 				</div>
+				if data.Commit.PGPSignature != "" {
+					<div>
+						<span class="text-muted">Verification:</span>
+						<div class="mt-1 flex items-center gap-1">
+							if data.Commit.SignatureStatus == "verified" {
+								<span class="badge badge-success flex items-center gap-1">
+									@Icon("verified", "text-green")
+									<span>Verified</span>
+								</span>
+							} else {
+								<span class="badge badge-warning flex items-center gap-1">
+									@Icon("unverified", "text-yellow")
+									<span>Unverified</span>
+								</span>
+							}
+							if data.Commit.SignatureKeyID != "" {
+								<span class="text-xs text-muted ml-1">Key ID: { data.Commit.SignatureKeyID }</span>
+							}
+						</div>
+					</div>
+				}
 				if len(data.Commit.ParentSHAs) > 0 {
 					<div>
 						<span class="text-muted">Parents:</span>

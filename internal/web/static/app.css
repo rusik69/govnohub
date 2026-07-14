@@ -176,6 +176,10 @@ html.dark .btn-danger:hover { background: #b62324; }
 .badge-closed { background: #ffebe9; color: #cf222e; }
 html.dark .badge-open { background: #12261e; color: #3fb950; }
 html.dark .badge-closed { background: #3d1418; color: #f85149; }
+.badge-success { background: #dafbe1; color: #1a7f37; }
+.badge-warning { background: #fff8c5; color: #9a6700; }
+html.dark .badge-success { background: #12261e; color: #3fb950; }
+html.dark .badge-warning { background: #3d2e00; color: #d29922; }
 
 /* Header */
 .site-header { background: var(--header-bg); color: #fff; padding: 0.75rem 1rem; }
