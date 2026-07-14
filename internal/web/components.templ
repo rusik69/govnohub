@@ -420,18 +420,88 @@ templ BranchBar(fullName, ref, path string, branches []RepoBranchOption) {
 }
 
 templ FileTable(fullName, ref, basePath string, entries []gitstore.TreeEntry) {
-	<div class="gh-file-table">
+	<div class="gh-file-table" data-root={ basePath }>
 		for _, e := range entries {
-			<div class="gh-file-row">
-				if e.Type == "dir" {
-					@Icon("file-directory", "")
-				} else {
-					@Icon("file", "")
-				}
-				<a href={ templ.SafeURL(repoEntryURL(fullName, ref, basePath, e)) }>{ e.Path }</a>
-			</div>
+			@FileTableRow(fullName, ref, basePath, e, 0)
 		}
 	</div>
+}
+
+templ FileTableRow(fullName, ref, basePath string, e gitstore.TreeEntry, depth int) {
+	<div class="gh-file-row" data-type={ e.Type }>
+		if e.Type == "dir" {
+			<button
+				type="button"
+				class="gh-tree-toggle"
+				data-url={ templ.SafeURL("/" + fullName + "/tree-partial/" + treeChildPath(basePath, e.Path) + "?ref=" + ref) }
+				aria-label={ "Expand " + e.Path }
+				onclick="return toggleTreeDir(event)"
+			>
+				<svg class="gh-tree-toggle-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.427 4.427l3.396 3.396a.25.25 0 010 .354l-3.396 3.396A.25.25 0 016 11.396V4.604a.25.25 0 01.427-.177z"/></svg>
+			</button>
+			@Icon("file-directory", "")
+		} else {
+			<span class="gh-tree-toggle-placeholder"></span>
+			@Icon("file", "")
+		}
+		<a href={ templ.SafeURL(repoEntryURL(fullName, ref, basePath, e)) }>{ e.Path }</a>
+		if e.Type == "dir" {
+			<div class="gh-tree-children"></div>
+		}
+	</div>
+}
+
+templ FileTableChildren(fullName, ref, childPath string, entries []gitstore.TreeEntry) {
+	for _, e := range entries {
+		@FileTableRow(fullName, ref, childPath, e, 0)
+	}
+}
+
+templ TreeLazyScript() {
+	<script>
+		function toggleTreeDir(event) {
+			var btn = event.currentTarget;
+			var row = btn.closest('.gh-file-row');
+			if (!row) return;
+			var children = row.querySelector('.gh-tree-children');
+			if (!children) return;
+			var icon = btn.querySelector('.gh-tree-toggle-icon');
+
+			if (children.style.display === 'none' || children.innerHTML.trim() === '') {
+				// Load children if not yet loaded
+				if (children.innerHTML.trim() === '') {
+					var url = btn.getAttribute('data-url');
+					if (!url) return false;
+					// Rotate icon to show loading/expanded state
+					if (icon) icon.style.transform = 'rotate(90deg)';
+					row.classList.add('expanded');
+					fetch(url)
+						.then(function(r) {
+							if (!r.ok) throw new Error('Failed to load');
+							return r.text();
+						})
+						.then(function(html) {
+							children.innerHTML = html;
+							children.style.display = '';
+						})
+						.catch(function() {
+							children.innerHTML = '<div class="gh-file-row" style="color:var(--text-subtle);padding-left:2.5rem">Failed to load directory</div>';
+							children.style.display = '';
+						});
+					return false;
+				}
+				// Already loaded, just show
+				children.style.display = '';
+				if (icon) icon.style.transform = 'rotate(90deg)';
+				row.classList.add('expanded');
+			} else {
+				children.style.display = 'none';
+				if (icon) icon.style.transform = '';
+				row.classList.remove('expanded');
+			}
+			return false;
+		}
+	</script>
 }
 
 templ CommentBox(author, action string, body templ.Component) {

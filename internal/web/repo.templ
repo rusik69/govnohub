@@ -93,6 +93,7 @@ templ RepoContent(data RepoPageData) {
 	<div id="fork-dialog-container"></div>
 	@ForkDialogScript()
 	@FileFinder(data.Repo.FullName, data.Ref)
+	@TreeLazyScript()
 }
 
 func repoEntryURL(fullName, ref, basePath string, e gitstore.TreeEntry) string {
@@ -104,6 +105,13 @@ func repoEntryURL(fullName, ref, basePath string, e gitstore.TreeEntry) string {
 		return "/" + fullName + "/tree/" + p + "?ref=" + ref
 	}
 	return "/" + fullName + "/blob/" + p + "?ref=" + ref
+}
+
+func treeChildPath(basePath, entryPath string) string {
+	if basePath == "" {
+		return entryPath
+	}
+	return basePath + "/" + entryPath
 }
 
 templ FileFinder(fullName string, ref string) {

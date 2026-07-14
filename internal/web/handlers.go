@@ -510,6 +510,28 @@ func (h *Handler) handleRepoTree(w http.ResponseWriter, r *http.Request) {
 	}))
 }
 
+func (h *Handler) handleRepoTreeLazy(w http.ResponseWriter, r *http.Request) {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	ref := r.URL.Query().Get("ref")
+	if ref == "" {
+		ref = repository.DefaultBranch
+	}
+	path := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
+	entries, err := h.deps.Git.GetTree(repository.OwnerName, repository.Name, ref, path)
+	if err != nil {
+		http.Error(w, "Failed to load directory: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	err = FileTableChildren(repository.FullName, ref, path, entries).Render(r.Context(), w)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (h *Handler) handleRepoBlob(w http.ResponseWriter, r *http.Request) {
 	repository, ok := h.getRepo(w, r, "read")
 	if !ok {

@@ -322,6 +322,10 @@ func RepoContent(data RepoPageData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
+		templ_7745c5c3_Err = TreeLazyScript().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
 		return nil
 	})
 }
@@ -335,6 +339,13 @@ func repoEntryURL(fullName, ref, basePath string, e gitstore.TreeEntry) string {
 		return "/" + fullName + "/tree/" + p + "?ref=" + ref
 	}
 	return "/" + fullName + "/blob/" + p + "?ref=" + ref
+}
+
+func treeChildPath(basePath, entryPath string) string {
+	if basePath == "" {
+		return entryPath
+	}
+	return basePath + "/" + entryPath
 }
 
 func FileFinder(fullName string, ref string) templ.Component {
