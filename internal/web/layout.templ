@@ -115,6 +115,30 @@ templ Layout(data LayoutData) {
 						setTimeout(function() { btn.setAttribute('aria-label', 'Copy'); }, 2000);
 					});
 				}
+				/* Generic copy-to-clipboard with visual feedback */
+				function copyToClipboard(text, btn) {
+					navigator.clipboard.writeText(text).then(function() {
+						var orig = btn.getAttribute('aria-label') || 'Copy';
+						btn.setAttribute('aria-label', 'Copied!');
+						btn.classList.add('copied');
+						setTimeout(function() {
+							btn.setAttribute('aria-label', orig);
+							btn.classList.remove('copied');
+						}, 2000);
+					}).catch(function() {
+						/* Fallback: select a hidden input if clipboard API fails */
+						var input = document.createElement('input');
+						input.value = text;
+						input.style.position = 'fixed';
+						input.style.opacity = '0';
+						document.body.appendChild(input);
+						input.select();
+						document.execCommand('copy');
+						document.body.removeChild(input);
+						btn.setAttribute('aria-label', 'Copied!');
+						setTimeout(function() { btn.setAttribute('aria-label', orig); }, 2000);
+					});
+				}
 				document.addEventListener('click', function(e) {
 					document.querySelectorAll('.gh-clone-menu[open]').forEach(function(menu) {
 						if (!menu.contains(e.target)) menu.removeAttribute('open');

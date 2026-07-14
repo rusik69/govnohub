@@ -30,9 +30,14 @@ templ CommitDetailContent(data CommitDetailData) {
 				@Icon("git-commit", "text-muted")
 				<h2 class="text-lg font-bold m-0">Commit</h2>
 				<code class="commit-sha-full text-sm text-muted">{ data.Commit.SHA }</code>
-				<button type="button" class="gh-clone-copy gh-header-btn" aria-label="Copy SHA"
-					onclick="navigator.clipboard.writeText('{ data.Commit.SHA }')">
+				<button type="button" class="gh-clone-copy gh-header-btn" id="copy-sha-btn" aria-label="Copy SHA"
+					onclick="copyToClipboard('{ data.Commit.SHA }', this)">
 					@Icon("copy", "")
+				</button>
+				<button type="button" class="gh-clone-copy gh-header-btn" id="copy-permalink-btn" aria-label="Copy permalink"
+					onclick="copyToClipboard(window.location.href, this)">
+					@Icon("link", "")
+					<span class="ml-1">Permalink</span>
 				</button>
 			</div>
 

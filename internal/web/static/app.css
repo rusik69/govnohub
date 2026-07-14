@@ -1097,3 +1097,10 @@ html.dark .gh-skeleton::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Copy button visual feedback */
+.gh-clone-copy.copied,
+.gh-header-btn.copied {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
