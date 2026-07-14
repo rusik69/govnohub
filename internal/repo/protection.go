@@ -19,6 +19,22 @@ type ProtectedBranch struct {
 	RequireReviews int      `json:"require_reviews"`
 }
 
+// CheckResult describes the aggregate state of required status checks.
+// It separates checks into three buckets:
+//   - Missing: no workflow job was ever created for this check name
+//   - Pending: a matching job exists but has not completed yet
+//   - Failed:  a matching job completed with a conclusion other than "success"
+type CheckResult struct {
+	Missing []string `json:"missing"`
+	Pending []string `json:"pending"`
+	Failed  []string `json:"failed"`
+}
+
+// HasBlockers returns true when at least one required check is not passing.
+func (r CheckResult) HasBlockers() bool {
+	return len(r.Failed)+len(r.Pending)+len(r.Missing) > 0
+}
+
 func (s *Service) GetProtectedBranch(ctx context.Context, repoID uuid.UUID, branch string) (*ProtectedBranch, error) {
 	var pb ProtectedBranch
 	err := s.pool.QueryRow(ctx, `
@@ -54,41 +70,64 @@ func (s *Service) ListProtectedBranches(ctx context.Context, repoID uuid.UUID) (
 	return out, rows.Err()
 }
 
-func (s *Service) CheckRequiredChecks(ctx context.Context, repoID uuid.UUID, headSHA string, checks []string) ([]string, error) {
+// CheckRequiredChecks evaluates the required status checks for a given commit.
+// It queries all workflow jobs associated with headSHA and classifies each
+// required check as missing (no job exists), pending (job still running), or
+// failed (job completed with a non-success conclusion). A check that has
+// completed successfully is not included in any return bucket.
+func (s *Service) CheckRequiredChecks(ctx context.Context, repoID uuid.UUID, headSHA string, checks []string) (*CheckResult, error) {
+	res := &CheckResult{}
 	if len(checks) == 0 {
-		return nil, nil
+		return res, nil
 	}
+
 	rows, err := s.pool.Query(ctx, `
-		SELECT wj.job_id, wj.conclusion
+		SELECT wj.job_id, wj.status, wj.conclusion
 		FROM workflow_jobs wj
 		JOIN workflow_runs wr ON wj.run_id = wr.id
-		WHERE wr.repo_id=$1 AND wr.head_sha=$2 AND wj.status='completed'`,
+		WHERE wr.repo_id=$1 AND wr.head_sha=$2`,
 		repoID, headSHA)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	passed := map[string]bool{}
+
+	// statusByCheck maps check names to their state:
+	//   "passed"  – completed with conclusion="success"
+	//   "failed"  – completed with conclusion != "success"
+	//   "pending" – still running (not completed)
+	statusByCheck := map[string]string{}
 	for rows.Next() {
-		var jobID string
+		var jobID, status string
 		var conclusion *string
-		if err := rows.Scan(&jobID, &conclusion); err != nil {
+		if err := rows.Scan(&jobID, &status, &conclusion); err != nil {
 			return nil, err
 		}
-		if conclusion != nil && *conclusion == "success" {
-			passed[jobID] = true
+		if status != "completed" {
+			statusByCheck[jobID] = "pending"
+		} else if conclusion != nil && *conclusion == "success" {
+			statusByCheck[jobID] = "passed"
+		} else {
+			statusByCheck[jobID] = "failed"
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	var missing []string
+
 	for _, check := range checks {
-		if !passed[check] {
-			missing = append(missing, check)
+		switch statusByCheck[check] {
+		case "passed":
+			// all good
+		case "failed":
+			res.Failed = append(res.Failed, check)
+		case "pending":
+			res.Pending = append(res.Pending, check)
+		default:
+			res.Missing = append(res.Missing, check)
 		}
 	}
-	return missing, nil
+	return res, nil
 }
 
 func (s *Service) ValidateMergeProtection(ctx context.Context, repoID uuid.UUID, baseBranch, headSHA string, approvedReviews int) error {
@@ -102,14 +141,24 @@ func (s *Service) ValidateMergeProtection(ctx context.Context, repoID uuid.UUID,
 	if pb.RequireReviews > 0 && approvedReviews < pb.RequireReviews {
 		return fmt.Errorf("%w: need %d approvals, have %d", ErrProtectionViolation, pb.RequireReviews, approvedReviews)
 	}
-	missing, err := s.CheckRequiredChecks(ctx, repoID, headSHA, pb.RequiredChecks)
+	res, err := s.CheckRequiredChecks(ctx, repoID, headSHA, pb.RequiredChecks)
 	if err != nil {
 		return err
 	}
-	if len(missing) > 0 {
-		return fmt.Errorf("%w: missing or failed checks: %v", ErrProtectionViolation, missing)
+	if !res.HasBlockers() {
+		return nil
 	}
-	return nil
+	var parts []string
+	if len(res.Failed) > 0 {
+		parts = append(parts, fmt.Sprintf("failed checks: %v", res.Failed))
+	}
+	if len(res.Pending) > 0 {
+		parts = append(parts, fmt.Sprintf("pending checks: %v", res.Pending))
+	}
+	if len(res.Missing) > 0 {
+		parts = append(parts, fmt.Sprintf("missing checks: %v", res.Missing))
+	}
+	return fmt.Errorf("%w: %s", ErrProtectionViolation, strings.Join(parts, "; "))
 }
 
 // CheckPushProtection checks if pushing to the given git refs (from a receive-pack)
