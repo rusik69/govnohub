@@ -23,6 +23,7 @@ var (
 	ErrForbidden          = errors.New("forbidden")
 	ErrUserExists         = errors.New("user already exists")
 	ErrInsufficientScope  = errors.New("insufficient token scope")
+	ErrAccountLocked      = errors.New("account locked due to too many failed login attempts")
 )
 
 const (
@@ -53,20 +54,39 @@ type User struct {
 
 type Options struct {
 	AllowPublicRegistration bool
+	MaxLoginAttempts        int
+	LockoutDuration         time.Duration
 }
 
 type Service struct {
 	pool                    *pgxpool.Pool
 	jwtSecret               []byte
 	allowPublicRegistration bool
+	maxLoginAttempts        int
+	lockoutDuration         time.Duration
 }
 
 func NewService(pool *pgxpool.Pool, jwtSecret string, opts ...Options) *Service {
-	o := Options{}
-	if len(opts) > 0 {
-		o = opts[0]
+	o := Options{
+		MaxLoginAttempts: 5,
+		LockoutDuration:  15 * time.Minute,
 	}
-	return &Service{pool: pool, jwtSecret: []byte(jwtSecret), allowPublicRegistration: o.AllowPublicRegistration}
+	if len(opts) > 0 {
+		if opts[0].MaxLoginAttempts > 0 {
+			o.MaxLoginAttempts = opts[0].MaxLoginAttempts
+		}
+		if opts[0].LockoutDuration > 0 {
+			o.LockoutDuration = opts[0].LockoutDuration
+		}
+		o.AllowPublicRegistration = opts[0].AllowPublicRegistration
+	}
+	return &Service{
+		pool:                    pool,
+		jwtSecret:               []byte(jwtSecret),
+		allowPublicRegistration: o.AllowPublicRegistration,
+		maxLoginAttempts:        o.MaxLoginAttempts,
+		lockoutDuration:         o.LockoutDuration,
+	}
 }
 
 func (s *Service) AllowPublicRegistration() bool {
@@ -106,9 +126,19 @@ func (s *Service) createUser(ctx context.Context, username, email, password, rol
 }
 
 func (s *Service) Login(ctx context.Context, username, password string) (string, *User, error) {
+	// Check if account is locked
+	var lockedUntil *time.Time
+	err := s.pool.QueryRow(ctx, `SELECT locked_until FROM users WHERE username=$1 OR email=$1`, username).Scan(&lockedUntil)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", nil, err
+	}
+	if lockedUntil != nil && time.Now().Before(*lockedUntil) {
+		return "", nil, ErrAccountLocked
+	}
+
 	var u User
 	var hash string
-	err := s.pool.QueryRow(ctx, `
+	err = s.pool.QueryRow(ctx, `
 		SELECT id, username, email, role, COALESCE(avatar_url,''), password_hash, created_at
 		FROM users WHERE username=$1 OR email=$1`, username,
 	).Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.AvatarURL, &hash, &u.CreatedAt)
@@ -119,8 +149,24 @@ func (s *Service) Login(ctx context.Context, username, password string) (string,
 		return "", nil, err
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
+		// Increment failed attempts and potentially lock account
+		_, _ = s.pool.Exec(ctx, `
+			UPDATE users SET failed_login_attempts = failed_login_attempts + 1
+			WHERE id=$1`, u.ID)
+
+		// Check if we should lock the account
+		var attempts int
+		_ = s.pool.QueryRow(ctx, `SELECT failed_login_attempts FROM users WHERE id=$1`, u.ID).Scan(&attempts)
+		if attempts >= s.maxLoginAttempts {
+			lockUntil := time.Now().Add(s.lockoutDuration)
+			_, _ = s.pool.Exec(ctx, `UPDATE users SET locked_until=$1, failed_login_attempts=0 WHERE id=$2`, lockUntil, u.ID)
+		}
 		return "", nil, ErrInvalidCredentials
 	}
+
+	// Reset failed attempts on successful login
+	_, _ = s.pool.Exec(ctx, `UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE id=$1`, u.ID)
+
 	token, err := s.issueJWT(u.ID, u.Username)
 	if err != nil {
 		return "", nil, err
@@ -370,6 +416,31 @@ func (s *Service) DeleteUser(ctx context.Context, actorID, targetID uuid.UUID) e
 		}
 	}
 	tag, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, targetID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUnauthorized
+	}
+	return nil
+}
+
+// IsLocked returns true if the account is currently locked due to failed login attempts.
+func (s *Service) IsLocked(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var lockedUntil *time.Time
+	err := s.pool.QueryRow(ctx, `SELECT locked_until FROM users WHERE id=$1`, userID).Scan(&lockedUntil)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrUnauthorized
+		}
+		return false, err
+	}
+	return lockedUntil != nil && time.Now().Before(*lockedUntil), nil
+}
+
+// UnlockUser clears the lockout for a user. Only admins should call this.
+func (s *Service) UnlockUser(ctx context.Context, userID uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE id=$1`, userID)
 	if err != nil {
 		return err
 	}

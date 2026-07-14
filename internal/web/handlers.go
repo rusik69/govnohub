@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/rusik69/govnohub/internal/auth"
 	"github.com/rusik69/govnohub/internal/repo"
 	"github.com/rusik69/govnohub/internal/search"
 	"github.com/rusik69/govnohub/internal/wiki"
@@ -32,7 +34,11 @@ func (h *Handler) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 	token, _, err := h.deps.Auth.Login(r.Context(), r.FormValue("username"), r.FormValue("password"))
 	if err != nil {
-		render(w, r, LoginPage(csrfFrom(r.Context()), "Invalid credentials", r.FormValue("next")))
+		errMsg := "Invalid credentials"
+		if errors.Is(err, auth.ErrAccountLocked) {
+			errMsg = err.Error()
+		}
+		render(w, r, LoginPage(csrfFrom(r.Context()), errMsg, r.FormValue("next")))
 		return
 	}
 	h.setSession(w, token)

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -349,6 +350,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	token, u, err := s.auth.Login(r.Context(), req.Username, req.Password)
 	if err != nil {
+		if errors.Is(err, auth.ErrAccountLocked) {
+			jsonError(w, http.StatusTooManyRequests, err.Error())
+			return
+		}
 		jsonError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
