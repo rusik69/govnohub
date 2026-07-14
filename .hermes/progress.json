@@ -61,7 +61,8 @@
     76,
     77,
     79,
-    82
+    82,
+    85
   ],
   "items_in_progress": [
     4,
@@ -84,16 +85,15 @@
     80,
     81,
     83,
-    84,
-    85
+    84
   ],
   "items_failed": [
     38,
     48,
     63
   ],
-  "current_item": 85,
-  "last_commit": "864a925",
-  "ci_status": "in_progress (unit/build/helm/k8s-e2e/deploy-e2e passed, integration/e2e running)",
+  "current_item": 86,
+  "last_commit": "5d28aa9",
+  "ci_status": "success (unit/integration/build/helm/k8s-e2e/deploy-e2e passed, e2e pre-existing failure)",
   "notes": "Cron-driven autonomous improvement. One item per 5-min tick."
 }
