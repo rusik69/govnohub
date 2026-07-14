@@ -23,14 +23,14 @@ func InstallPreReceiveHook(repoPath string) error {
 		return nil // already installed
 	}
 
-	// Simple shell script that checks for protected branches.
+	// Simple shell script that checks for protected branches and secrets.
 	// It uses the DATABASE_URL env var (exported by git-server) to query
 	// the protected_branches table via psql.
 	// If psql is unavailable, the hook is benign (allows all pushes).
 	content := `#!/bin/sh
-# Git pre-receive hook for Govnohub branch protection
+# Git pre-receive hook for Govnohub branch protection and secret scanning
 # Installed by git-server. Reads ref updates from stdin and rejects
-# pushes to protected branches.
+# pushes to protected branches or pushes containing secrets.
 #
 # This hook requires the DATABASE_URL environment variable to be set
 # (set by the git-server process). If unavailable, the hook is a no-op
@@ -80,12 +80,40 @@ while read OLD_SHA NEW_SHA REF; do
           echo "ERROR: Cannot push to protected branch '$BRANCH' in $OWNER/$NAME" >&2
           exit 1
         fi
-      else
-        # psql not available - allow the push
-        :
       fi
       ;;
   esac
+
+  # --- Secret scanning ---
+  # Scan the diff between old and new SHA for common secret patterns
+  # Skip deletion pushes (new SHA all zeros)
+  if echo "$NEW_SHA" | grep -qE '^0+$'; then
+    continue
+  fi
+
+  # Get the diff and scan for secrets
+  # If old SHA is all zeros, this is a new branch push
+  if echo "$OLD_SHA" | grep -qE '^0+$'; then
+    DIFF=$(git diff-tree --no-commit-id -r --diff-filter=AM "$NEW_SHA" 2>/dev/null)
+  else
+    DIFF=$(git diff-tree --no-commit-id -r "$OLD_SHA" "$NEW_SHA" 2>/dev/null)
+  fi
+
+  if [ -n "$DIFF" ]; then
+    # Scan for AWS keys, GitHub tokens, private keys, etc.
+    SECRETS=$(echo "$DIFF" | grep -oE '(AKIA[0-9A-Z]{16}|ghp_[0-9a-zA-Z]{4,}|gho_[0-9a-zA-Z]{4,}|ghs_[0-9a-zA-Z]{4,}|-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----|xox[baprs]-[0-9a-zA-Z]{4,}|AIza[0-9A-Za-z_-]{4,})' 2>/dev/null | head -5)
+
+    if [ -n "$SECRETS" ]; then
+      echo "ERROR: Push rejected — secrets detected in $OWNER/$NAME" >&2
+      echo "ERROR: The following potential secrets were found:" >&2
+      echo "$SECRETS" | while read line; do
+        echo "  - $line" >&2
+      done
+      echo "ERROR: Remove these secrets from your commit history and try again." >&2
+      exit 1
+    fi
+  fi
+  # --- End secret scanning ---
 done
 
 exit 0
