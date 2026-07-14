@@ -1029,3 +1029,71 @@ html.dark .gh-skeleton::after {
   padding: 0.75rem 1rem;
   min-height: 6rem;
 }
+
+/* File finder modal */
+.gh-file-finder {
+  position: fixed;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  z-index: 101;
+  width: 520px;
+  max-width: 90vw;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+.gh-file-finder .gh-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.gh-file-finder .gh-modal-header input {
+  flex: 1;
+  font-size: 0.9rem;
+}
+.gh-file-finder-results {
+  overflow-y: auto;
+  max-height: 50vh;
+  padding: 0.25rem 0;
+}
+.gh-file-finder-empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+.gh-file-finder-list {
+  display: flex;
+  flex-direction: column;
+}
+.gh-file-finder-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text);
+  border-left: 3px solid transparent;
+}
+.gh-file-finder-item:hover,
+.gh-file-finder-item.active {
+  background: var(--hover);
+  border-left-color: var(--accent);
+}
+.gh-file-finder-item .gh-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.gh-file-finder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

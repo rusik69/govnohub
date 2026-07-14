@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -466,6 +467,24 @@ func (h *Handler) handleRepoBlob(w http.ResponseWriter, r *http.Request) {
 		Repo: repository, Path: path, Ref: ref, Content: content, IsBinary: isBinary,
 		Branches: h.repoBranches(r, repository),
 	}))
+}
+
+func (h *Handler) handleFileFinder(w http.ResponseWriter, r *http.Request) {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		return
+	}
+	ref := r.URL.Query().Get("ref")
+	if ref == "" {
+		ref = repository.DefaultBranch
+	}
+	files, err := h.deps.Git.GetAllFiles(repository.OwnerName, repository.Name, ref)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(files)
 }
 
 func (h *Handler) handleIssues(w http.ResponseWriter, r *http.Request) {

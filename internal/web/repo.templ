@@ -58,6 +58,7 @@ templ RepoContent(data RepoPageData) {
 	</div>
 	<div id="fork-dialog-container"></div>
 	@ForkDialogScript()
+	@FileFinder(data.Repo.FullName, data.Ref)
 }
 
 func repoEntryURL(fullName, ref, basePath string, e gitstore.TreeEntry) string {
@@ -69,4 +70,190 @@ func repoEntryURL(fullName, ref, basePath string, e gitstore.TreeEntry) string {
 		return "/" + fullName + "/tree/" + p + "?ref=" + ref
 	}
 	return "/" + fullName + "/blob/" + p + "?ref=" + ref
+}
+
+templ FileFinder(fullName string, ref string) {
+	<!-- File finder modal — triggered by pressing `t` on repo page -->
+	<div id="file-finder-overlay" class="gh-overlay" style="display:none" onclick="closeFileFinder()"></div>
+	<div id="file-finder-modal" class="gh-modal gh-file-finder" role="dialog" aria-label="Find file" style="display:none">
+		<div class="gh-modal-header">
+			<input
+				type="text"
+				id="file-finder-input"
+				class="input"
+				placeholder="Find file..."
+				aria-label="Find file"
+				autocomplete="off"
+				spellcheck="false"
+				oninput="filterFiles()"
+				onkeydown="handleFileFinderKeydown(event)"
+			/>
+			<button type="button" class="gh-header-btn" onclick="closeFileFinder()" aria-label="Close">
+				<svg class="gh-icon" aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+			</button>
+		</div>
+		<div id="file-finder-results" class="gh-file-finder-results">
+			<div class="gh-file-finder-empty">Type to filter files...</div>
+		</div>
+	</div>
+	<script>
+		var _fileFinderData = null;
+		var _fileFinderFullName = { templ.JSScript(fullName) };
+		var _fileFinderRef = { templ.JSScript(ref) };
+		var _fileFinderSelected = 0;
+
+		function openFileFinder() {
+			var overlay = document.getElementById('file-finder-overlay');
+			var modal = document.getElementById('file-finder-modal');
+			var input = document.getElementById('file-finder-input');
+			var results = document.getElementById('file-finder-results');
+			if (!overlay || !modal || !input) return;
+
+			if (_fileFinderData === null) {
+				results.innerHTML = '<div class="gh-file-finder-empty">Loading files...</div>';
+				modal.style.display = '';
+				overlay.style.display = '';
+				fetch('/' + _fileFinderFullName + '/file-finder-data?ref=' + encodeURIComponent(_fileFinderRef))
+					.then(function(r) { return r.json(); })
+					.then(function(data) {
+						_fileFinderData = data;
+						input.value = '';
+						_fileFinderSelected = 0;
+						renderFiles(data);
+						input.focus();
+					})
+					.catch(function() {
+						results.innerHTML = '<div class="gh-file-finder-empty">Failed to load files.</div>';
+					});
+			} else {
+				modal.style.display = '';
+				overlay.style.display = '';
+				input.value = '';
+				_fileFinderSelected = 0;
+				renderFiles(_fileFinderData);
+				setTimeout(function() { input.focus(); }, 50);
+			}
+		}
+
+		function closeFileFinder() {
+			var overlay = document.getElementById('file-finder-overlay');
+			var modal = document.getElementById('file-finder-modal');
+			if (overlay) overlay.style.display = 'none';
+			if (modal) modal.style.display = 'none';
+		}
+
+		function renderFiles(files) {
+			var results = document.getElementById('file-finder-results');
+			if (!results) return;
+			if (!files || files.length === 0) {
+				results.innerHTML = '<div class="gh-file-finder-empty">No files found.</div>';
+				return;
+			}
+			var html = '<div class="gh-file-finder-list">';
+			for (var i = 0; i < files.length; i++) {
+				var cls = i === _fileFinderSelected ? 'gh-file-finder-item active' : 'gh-file-finder-item';
+				html += '<div class="' + cls + '" data-index="' + i + '" onclick="navigateToFile(' + i + ')" onmouseover="selectFileFinderIndex(' + i + ')">';
+				html += '<svg class="gh-icon" aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zM3.75 1.5a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V5.5h-2.25A1.75 1.75 0 018.5 3.75V1.5H3.75z"/></svg>';
+				html += '<span class="gh-file-finder-name">' + escapeHtml(files[i]) + '</span>';
+				html += '</div>';
+			}
+			html += '</div>';
+			results.innerHTML = html;
+		}
+
+		function filterFiles() {
+			if (!_fileFinderData) return;
+			var q = document.getElementById('file-finder-input').value.toLowerCase();
+			var filtered;
+			if (q === '') {
+				filtered = _fileFinderData.slice(0, 200);
+			} else {
+				filtered = [];
+				for (var i = 0; i < _fileFinderData.length; i++) {
+					var path = _fileFinderData[i].toLowerCase();
+					if (path.indexOf(q) !== -1) {
+						filtered.push(_fileFinderData[i]);
+					}
+				}
+			}
+			_fileFinderSelected = 0;
+			renderFiles(filtered);
+		}
+
+		function handleFileFinderKeydown(e) {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				closeFileFinder();
+				return;
+			}
+			if (e.key === 'ArrowDown') {
+				e.preventDefault();
+				var items = document.querySelectorAll('.gh-file-finder-item');
+				if (items.length === 0) return;
+				_fileFinderSelected = Math.min(_fileFinderSelected + 1, items.length - 1);
+				items.forEach(function(el, i) {
+					el.classList.toggle('active', i === _fileFinderSelected);
+				});
+				items[_fileFinderSelected].scrollIntoView({ block: 'nearest' });
+				return;
+			}
+			if (e.key === 'ArrowUp') {
+				e.preventDefault();
+				var items = document.querySelectorAll('.gh-file-finder-item');
+				if (items.length === 0) return;
+				_fileFinderSelected = Math.max(_fileFinderSelected - 1, 0);
+				items.forEach(function(el, i) {
+					el.classList.toggle('active', i === _fileFinderSelected);
+				});
+				items[_fileFinderSelected].scrollIntoView({ block: 'nearest' });
+				return;
+			}
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				var items = document.querySelectorAll('.gh-file-finder-item');
+				if (items.length > 0 && _fileFinderSelected < items.length) {
+					navigateToFile(_fileFinderSelected);
+				}
+				return;
+			}
+		}
+
+		function selectFileFinderIndex(idx) {
+			_fileFinderSelected = idx;
+			var items = document.querySelectorAll('.gh-file-finder-item');
+			items.forEach(function(el, i) {
+				el.classList.toggle('active', i === idx);
+			});
+		}
+
+		function navigateToFile(idx) {
+			var items = document.querySelectorAll('.gh-file-finder-item');
+			if (idx < items.length) {
+				var nameEl = items[idx].querySelector('.gh-file-finder-name');
+				if (nameEl) {
+					var path = nameEl.textContent;
+					window.location.href = '/' + _fileFinderFullName + '/blob/' + path + '?ref=' + encodeURIComponent(_fileFinderRef);
+				}
+			}
+		}
+
+		function escapeHtml(s) {
+			return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+		}
+
+		/* Add 't' key handler to existing keyboard shortcuts */
+		document.addEventListener('keydown', function(e) {
+			var tag = e.target.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+			if (e.ctrlKey || e.altKey || e.metaKey) return;
+			/* t → open file finder (only on repo pages that have the file-finder-data route) */
+			if (e.key === 't' && !e.shiftKey) {
+				/* Check we are on a repo page by looking for the file-finder element */
+				if (document.getElementById('file-finder-modal')) {
+					e.preventDefault();
+					openFileFinder();
+				}
+			}
+		});
+	</script>
 }

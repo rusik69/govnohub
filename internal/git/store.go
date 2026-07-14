@@ -318,6 +318,38 @@ func (s *Store) GetTree(owner, name, ref, path string) ([]TreeEntry, error) {
 	return entries, nil
 }
 
+// GetAllFiles recursively walks the entire tree at the given ref and returns all file paths.
+func (s *Store) GetAllFiles(owner, name, ref string) ([]string, error) {
+	repo, err := s.Open(owner, name)
+	if err != nil {
+		return nil, err
+	}
+	commit, err := resolveCommit(repo, ref)
+	if err != nil {
+		return nil, err
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	walker := object.NewTreeWalker(tree, false, nil)
+	defer walker.Close()
+	for {
+		name, entry, err := walker.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if entry.Mode == filemode.Regular || entry.Mode == filemode.Executable || entry.Mode == filemode.Symlink {
+			files = append(files, name)
+		}
+	}
+	return files, nil
+}
+
 func (s *Store) GetBlob(owner, name, ref, path string) ([]byte, error) {
 	repo, err := s.Open(owner, name)
 	if err != nil {
