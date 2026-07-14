@@ -66,6 +66,7 @@ func (h *Handler) Routes() chi.Router {
 			r.Get("/admin/users", h.handleAdminUsers)
 			r.Post("/admin/users", h.handleAdminCreateUser)
 			r.Post("/admin/users/{id}/delete", h.handleAdminDeleteUser)
+			r.Post("/admin/users/{id}/role", h.handleAdminChangeUserRole)
 			r.Get("/admin/audit", h.handleAdminAudit)
 		})
 

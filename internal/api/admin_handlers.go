@@ -16,6 +16,7 @@ func (s *Server) registerAdminRoutes(r chi.Router) {
 		r.Use(s.requireAdmin)
 		r.Get("/users", s.handleListUsers)
 		r.Post("/users", s.handleAdminCreateUser)
+		r.Patch("/users/{userID}/role", s.handleUpdateUserRole)
 		r.Delete("/users/{userID}", s.handleDeleteUser)
 		r.Get("/audit", s.handleListAuditLog)
 	})
@@ -81,6 +82,43 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.audit.Record(r.Context(), userIDFrom(r.Context()), "user.create", "user", u.ID.String(), map[string]string{"username": u.Username})
+	jsonOK(w, u)
+}
+
+func (s *Server) handleUpdateUserRole(w http.ResponseWriter, r *http.Request) {
+	targetID, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	var req struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.Role == "" {
+		jsonError(w, http.StatusBadRequest, "role is required")
+		return
+	}
+	u, err := s.auth.UpdateUserRole(r.Context(), userIDFrom(r.Context()), targetID, req.Role)
+	if err != nil {
+		switch err {
+		case auth.ErrForbidden:
+			jsonError(w, http.StatusForbidden, err.Error())
+		case auth.ErrUnauthorized:
+			jsonError(w, http.StatusNotFound, "user not found")
+		default:
+			jsonError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	if s.audit != nil {
+		_ = s.audit.Record(r.Context(), userIDFrom(r.Context()), "user.role_change", "user", targetID.String(), map[string]string{
+			"new_role": u.Role,
+		})
+	}
 	jsonOK(w, u)
 }
 

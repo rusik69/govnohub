@@ -498,6 +498,44 @@ func (s *Service) DeleteUser(ctx context.Context, actorID, targetID uuid.UUID) e
 	return nil
 }
 
+// UpdateUserRole changes the role of a user. Only admins can change roles.
+// Prevents removing the last admin.
+func (s *Service) UpdateUserRole(ctx context.Context, actorID, targetID uuid.UUID, newRole string) (*User, error) {
+	if newRole != RoleAdmin && newRole != RoleUser {
+		return nil, fmt.Errorf("invalid role: %q", newRole)
+	}
+	var targetRole string
+	if err := s.pool.QueryRow(ctx, `SELECT role FROM users WHERE id=$1`, targetID).Scan(&targetRole); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUnauthorized
+		}
+		return nil, err
+	}
+	// Prevent removing the last admin
+	if targetRole == RoleAdmin && newRole != RoleAdmin {
+		var adminCount int
+		if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role=$1`, RoleAdmin).Scan(&adminCount); err != nil {
+			return nil, err
+		}
+		if adminCount <= 1 {
+			return nil, ErrForbidden
+		}
+	}
+	var u User
+	err := s.pool.QueryRow(ctx, `
+		UPDATE users SET role=$1 WHERE id=$2
+		RETURNING id, username, email, role, COALESCE(avatar_url,''), created_at`,
+		newRole, targetID,
+	).Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.AvatarURL, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUnauthorized
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
 // IsLocked returns true if the account is currently locked due to failed login attempts.
 func (s *Service) IsLocked(ctx context.Context, userID uuid.UUID) (bool, error) {
 	var lockedUntil *time.Time

@@ -441,6 +441,31 @@ func (h *Handler) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
 }
 
+func (h *Handler) handleAdminChangeUserRole(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePOST(w, r) {
+		return
+	}
+	su := userFrom(r.Context())
+	id, ok := parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	newRole := r.FormValue("role")
+	if newRole != "admin" && newRole != "user" {
+		redirectWithFlash(w, r, "/admin/users", "Invalid role: "+newRole, true)
+		return
+	}
+	u, err := h.deps.Auth.UpdateUserRole(r.Context(), su.ID, id, newRole)
+	if err != nil {
+		redirectWithFlash(w, r, "/admin/users", "Failed to change role: "+err.Error(), true)
+		return
+	}
+	if h.deps.Audit != nil {
+		_ = h.deps.Audit.Record(r.Context(), su.ID, "user.role_change", "user", id.String(), map[string]string{"new_role": u.Role})
+	}
+	redirectWithFlash(w, r, "/admin/users", "Role changed to "+u.Role, false)
+}
+
 func (h *Handler) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
 	entries, _ := h.deps.Audit.List(r.Context(), 100)
 	render(w, r, AdminAuditPage(h.layout(r, "Audit log"), entries))

@@ -22,7 +22,16 @@ templ AdminUsersContent(csrf string, users []auth.User, errMsg string) {
 				<tr>
 					<td>{ u.Username }</td>
 					<td>{ u.Email }</td>
-					<td>{ u.Role }</td>
+					<td>
+						<form method="post" action={ templ.SafeURL("/admin/users/" + u.ID.String() + "/role") } class="flex items-center gap-2">
+							@CSRFInput(csrf)
+							<select name="role" class="input text-sm py-1">
+								<option value="user" selected={ u.Role == "user" }>user</option>
+								<option value="admin" selected={ u.Role == "admin" }>admin</option>
+							</select>
+							<button type="submit" class="btn-secondary text-sm">Change</button>
+						</form>
+					</td>
 					<td class="text-sm text-muted"><time datetime={ timeAttr(u.CreatedAt) } title={ timeTooltip(u.CreatedAt) }>{ relativeTime(u.CreatedAt) }</time></td>
 					<td>
 						<form method="post" action={ templ.SafeURL("/admin/users/" + u.ID.String() + "/delete") } onsubmit="return confirm('Delete this user?')">
