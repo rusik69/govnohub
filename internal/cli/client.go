@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/rusik69/govnohub/internal/httputil"
 )
 
 type Client struct {
@@ -24,7 +26,7 @@ func NewClient(baseURL, token string) *Client {
 	return &Client{
 		baseURL:    stringsTrimSlash(baseURL),
 		token:      token,
-		httpClient: http.DefaultClient,
+		httpClient: httputil.NewClient(),
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/rusik69/govnohub/internal/httputil"
 )
 
 type Document struct {
@@ -57,7 +59,7 @@ type Service struct {
 func NewService(baseURL string) *Service {
 	return &Service{
 		baseURL:    strings.TrimRight(baseURL, "/"),
-		client:     http.DefaultClient,
+		client:     httputil.NewClient(),
 		maxRetries: 3,
 		baseDelay:  500 * time.Millisecond,
 	}

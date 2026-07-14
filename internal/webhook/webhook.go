@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rusik69/govnohub/internal/httputil"
 )
 
 type Hook struct {
@@ -24,11 +25,15 @@ type Hook struct {
 }
 
 type Service struct {
-	pool *pgxpool.Pool
+	pool       *pgxpool.Pool
+	httpClient *http.Client
 }
 
 func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{pool: pool}
+	return &Service{
+		pool:       pool,
+		httpClient: httputil.NewClient(),
+	}
 }
 
 func (s *Service) Create(ctx context.Context, repoID uuid.UUID, url, secret string, events []string) (*Hook, error) {
@@ -60,7 +65,7 @@ func (s *Service) Dispatch(ctx context.Context, repoID uuid.UUID, event string, 
 		req.Header.Set("X-Govnohub-Event", event)
 		sig := sign(secret, body)
 		req.Header.Set("X-Govnohub-Signature-256", "sha256="+sig)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := s.httpClient.Do(req)
 		status := 0
 		if resp != nil {
 			status = resp.StatusCode

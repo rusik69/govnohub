@@ -14,8 +14,8 @@ func TestNewService(t *testing.T) {
 	if !strings.HasSuffix(s.baseURL, "9200") {
 		t.Fatalf("expected baseURL to end with 9200, got %s", s.baseURL)
 	}
-	if s.client != http.DefaultClient {
-		t.Fatal("expected default HTTP client")
+	if s.client == nil {
+		t.Fatal("expected non-nil HTTP client")
 	}
 }
 
