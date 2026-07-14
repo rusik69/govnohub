@@ -103,18 +103,22 @@ func (s *Server) Router() http.Handler {
 		AllowCredentials: false,
 	}))
 
+	// Health check — no rate limiting.
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		jsonOK(w, map[string]string{"status": "ok"})
 	})
 
-	r.Post("/api/v1/users", s.handleRegister)
-	r.Post("/api/v1/auth/login", s.handleLogin)
-	r.Get("/api/v1/rate_limit", s.handleRateLimit)
-	r.Get("/api/v1/meta", s.handleMeta)
-	r.Get("/api/v1/events", s.handleEvents)
+	// Unauthenticated routes: anon rate limiting (per-IP).
+	r.With(RateLimitMiddleware(anonLimiter)).Post("/api/v1/users", s.handleRegister)
+	r.With(RateLimitMiddleware(anonLimiter)).Post("/api/v1/auth/login", s.handleLogin)
+	r.With(RateLimitMiddleware(anonLimiter)).Get("/api/v1/rate_limit", s.handleRateLimit)
+	r.With(RateLimitMiddleware(anonLimiter)).Get("/api/v1/meta", s.handleMeta)
+	r.With(RateLimitMiddleware(anonLimiter)).Get("/api/v1/events", s.handleEvents)
 
+	// Authenticated routes: core rate limiting (per-user).
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(s.authenticate)
+		r.Use(RateLimitMiddleware(coreLimiter))
 		r.Get("/user", s.handleCurrentUser)
 		r.Post("/user/tokens", s.handleCreatePAT)
 		r.Get("/user/tokens", s.handleListPATs)

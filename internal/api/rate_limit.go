@@ -2,8 +2,12 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // RateLimit defaults (per-hour per-user).
@@ -12,11 +16,13 @@ const (
 	defaultWindow   = time.Hour
 	anonLimit       = 60
 	anonWindow      = time.Hour
+	searchLimit     = 100
+	searchWindow    = time.Hour
 	cleanupInterval = 10 * time.Minute
 )
 
 type rateBucket struct {
-	count   int
+	count       int
 	windowStart time.Time
 }
 
@@ -94,6 +100,102 @@ func (rl *RateLimiter) Stop() {
 	close(rl.stopCh)
 }
 
+// Package-level limiters.
+var (
+	coreLimiter   = NewRateLimiter(defaultLimit, defaultWindow)
+	anonLimiter   = NewRateLimiter(anonLimit, anonWindow)
+	searchLimiter = NewRateLimiter(searchLimit, searchWindow)
+)
+
+// rateLimitKey returns the rate-limit key for the request:
+// authenticated users keyed by user ID, anonymous by remote IP.
+func rateLimitKey(r *http.Request, uid uuid.UUID) string {
+	if uid != uuid.Nil {
+		return "user:" + uid.String()
+	}
+	// Use X-Forwarded-For or X-Real-IP if available, fall back to RemoteAddr.
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip == "" {
+		ip = r.Header.Get("X-Real-IP")
+	}
+	if ip == "" {
+		// Strip port from RemoteAddr.
+		ip = r.RemoteAddr
+		for i := 0; i < len(ip); i++ {
+			if ip[i] == ':' {
+				ip = ip[:i]
+				break
+			}
+		}
+	}
+	return "ip:" + ip
+}
+
+// setRateLimitHeaders writes X-RateLimit-* headers on the response.
+func setRateLimitHeaders(w http.ResponseWriter, limit, remaining int, resetUnix int64) {
+	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limit))
+	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+	w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetUnix, 10))
+}
+
+// RateLimitMiddleware returns a chi middleware that enforces rate limits
+// using the provided limiter. It extracts user identity from the context
+// (set by the authenticate middleware) or falls back to the remote IP.
+// When the limit is exceeded it responds with 429 and the standard
+// rate-limit headers.
+func RateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			uid := userIDFrom(r.Context())
+			key := rateLimitKey(r, uid)
+						_, remaining, resetUnix := limiter.AllowIfPossible(key)
+
+			setRateLimitHeaders(w, limiter.limit, remaining, resetUnix)
+
+			if remaining == 0 {
+				// Calculate seconds until reset for Retry-After.
+				nowUnix := time.Now().Unix()
+				retryAfter := resetUnix - nowUnix
+				if retryAfter < 0 {
+					retryAfter = 0
+				}
+				w.Header().Set("Retry-After", strconv.FormatInt(retryAfter, 10))
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Write([]byte(`{"error":"rate limit exceeded"}`))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// rateLimitByMethod returns a middleware group that applies the given
+// limiter to requests matching one of the given methods.
+func rateLimitByMethod(limiter *RateLimiter, methods ...string) func(http.Handler) http.Handler {
+	methodSet := make(map[string]bool, len(methods))
+	for _, m := range methods {
+		methodSet[m] = true
+	}
+	inner := RateLimitMiddleware(limiter)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if methodSet[r.Method] {
+				inner(next).ServeHTTP(w, r.WithContext(r.Context()))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// WithRateLimit is a helper to attach a rate-limited sub-router.
+func WithRateLimit(r chi.Router, limiter *RateLimiter) chi.Router {
+	r.Use(RateLimitMiddleware(limiter))
+	return r
+}
+
 // --- Per-endpoint rate-limit status ---
 
 type rateLimitResource struct {
@@ -108,19 +210,10 @@ type rateLimitResponse struct {
 	Rate      rateLimitResource            `json:"rate"`
 }
 
-// Package-level limiters.
-var (
-	coreLimiter = NewRateLimiter(defaultLimit, defaultWindow)
-	anonLimiter = NewRateLimiter(anonLimit, anonWindow)
-)
-
 func (s *Server) handleRateLimit(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
-	isAnon := uid == [16]byte{}
-	key := r.RemoteAddr
-	if !isAnon {
-		key = uid.String()
-	}
+	isAnon := uid == uuid.Nil
+	key := rateLimitKey(r, uid)
 
 	var limiter *RateLimiter
 	var limit int
@@ -132,7 +225,19 @@ func (s *Server) handleRateLimit(w http.ResponseWriter, r *http.Request) {
 		limit = defaultLimit
 	}
 
+	// AllowIfPossible increments the counter; for the status endpoint we
+	// want to show stats without counting the request. We track the count
+	// separately here.
 	used, remaining, resetUnix := limiter.AllowIfPossible(key)
+	// Subtract 1 to show the state *before* this status check.
+	if used > 0 {
+		used--
+		remaining++
+		if remaining > limit {
+			remaining = limit
+		}
+	}
+
 	resp := rateLimitResponse{
 		Resources: map[string]rateLimitResource{
 			"core": {
