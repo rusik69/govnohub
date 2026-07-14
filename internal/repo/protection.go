@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	gitstore "github.com/rusik69/govnohub/internal/git"
 )
 
 var ErrProtectionViolation = errors.New("branch protection requirements not met")
@@ -106,6 +108,31 @@ func (s *Service) ValidateMergeProtection(ctx context.Context, repoID uuid.UUID,
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("%w: missing or failed checks: %v", ErrProtectionViolation, missing)
+	}
+	return nil
+}
+
+// CheckPushProtection checks if pushing to the given git refs (from a receive-pack)
+// would violate any branch protection rules. It returns an error listing all violations.
+// A "deletion" push (newSHA == all-zeros) to a protected branch is also blocked.
+func (s *Service) CheckPushProtection(ctx context.Context, repoID uuid.UUID, refs []gitstore.RefUpdate) error {
+	var errs []string
+	for _, ref := range refs {
+		if !strings.HasPrefix(ref.Ref, "refs/heads/") {
+			continue // only check branch pushes
+		}
+		branch := strings.TrimPrefix(ref.Ref, "refs/heads/")
+		// Deletion (all-zero new SHA) is checked against protection too
+		pb, err := s.GetProtectedBranch(ctx, repoID, branch)
+		if err != nil {
+			return err
+		}
+		if pb != nil {
+			errs = append(errs, fmt.Sprintf("cannot push to protected branch %q", branch))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("%w: %s", ErrProtectionViolation, strings.Join(errs, "; "))
 	}
 	return nil
 }

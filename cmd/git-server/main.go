@@ -53,6 +53,10 @@ func main() {
 		webhook: cfg.WebhookURL,
 	}
 
+	// Export environment variables for git pre-receive hooks
+	os.Setenv("GIT_ROOT", cfg.GitRoot)
+	os.Setenv("DATABASE_URL", cfg.DatabaseURL)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleGit)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -131,13 +135,32 @@ func (s *server) handleGit(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "forbidden: insufficient token scope", http.StatusForbidden)
 			return
 		}
+		// Read entire body to inspect ref updates for branch protection
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "cannot read body", http.StatusInternalServerError)
+			return
+		}
+		refs, parseErr := gitstore.ParseRefUpdates(body)
+		if parseErr != nil {
+			log.Printf("parse ref updates %s/%s: %v", owner, name, parseErr)
+		}
+		if len(refs) > 0 {
+			if err := s.repos.CheckPushProtection(r.Context(), repository.ID, refs); err != nil {
+				log.Printf("branch protection rejected push %s/%s: %v", owner, name, err)
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusForbidden)
+				w.Write([]byte(err.Error()))
+				return
+			}
+		}
 		before, err := s.git.ListBranchSHAs(owner, name)
 		if err != nil {
 			log.Printf("list branches before push %s/%s: %v", owner, name, err)
 			return
 		}
 		w.Header().Set("Content-Type", gitstore.ResultContentType(service))
-		if err := s.git.ReceivePack(owner, name, r.Body, w); err != nil {
+		if err := s.git.ReceivePack(owner, name, bytes.NewReader(body), w); err != nil {
 			log.Printf("receive-pack %s/%s: %v", owner, name, err)
 			return
 		}

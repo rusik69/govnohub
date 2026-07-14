@@ -54,7 +54,14 @@ func (s *Store) Init(ctx context.Context, owner, name string) error {
 		return err
 	}
 	_, err := git.PlainInit(path, true)
-	return err
+	if err != nil {
+		return err
+	}
+	// Install pre-receive hook for branch protection enforcement
+	if err := InstallPreReceiveHook(path); err != nil {
+		return fmt.Errorf("install pre-receive hook: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) SeedMainBranch(owner, repoName, branch string) (string, error) {

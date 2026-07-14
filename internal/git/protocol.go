@@ -5,8 +5,69 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 )
+
+// RefUpdate represents a single reference update from a receive-pack request.
+type RefUpdate struct {
+	OldSHA string `json:"old_sha"`
+	NewSHA string `json:"new_sha"`
+	Ref    string `json:"ref"`
+}
+
+// ParseRefUpdates parses the ref update pkt-lines from a git-receive-pack request body.
+// It returns the ref updates and the number of bytes consumed (up to and including
+// the flush-pkt). The remaining bytes are the packfile data.
+func ParseRefUpdates(data []byte) ([]RefUpdate, error) {
+	var refs []RefUpdate
+	r := bytes.NewReader(data)
+	for r.Len() > 0 {
+		var hexLen [4]byte
+		if _, err := io.ReadFull(r, hexLen[:]); err != nil {
+			break
+		}
+		n, err := strconv.ParseInt(string(hexLen[:]), 16, 32)
+		if err != nil || n <= 0 {
+			break
+		}
+		if n == 4 {
+			// flush-pkt (0004 means empty line, but 0000 is the actual flush)
+			// 0000 is handled above (n=0)
+			continue
+		}
+		if n < 4 {
+			break
+		}
+		line := make([]byte, n-4)
+		if _, err := io.ReadFull(r, line); err != nil {
+			break
+		}
+		// Ref update format: "<old-sha> <new-sha> <refname>\0<caps>\n"
+		// Strip trailing newline
+		line = bytes.TrimRight(line, "\n")
+		parts := strings.SplitN(string(line), " ", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		oldSHA := parts[0]
+		newSHA := parts[1]
+		ref := parts[2]
+		// Remove capabilities after null byte
+		if idx := strings.IndexByte(ref, 0); idx >= 0 {
+			ref = ref[:idx]
+		}
+		if len(oldSHA) != 40 || len(newSHA) != 40 {
+			continue
+		}
+		refs = append(refs, RefUpdate{
+			OldSHA: oldSHA,
+			NewSHA: newSHA,
+			Ref:    ref,
+		})
+	}
+	return refs, nil
+}
 
 // WriteServicePacket writes the smart HTTP service announcement (pkt-line framed).
 func WriteServicePacket(w io.Writer, service string) error {
