@@ -9,7 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rusik69/govnohub/internal/cache"
 )
+
+// Default cache TTL for repo lookups.
+const repoCacheTTL = 5 * time.Minute
 
 var ErrNotFound = errors.New("repository not found")
 var ErrForbidden = errors.New("forbidden")
@@ -31,11 +35,12 @@ type Repository struct {
 }
 
 type Service struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	cache *cache.Cache
 }
 
 func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{pool: pool}
+	return &Service{pool: pool, cache: cache.New(repoCacheTTL)}
 }
 
 func (s *Service) Create(ctx context.Context, ownerType string, ownerID uuid.UUID, ownerName, name, description string, isPrivate bool) (*Repository, error) {
@@ -60,6 +65,12 @@ func (s *Service) Create(ctx context.Context, ownerType string, ownerID uuid.UUI
 }
 
 func (s *Service) GetByFullName(ctx context.Context, owner, name string) (*Repository, error) {
+	// Check cache first
+	cacheKey := "repo:fullname:" + owner + "/" + name
+	if v, ok := s.cache.Get(cacheKey); ok {
+		return v.(*Repository), nil
+	}
+
 	var r Repository
 	err := s.pool.QueryRow(ctx, `
 		SELECT r.id, r.owner_type, r.owner_id, r.name, COALESCE(r.description,''),
@@ -78,6 +89,7 @@ func (s *Service) GetByFullName(ctx context.Context, owner, name string) (*Repos
 		return nil, err
 	}
 	r.FullName = r.OwnerName + "/" + r.Name
+	s.cache.Set(cacheKey, &r)
 	return &r, nil
 }
 
@@ -199,6 +211,8 @@ func (s *Service) Update(ctx context.Context, repoID uuid.UUID, input UpdateRepo
 		return nil, err
 	}
 	r.FullName = r.OwnerName + "/" + r.Name
+	// Invalidate cache for the old full name if name or owner changed
+	s.cache.Delete("repo:fullname:" + r.FullName)
 	return &r, nil
 }
 
@@ -242,6 +256,8 @@ func (s *Service) Star(ctx context.Context, repoID, userID uuid.UUID) error {
 	if _, err := tx.Exec(ctx, `UPDATE repos SET star_count = star_count + 1 WHERE id=$1`, repoID); err != nil {
 		return err
 	}
+	// Invalidate cache since star_count changed
+	s.cache.Clear()
 	return tx.Commit(ctx)
 }
 
@@ -259,6 +275,8 @@ func (s *Service) Unstar(ctx context.Context, repoID, userID uuid.UUID) error {
 		if _, err := tx.Exec(ctx, `UPDATE repos SET star_count = GREATEST(star_count - 1, 0) WHERE id=$1`, repoID); err != nil {
 			return err
 		}
+		// Invalidate cache since star_count changed
+		s.cache.Clear()
 	}
 	return tx.Commit(ctx)
 }
@@ -346,6 +364,8 @@ func (s *Service) Delete(ctx context.Context, repoID uuid.UUID) error {
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
+	// Invalidate entire repo cache since we don't have the full name here
+	s.cache.Clear()
 	return nil
 }
 

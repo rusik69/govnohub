@@ -14,8 +14,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rusik69/govnohub/internal/cache"
 	"golang.org/x/crypto/bcrypt"
 )
+
+const userCacheTTL = 10 * time.Minute
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
@@ -77,6 +80,7 @@ type Service struct {
 	allowPublicRegistration bool
 	maxLoginAttempts        int
 	lockoutDuration         time.Duration
+	cache                   *cache.Cache
 }
 
 func NewService(pool *pgxpool.Pool, jwtSecret string, opts ...Options) *Service {
@@ -99,6 +103,7 @@ func NewService(pool *pgxpool.Pool, jwtSecret string, opts ...Options) *Service 
 		allowPublicRegistration: o.AllowPublicRegistration,
 		maxLoginAttempts:        o.MaxLoginAttempts,
 		lockoutDuration:         o.LockoutDuration,
+		cache:                   cache.New(userCacheTTL),
 	}
 }
 
@@ -380,6 +385,12 @@ func (s *Service) ListExpiringPATs(ctx context.Context, within time.Duration) (m
 }
 
 func (s *Service) GetUserByUsername(ctx context.Context, username string) (*User, error) {
+	// Check cache first
+	cacheKey := "user:username:" + username
+	if v, ok := s.cache.Get(cacheKey); ok {
+		return v.(*User), nil
+	}
+
 	var u User
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, username, email, role, COALESCE(avatar_url,''), created_at
@@ -391,10 +402,17 @@ func (s *Service) GetUserByUsername(ctx context.Context, username string) (*User
 		}
 		return nil, err
 	}
+	s.cache.Set(cacheKey, &u)
 	return &u, nil
 }
 
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
+	// Check cache first
+	cacheKey := "user:id:" + id.String()
+	if v, ok := s.cache.Get(cacheKey); ok {
+		return v.(*User), nil
+	}
+
 	var u User
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, username, email, role, COALESCE(avatar_url,''), created_at
@@ -403,6 +421,7 @@ func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.cache.Set(cacheKey, &u)
 	return &u, nil
 }
 
@@ -508,6 +527,8 @@ func (s *Service) DeleteUser(ctx context.Context, actorID, targetID uuid.UUID) e
 	if tag.RowsAffected() == 0 {
 		return ErrUnauthorized
 	}
+	// Invalidate user cache since this user no longer exists
+	s.cache.Delete("user:id:" + targetID.String())
 	return nil
 }
 
