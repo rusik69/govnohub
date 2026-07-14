@@ -58,6 +58,8 @@ type Server struct {
 	anonLimiter   *RateLimiter
 	coreLimiter   *RateLimiter
 	searchLimiter *RateLimiter
+
+	corsAllowedOrigins []string
 }
 
 func NewServer(
@@ -79,6 +81,7 @@ func NewServer(
 	auditSvc *audit.Service,
 	presenceTracker *presence.Tracker,
 	uploadDir string,
+	corsAllowedOrigins []string,
 ) *Server {
 	s := &Server{
 		auth: authSvc, repos: repoSvc, git: gitStore,
@@ -90,6 +93,7 @@ func NewServer(
 		anonLimiter:   NewRateLimiter(anonLimit, anonWindow),
 		coreLimiter:   NewRateLimiter(defaultLimit, defaultWindow),
 		searchLimiter: NewRateLimiter(searchLimit, searchWindow),
+		corsAllowedOrigins: corsAllowedOrigins,
 	}
 	s.web = web.NewHandler(web.Deps{
 		Auth: authSvc, Repos: repoSvc, Git: gitStore, Issues: issueSvc,
@@ -104,8 +108,13 @@ func NewServer(
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger, middleware.Recoverer)
+
+	allowedOrigins := s.corsAllowedOrigins
+	if len(allowedOrigins) == 0 {
+		allowedOrigins = []string{"*"}
+	}
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: false,

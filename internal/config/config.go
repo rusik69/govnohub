@@ -20,6 +20,7 @@ type Config struct {
 	BootstrapAdminEmail     string
 	BootstrapAdminPassword  string
 	AllowPublicRegistration bool
+	CORSAllowedOrigins      string
 }
 
 type AIReviewConfig struct {
@@ -54,6 +55,7 @@ func Load() Config {
 		BootstrapAdminEmail:     getEnv("BOOTSTRAP_ADMIN_EMAIL", "admin@govnohub.local"),
 		BootstrapAdminPassword:  getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin"),
 		AllowPublicRegistration: getEnvBool("ALLOW_PUBLIC_REGISTRATION", false),
+		CORSAllowedOrigins:      getEnv("CORS_ALLOWED_ORIGINS", "*"),
 	}
 }
 

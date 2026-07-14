@@ -76,6 +76,7 @@ func New(t *testing.T) *Env {
 		audit.NewService(pg.Pool),
 		presence.NewTracker(),
 		artifactRoot+"/uploads",
+		[]string{"*"},
 	)
 
 	ts := httptest.NewServer(srv.Router())

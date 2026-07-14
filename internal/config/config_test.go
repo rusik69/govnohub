@@ -14,6 +14,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.RunnerNS != "govnohub-runners" {
 		t.Fatalf("runner ns=%s", cfg.RunnerNS)
 	}
+	if cfg.CORSAllowedOrigins != "*" {
+		t.Fatalf("cors origins=%s", cfg.CORSAllowedOrigins)
+	}
 }
 
 func TestGetEnvInt(t *testing.T) {

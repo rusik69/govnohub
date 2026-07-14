@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -62,6 +63,15 @@ func main() {
 	presenceTracker := presence.NewTracker()
 	defer presenceTracker.Stop()
 
+	var corsOrigins []string
+	if o := cfg.CORSAllowedOrigins; o != "" {
+		for _, origin := range strings.Split(o, ",") {
+			origin = strings.TrimSpace(origin)
+			if origin != "" {
+				corsOrigins = append(corsOrigins, origin)
+			}
+		}
+	}
 	srv := api.NewServer(
 		authSvc,
 		repo.NewService(pool),
@@ -87,6 +97,7 @@ func main() {
 		audit.NewService(pool),
 		presenceTracker,
 		cfg.ArtifactRoot+"/uploads",
+		corsOrigins,
 	)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: srv.Router()}
