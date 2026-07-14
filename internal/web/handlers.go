@@ -944,6 +944,39 @@ func (h *Handler) handleActions(w http.ResponseWriter, r *http.Request) {
 	render(w, r, ActionsPage(h.layout(r, "Actions"), header, nav, workflows, runs, csrfFrom(r.Context())))
 }
 
+func (h *Handler) handleBadge(w http.ResponseWriter, r *http.Request) {
+	repository, ok := h.getRepo(w, r, "read")
+	if !ok {
+		// Return "inactive" badge for unknown repos
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Cache-Control", "no-cache, max-age=60")
+		svg := badgeSVG("CI", "inactive", "#656d76")
+		w.Write([]byte(svg))
+		return
+	}
+
+	var conclusion, status string
+	err := h.deps.Pool.QueryRow(r.Context(), `
+		SELECT COALESCE(conclusion,''), status
+		FROM workflow_runs
+		WHERE repo_id=$1
+		ORDER BY created_at DESC
+		LIMIT 1`, repository.ID).Scan(&conclusion, &status)
+	if err != nil {
+		// No runs yet — return "not run" badge
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Cache-Control", "no-cache, max-age=60")
+		svg := badgeSVG("CI", "not run", "#656d76")
+		w.Write([]byte(svg))
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "no-cache, max-age=60")
+	svg := badgeSVG("CI", badgeValue(conclusion, status), badgeColor(conclusion, status))
+	w.Write([]byte(svg))
+}
+
 func (h *Handler) handleTriggerAction(w http.ResponseWriter, r *http.Request) {
 	if !h.requirePOST(w, r) {
 		return

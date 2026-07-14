@@ -131,6 +131,14 @@ templ RepoHeader(data RepoHeaderData) {
 					if data.Repository.IsFork {
 						<span class="gh-visibility">Fork</span>
 					}
+					<a href={ templ.SafeURL("/" + data.Repository.FullName + "/actions") } class="inline-flex items-center ml-2 align-middle" title="CI status">
+						<img
+							src={ templ.SafeURL("/" + data.Repository.FullName + "/actions/badge.svg") }
+							alt="CI status"
+							height="20"
+							loading="lazy"
+						/>
+					</a>
 				</div>
 			</div>
 			<div class="gh-repo-actions">

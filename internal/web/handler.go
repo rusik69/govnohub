@@ -64,9 +64,10 @@ func (h *Handler) Routes() chi.Router {
 
 		r.Route("/{owner}/{repo}", func(r chi.Router) {
 			r.Get("/", h.handleRepo)
+			r.Get("/actions/badge.svg", h.handleBadge)
 			r.Get("/tree/*", h.handleRepoTree)
 			r.Get("/blob/*", h.handleRepoBlob)
-		r.Get("/blame/*", h.handleRepoBlame)
+			r.Get("/blame/*", h.handleRepoBlame)
 			r.Get("/commit/{sha}", h.handleCommitDetail)
 			r.Get("/compare/*", h.handleCompare)
 			r.Get("/file-finder-data", h.handleFileFinder)
