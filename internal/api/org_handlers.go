@@ -24,7 +24,8 @@ func (s *Server) registerOrgRoutes(r chi.Router) {
 }
 
 func (s *Server) handleListOrgs(w http.ResponseWriter, r *http.Request) {
-	orgs, err := s.org.List(r.Context())
+	limit, offset := parsePagination(r)
+	orgs, err := s.org.ListPaginated(r.Context(), limit, offset)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return

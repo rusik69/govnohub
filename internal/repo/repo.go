@@ -82,7 +82,11 @@ func (s *Service) GetByFullName(ctx context.Context, owner, name string) (*Repos
 }
 
 func (s *Service) ListForUser(ctx context.Context, userID uuid.UUID) ([]Repository, error) {
-	rows, err := s.pool.Query(ctx, `
+	return s.ListForUserPaginated(ctx, userID, 0, 0)
+}
+
+func (s *Service) ListForUserPaginated(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Repository, error) {
+	query := `
 		SELECT r.id, r.owner_type, r.owner_id, r.name, COALESCE(r.description,''),
 		       r.default_branch, r.is_private, r.is_fork, r.star_count, r.created_at, r.updated_at,
 		       COALESCE(u.username, o.name, '') AS owner_name
@@ -91,7 +95,18 @@ func (s *Service) ListForUser(ctx context.Context, userID uuid.UUID) ([]Reposito
 		LEFT JOIN orgs o ON r.owner_type='org' AND r.owner_id=o.id
 		WHERE (r.owner_type='user' AND r.owner_id=$1)
 		   OR r.id IN (SELECT repo_id FROM repo_collaborators WHERE user_id=$1)
-		ORDER BY r.updated_at DESC`, userID)
+		ORDER BY r.updated_at DESC`
+	var args []any
+	args = append(args, userID)
+	if limit > 0 {
+		query += fmt.Sprintf(` LIMIT $%d`, len(args)+1)
+		args = append(args, limit)
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(` OFFSET $%d`, len(args)+1)
+		args = append(args, offset)
+	}
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

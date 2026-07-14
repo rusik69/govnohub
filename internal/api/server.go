@@ -468,7 +468,8 @@ func (s *Server) handleIntrospectToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListUserRepos(w http.ResponseWriter, r *http.Request) {
-	repos, err := s.repos.ListForUser(r.Context(), userIDFrom(r.Context()))
+	limit, offset := parsePagination(r)
+	repos, err := s.repos.ListForUserPaginated(r.Context(), userIDFrom(r.Context()), limit, offset)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -801,7 +802,8 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	issues, err := s.issues.List(r.Context(), repository.ID)
+	limit, offset := parsePagination(r)
+	issues, err := s.issues.ListPaginated(r.Context(), repository.ID, limit, offset)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -969,7 +971,8 @@ func (s *Server) handleListPRs(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	prs, err := s.pulls.List(r.Context(), repository.ID)
+	limit, offset := parsePagination(r)
+	prs, err := s.pulls.ListPaginated(r.Context(), repository.ID, limit, offset)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return

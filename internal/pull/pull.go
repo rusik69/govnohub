@@ -2,6 +2,7 @@ package pull
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,6 +67,41 @@ func (s *Service) List(ctx context.Context, repoID uuid.UUID) ([]PullRequest, er
 		SELECT id, repo_id, number, title, COALESCE(body,''), state, author_id,
 		       head_branch, base_branch, head_sha, merged_at, COALESCE(merge_sha,''), created_at, updated_at
 		FROM pull_requests WHERE repo_id=$1 ORDER BY number DESC`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var prs []PullRequest
+	for rows.Next() {
+		var pr PullRequest
+		if err := rows.Scan(&pr.ID, &pr.RepoID, &pr.Number, &pr.Title, &pr.Body, &pr.State, &pr.AuthorID,
+			&pr.HeadBranch, &pr.BaseBranch, &pr.HeadSHA, &pr.MergedAt, &pr.MergeSHA, &pr.CreatedAt, &pr.UpdatedAt); err != nil {
+			return nil, err
+		}
+		prs = append(prs, pr)
+	}
+	return prs, rows.Err()
+}
+
+func (s *Service) ListPaginated(ctx context.Context, repoID uuid.UUID, limit, offset int) ([]PullRequest, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	query := `
+		SELECT id, repo_id, number, title, COALESCE(body,''), state, author_id,
+		       head_branch, base_branch, head_sha, merged_at, COALESCE(merge_sha,''), created_at, updated_at
+		FROM pull_requests WHERE repo_id=$1 ORDER BY number DESC`
+	var args []any
+	args = append(args, repoID)
+	if limit > 0 {
+		query += fmt.Sprintf(` LIMIT $%d`, len(args)+1)
+		args = append(args, limit)
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(` OFFSET $%d`, len(args)+1)
+		args = append(args, offset)
+	}
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

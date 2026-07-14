@@ -3,6 +3,7 @@ package org
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,7 +76,21 @@ func (s *Service) IsMember(ctx context.Context, orgID, userID uuid.UUID) (bool, 
 }
 
 func (s *Service) List(ctx context.Context) ([]Org, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, name, COALESCE(display_name,''), COALESCE(description,''), created_at FROM orgs`)
+	return s.ListPaginated(ctx, 0, 0)
+}
+
+func (s *Service) ListPaginated(ctx context.Context, limit, offset int) ([]Org, error) {
+	query := `SELECT id, name, COALESCE(display_name,''), COALESCE(description,''), created_at FROM orgs`
+	var args []any
+	if limit > 0 {
+		query += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d`, len(args)+1)
+		args = append(args, limit)
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(` OFFSET $%d`, len(args)+1)
+		args = append(args, offset)
+	}
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
