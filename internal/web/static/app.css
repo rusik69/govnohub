@@ -211,6 +211,60 @@ html.dark .diff-hunk { background: #051d4d; color: #58a6ff; }
 .markdown code { font-family: monospace; font-size: 0.875em; }
 .markdown p { margin: 0.5rem 0; }
 
+/* Markdown task list checkboxes */
+.markdown li:has(input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.5rem;
+}
+.markdown li:has(input[type="checkbox"])::marker {
+  content: none;
+}
+.markdown input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  margin: 0 0.375rem 0 0;
+  vertical-align: middle;
+  cursor: default;
+  flex-shrink: 0;
+  position: relative;
+  top: -0.0625rem;
+  background: var(--surface);
+  transition: background 0.15s, border-color 0.15s;
+}
+.markdown input[type="checkbox"]:checked {
+  background: var(--success);
+  border-color: var(--success);
+}
+.markdown input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 0.25rem;
+  top: 0.05rem;
+  width: 0.375rem;
+  height: 0.625rem;
+  border: solid #fff;
+  border-width: 0 0.125rem 0.125rem 0;
+  transform: rotate(45deg);
+}
+html.dark .markdown input[type="checkbox"] {
+  background: var(--input-bg);
+  border-color: var(--border);
+}
+html.dark .markdown input[type="checkbox"]:checked {
+  background: var(--success);
+  border-color: var(--success);
+}
+.markdown li:has(input[type="checkbox"]) + li:has(input[type="checkbox"]) {
+  border-top: none;
+}
+.markdown ul:has(input[type="checkbox"]) {
+  padding-left: 1.5rem;
+}
+
 /* Notifications drawer (slide-in from right) */
 .notif-bell { position: relative; }
 .notif-count { position: absolute; top: -4px; right: -4px; background: #cf222e; color: #fff; font-size: 0.625rem; padding: 0 4px; border-radius: 9999px; z-index: 1; }
