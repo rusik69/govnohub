@@ -45,7 +45,7 @@ templ SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, 
 						<tr>
 							<td>{ p.Name }</td>
 							<td class="text-sm">{ joinScopes(p.Scopes) }</td>
-							<td class="text-sm text-muted">{ p.CreatedAt.Format("2006-01-02") }</td>
+							<td class="text-sm text-muted"><time datetime={ timeAttr(p.CreatedAt) } title={ timeTooltip(p.CreatedAt) }>{ relativeTime(p.CreatedAt) }</time></td>
 							<td>
 								<form method="post" action={ templ.SafeURL("/settings/pat/" + p.ID.String() + "/revoke") } onsubmit="return confirm('Revoke this token?')">
 									@CSRFInput(csrf)

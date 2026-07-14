@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+
 	"github.com/rusik69/govnohub/internal/audit"
 )
 
@@ -23,7 +24,7 @@ templ AdminAuditContent(entries []audit.Entry) {
 			<tbody>
 				for _, e := range entries {
 					<tr>
-						<td class="text-sm text-muted">{ e.CreatedAt.Format("2006-01-02 15:04") }</td>
+						<td class="text-sm text-muted"><time datetime={ timeAttr(e.CreatedAt) } title={ timeTooltip(e.CreatedAt) }>{ relativeTime(e.CreatedAt) }</time></td>
 						<td>{ e.Action }</td>
 						<td class="text-sm">{ e.ResourceType } / { e.ResourceID }</td>
 						<td class="text-sm font-mono">{ auditMeta(e.Metadata) }</td>

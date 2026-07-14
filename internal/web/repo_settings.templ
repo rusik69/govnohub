@@ -146,7 +146,7 @@ templ RepoSettingsContent(data RepoSettingsData) {
 									<tr>
 										<td>{ d.Event }</td>
 										<td>{ d.StatusCode }</td>
-										<td class="text-muted">{ d.DeliveredAt.Format("01-02 15:04") }</td>
+										<td class="text-muted"><time datetime={ timeAttr(d.DeliveredAt) } title={ timeTooltip(d.DeliveredAt) }>{ relativeTime(d.DeliveredAt) }</time></td>
 									</tr>
 								}
 							</tbody>

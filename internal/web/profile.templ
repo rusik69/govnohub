@@ -39,7 +39,7 @@ templ UserProfileContent(data UserProfileData) {
 			<div class="text-sm text-muted space-y-2">
 				<div class="flex items-center gap-2">
 					@Icon("clock", "")
-					<span>Joined { data.User.CreatedAt.Format("Jan 2, 2006") }</span>
+					<span>Joined <time datetime={ timeAttr(data.User.CreatedAt) } title={ timeTooltip(data.User.CreatedAt) }>{ relativeTime(data.User.CreatedAt) }</time></span>
 				</div>
 			</div>
 		</div>
@@ -67,7 +67,7 @@ templ UserProfileContent(data UserProfileData) {
 									if r.Description != "" {
 										<span> · { r.Description }</span>
 									}
-									<span> · Updated { r.UpdatedAt.Format("Jan 2, 2006") }</span>
+									<span> · Updated <time datetime={ timeAttr(r.UpdatedAt) } title={ timeTooltip(r.UpdatedAt) }>{ relativeTime(r.UpdatedAt) }</time></span>
 								</div>
 							</div>
 						</a>

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/go-chi/chi/v5"
@@ -12,6 +13,39 @@ import (
 
 	"github.com/rusik69/govnohub/internal/repo"
 )
+
+// relativeTime returns a human-readable "time ago" string.
+func relativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < 2*time.Minute:
+		return "1m ago"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + "m ago"
+	case d < 2*time.Hour:
+		return "1h ago"
+	case d < 24*time.Hour:
+		return strconv.Itoa(int(d.Hours())) + "h ago"
+	case d < 48*time.Hour:
+		return "yesterday"
+	case d < 30*24*time.Hour:
+		return strconv.Itoa(int(d.Hours()/24)) + "d ago"
+	default:
+		return t.Format("Jan 2")
+	}
+}
+
+// timeAttr returns an RFC3339 string for use in the datetime attribute of <time>.
+func timeAttr(t time.Time) string {
+	return t.Format(time.RFC3339)
+}
+
+// timeTooltip returns a full date/time string for use in the title attribute of <time>.
+func timeTooltip(t time.Time) string {
+	return t.Format("Jan 2, 2006 3:04 PM")
+}
 
 func (h *Handler) layout(r *http.Request, title string) LayoutData {
 	su := userFrom(r.Context())

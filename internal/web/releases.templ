@@ -33,7 +33,7 @@ templ ReleasesContent(header RepoHeaderData, nav RepoNavData, releases []Release
 					if row.Release.Name != "" {
 						<span class="ml-2">{ row.Release.Name }</span>
 					}
-					<p class="text-sm text-muted m-0 mt-1">{ row.Release.CreatedAt.Format("2006-01-02") }</p>
+					<p class="text-sm text-muted m-0 mt-1"><time datetime={ timeAttr(row.Release.CreatedAt) } title={ timeTooltip(row.Release.CreatedAt) }>{ relativeTime(row.Release.CreatedAt) }</time></p>
 					if row.Release.Body != "" {
 						<div class="markdown mt-3 mb-0 text-sm">{ row.Release.Body }</div>
 					}

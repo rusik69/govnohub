@@ -27,7 +27,7 @@ templ PackagesContent(header RepoHeaderData, nav RepoNavData, packages []pkg.Pac
 								<td>{ p.Name }</td>
 								<td>{ p.PackageType }</td>
 								<td>{ p.Version }</td>
-								<td class="text-sm text-muted">{ p.CreatedAt.Format("2006-01-02") }</td>
+								<td class="text-sm text-muted"><time datetime={ timeAttr(p.CreatedAt) } title={ timeTooltip(p.CreatedAt) }>{ relativeTime(p.CreatedAt) }</time></td>
 							</tr>
 						}
 					</tbody>

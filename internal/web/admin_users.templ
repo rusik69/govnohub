@@ -23,7 +23,7 @@ templ AdminUsersContent(csrf string, users []auth.User, errMsg string) {
 					<td>{ u.Username }</td>
 					<td>{ u.Email }</td>
 					<td>{ u.Role }</td>
-					<td class="text-sm text-muted">{ u.CreatedAt.Format("2006-01-02") }</td>
+					<td class="text-sm text-muted"><time datetime={ timeAttr(u.CreatedAt) } title={ timeTooltip(u.CreatedAt) }>{ relativeTime(u.CreatedAt) }</time></td>
 					<td>
 						<form method="post" action={ templ.SafeURL("/admin/users/" + u.ID.String() + "/delete") } onsubmit="return confirm('Delete this user?')">
 							@CSRFInput(csrf)

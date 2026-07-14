@@ -67,6 +67,34 @@ templ Layout(data LayoutData) {
 						}
 					});
 				}
+				function updateRelativeTimes() {
+					document.querySelectorAll('time[datetime]').forEach(function(el) {
+						var dt = new Date(el.getAttribute('datetime'));
+						if (isNaN(dt.getTime())) return;
+						var diff = Date.now() - dt.getTime();
+						var seconds = Math.floor(diff / 1000);
+						var minutes = Math.floor(seconds / 60);
+						var hours = Math.floor(minutes / 60);
+						var days = Math.floor(hours / 24);
+						if (seconds < 60) {
+							el.textContent = 'just now';
+						} else if (minutes < 2) {
+							el.textContent = '1m ago';
+						} else if (minutes < 60) {
+							el.textContent = minutes + 'm ago';
+						} else if (hours < 2) {
+							el.textContent = '1h ago';
+						} else if (hours < 24) {
+							el.textContent = hours + 'h ago';
+						} else if (days < 2) {
+							el.textContent = 'yesterday';
+						} else if (days < 30) {
+							el.textContent = days + 'd ago';
+						} else {
+							/* For old dates, keep the server-rendered text (e.g. "Jan 2") */
+						}
+					});
+				}
 				function toggleNotifications(btn) {
 					const drawer = document.getElementById('notif-drawer');
 					const overlay = document.getElementById('notif-overlay');
@@ -89,6 +117,7 @@ templ Layout(data LayoutData) {
 				document.addEventListener('DOMContentLoaded', function() {
 					updateThemeIcon();
 					highlightCodeBlocks();
+					updateRelativeTimes();
 					/* Start auto-polling for new notification count */
 					if (document.querySelector('.notif-bell')) {
 						setInterval(function() {
@@ -614,6 +643,7 @@ templ Layout(data LayoutData) {
 					evt.detail.target.querySelectorAll('[data-md-container]').forEach(setupMentionAutocomplete);
 					evt.detail.target.querySelectorAll('[data-md-container]').forEach(setupEmojiAutocomplete);
 					highlightCodeBlocks();
+					updateRelativeTimes();
 				}
 			});
 			/* --- Inline image paste support --- */
@@ -869,6 +899,9 @@ templ Layout(data LayoutData) {
 					}
 
 					document.addEventListener('DOMContentLoaded', startPresence);
+					/* Start auto-refreshing relative timestamps every 60 seconds */
+					setInterval(updateRelativeTimes, 60000);
+
 					document.addEventListener('htmx:afterSwap', function() {
 						stopPresence();
 						startPresence();

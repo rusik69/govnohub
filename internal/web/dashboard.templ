@@ -42,7 +42,7 @@ templ DashboardContent(repos []repo.Repository, orgs []org.Org, csrf string, err
 									if r.Description != "" {
 										<span> · { r.Description }</span>
 									}
-									<span> · Updated { r.UpdatedAt.Format("Jan 2, 2006") }</span>
+									<span> · Updated <time datetime={ timeAttr(r.UpdatedAt) } title={ timeTooltip(r.UpdatedAt) }>{ relativeTime(r.UpdatedAt) }</time></span>
 								</div>
 							</div>
 						</a>
