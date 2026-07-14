@@ -826,6 +826,55 @@ templ Layout(data LayoutData) {
 				}
 				@data.Content
 			</main>
+			<div id="presence-indicator" class="gh-presence" style="display:none"></div>
+			<script>
+				(function() {
+					var _presenceInterval = null;
+					var _presencePollInterval = null;
+
+					function startPresence() {
+						var m = window.location.pathname.match(/^\/([^\/]+)\/([^\/]+)/);
+						if (!m) return;
+						var resource = m[1] + '/' + m[2];
+						var indicator = document.getElementById('presence-indicator');
+						if (!indicator) return;
+
+						function heartbeat() {
+							fetch('/api/v1/repos/' + resource + '/presence', { method: 'POST' }).catch(function() {});
+						}
+
+						function pollViewers() {
+							fetch('/api/v1/repos/' + resource + '/presence')
+								.then(function(r) { return r.json(); })
+								.then(function(data) {
+									if (data.count > 0) {
+										indicator.style.display = 'inline-flex';
+										indicator.innerHTML = '<span class="gh-presence-dot"></span> ' + data.count + ' viewer' + (data.count > 1 ? 's' : '');
+									} else {
+										indicator.style.display = 'none';
+									}
+								})
+								.catch(function() {});
+						}
+
+						heartbeat();
+						pollViewers();
+						_presenceInterval = setInterval(heartbeat, 30000);
+						_presencePollInterval = setInterval(pollViewers, 30000);
+					}
+
+					function stopPresence() {
+						if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
+						if (_presencePollInterval) { clearInterval(_presencePollInterval); _presencePollInterval = null; }
+					}
+
+					document.addEventListener('DOMContentLoaded', startPresence);
+					document.addEventListener('htmx:afterSwap', function() {
+						stopPresence();
+						startPresence();
+					});
+				})();
+			</script>
 		</body>
 	</html>
 }

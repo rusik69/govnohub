@@ -21,6 +21,7 @@ import (
 	pkg "github.com/rusik69/govnohub/internal/package"
 	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
+	"github.com/rusik69/govnohub/internal/presence"
 	"github.com/rusik69/govnohub/internal/pull"
 	"github.com/rusik69/govnohub/internal/release"
 	"github.com/rusik69/govnohub/internal/repo"
@@ -58,6 +59,9 @@ func main() {
 	searchSvc := search.NewService(cfg.OpenSearchURL)
 	_ = searchSvc.EnsureIndex(ctx)
 
+	presenceTracker := presence.NewTracker()
+	defer presenceTracker.Stop()
+
 	srv := api.NewServer(
 		authSvc,
 		repo.NewService(pool),
@@ -81,6 +85,7 @@ func main() {
 		notification.NewService(pool),
 		wiki.NewService(pool),
 		audit.NewService(pool),
+		presenceTracker,
 		cfg.ArtifactRoot+"/uploads",
 	)
 

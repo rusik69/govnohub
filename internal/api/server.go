@@ -24,6 +24,7 @@ import (
 	pkg "github.com/rusik69/govnohub/internal/package"
 	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
+	"github.com/rusik69/govnohub/internal/presence"
 	"github.com/rusik69/govnohub/internal/pull"
 	"github.com/rusik69/govnohub/internal/release"
 	"github.com/rusik69/govnohub/internal/repo"
@@ -50,6 +51,7 @@ type Server struct {
 	notify   *notification.Service
 	wiki     *wiki.Service
 	audit    *audit.Service
+	presence *presence.Tracker
 	web      *web.Handler
 }
 
@@ -70,6 +72,7 @@ func NewServer(
 	notifySvc *notification.Service,
 	wikiSvc *wiki.Service,
 	auditSvc *audit.Service,
+	presenceTracker *presence.Tracker,
 	uploadDir string,
 ) *Server {
 	s := &Server{
@@ -78,14 +81,14 @@ func NewServer(
 		packages: pkgSvc, webhooks: webhookSvc, search: searchSvc,
 		events: eventsSvc,
 		pool: pool, org: orgSvc, aiReview: aiReviewSvc,
-		notify: notifySvc, wiki: wikiSvc, audit: auditSvc,
+		notify: notifySvc, wiki: wikiSvc, audit: auditSvc, presence: presenceTracker,
 	}
 	s.web = web.NewHandler(web.Deps{
 		Auth: authSvc, Repos: repoSvc, Git: gitStore, Issues: issueSvc,
 		Pulls: pullSvc, Releases: releaseSvc, Packages: pkgSvc,
 		Webhooks: webhookSvc, Search: searchSvc, Pool: pool,
 		Org: orgSvc, AIReview: aiReviewSvc, Notify: notifySvc, Wiki: wikiSvc,
-		Audit: auditSvc, UploadDir: uploadDir,
+		Audit: auditSvc, UploadDir: uploadDir, Presence: presenceTracker,
 	})
 	return s
 }
@@ -148,6 +151,9 @@ func (s *Server) Router() http.Handler {
 			r.Get("/compare/*", s.handleCompareCommits)
 
 			r.Get("/archive/{ref}.tar.gz", s.handleArchive)
+
+			r.Post("/presence", s.handlePresenceHeartbeat)
+			r.Get("/presence", s.handlePresence)
 
 		r.Get("/issues", s.handleListIssues)
 			r.Post("/issues", s.handleCreateIssue)

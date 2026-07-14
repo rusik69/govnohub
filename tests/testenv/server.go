@@ -18,6 +18,7 @@ import (
 	pkg "github.com/rusik69/govnohub/internal/package"
 	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
+	"github.com/rusik69/govnohub/internal/presence"
 	"github.com/rusik69/govnohub/internal/pull"
 	"github.com/rusik69/govnohub/internal/release"
 	"github.com/rusik69/govnohub/internal/repo"
@@ -73,6 +74,8 @@ func New(t *testing.T) *Env {
 		notification.NewService(pg.Pool),
 		wiki.NewService(pg.Pool),
 		audit.NewService(pg.Pool),
+		presence.NewTracker(),
+		artifactRoot+"/uploads",
 	)
 
 	ts := httptest.NewServer(srv.Router())

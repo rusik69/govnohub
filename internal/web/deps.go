@@ -11,6 +11,7 @@ import (
 	"github.com/rusik69/govnohub/internal/notification"
 	"github.com/rusik69/govnohub/internal/org"
 	pkg "github.com/rusik69/govnohub/internal/package"
+	"github.com/rusik69/govnohub/internal/presence"
 	"github.com/rusik69/govnohub/internal/pull"
 	"github.com/rusik69/govnohub/internal/release"
 	"github.com/rusik69/govnohub/internal/repo"
@@ -35,5 +36,6 @@ type Deps struct {
 	Notify   *notification.Service
 	Wiki     *wiki.Service
 	Audit    *audit.Service
+	Presence *presence.Tracker
 	UploadDir string
 }
