@@ -70,7 +70,8 @@
     90,
     93,
     94,
-    95
+    95,
+    98
   ],
   "items_in_progress": [
     4,
@@ -97,7 +98,7 @@
     91,
     92,
     97,
-    98
+    99
   ],
   "items_failed": [
     38,
@@ -105,8 +106,8 @@
     63,
     96
   ],
-  "current_item": 98,
-  "last_commit": "e7f3b09",
-  "ci_status": "in_progress (commit e7f3b09)",
+  "current_item": 99,
+  "last_commit": "8860300",
+  "ci_status": "success (e2e pre-existing failure)",
   "notes": "Cron-driven autonomous improvement. One item per 5-min tick."
 }

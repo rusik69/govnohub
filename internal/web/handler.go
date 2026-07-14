@@ -17,6 +17,8 @@ func NewHandler(deps Deps) *Handler {
 func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
 
+	r.Use(ContentSecurityPolicy)
+
 	r.Handle("/static/*", http.StripPrefix("/static/", staticHandler()))
 
 	// Serve uploaded images
