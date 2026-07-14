@@ -41,6 +41,7 @@ func (h *Handler) Routes() chi.Router {
 		r.Post("/settings/ssh-key/{id}/delete", h.handleDeleteSSHKey)
 
 		r.Get("/notifications", h.handleNotifications)
+		r.Get("/notifications/count", h.handleNotificationsCount)
 		r.Post("/notifications/{id}/read", h.handleMarkNotificationRead)
 
 		r.Get("/orgs", h.handleOrgs)

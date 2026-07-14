@@ -224,6 +224,12 @@ func (h *Handler) handleNotifications(w http.ResponseWriter, r *http.Request) {
 	render(w, r, NotificationsPartial(notifs, csrfFrom(r.Context())))
 }
 
+func (h *Handler) handleNotificationsCount(w http.ResponseWriter, r *http.Request) {
+	su := userFrom(r.Context())
+	count, _ := h.deps.Notify.UnreadCount(r.Context(), su.ID)
+	render(w, r, NotifBadge(count))
+}
+
 func (h *Handler) handleMarkNotificationRead(w http.ResponseWriter, r *http.Request) {
 	if !h.requirePOST(w, r) {
 		return

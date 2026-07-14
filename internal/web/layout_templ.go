@@ -74,7 +74,7 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " · Govnohub</title><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script>\n\t\t\t\t(function() {\n\t\t\t\t\tconst stored = localStorage.getItem('theme');\n\t\t\t\t\tif (stored) {\n\t\t\t\t\t\tdocument.documentElement.classList.toggle('dark', stored === 'dark');\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdocument.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t\tfunction toggleTheme() {\n\t\t\t\t\tconst dark = !document.documentElement.classList.contains('dark');\n\t\t\t\t\tdocument.documentElement.classList.toggle('dark', dark);\n\t\t\t\t\tlocalStorage.setItem('theme', dark ? 'dark' : 'light');\n\t\t\t\t\tupdateThemeIcon();\n\t\t\t\t}\n\t\t\t\tfunction updateThemeIcon() {\n\t\t\t\t\tconst dark = document.documentElement.classList.contains('dark');\n\t\t\t\t\tdocument.querySelectorAll('.theme-icon-sun').forEach(el => el.classList.toggle('hidden', dark));\n\t\t\t\t\tdocument.querySelectorAll('.theme-icon-moon').forEach(el => el.classList.toggle('hidden', !dark));\n\t\t\t\t\tconst btn = document.getElementById('theme-toggle');\n\t\t\t\t\tif (btn) btn.setAttribute('aria-pressed', dark ? 'true' : 'false');\n\t\t\t\t}\n\t\t\t\tfunction toggleNotifications(btn) {\n\t\t\t\t\tconst panel = document.getElementById('notif-panel');\n\t\t\t\t\tif (!panel) return;\n\t\t\t\t\tpanel.classList.toggle('hidden');\n\t\t\t\t\tconst isOpen = !panel.classList.contains('hidden');\n\t\t\t\t\tbtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');\n\t\t\t\t\tif (isOpen && panel.innerHTML.trim() === '') {\n\t\t\t\t\t\thtmx.ajax('GET', '/notifications', {target: '#notif-panel', swap: 'innerHTML'});\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tdocument.addEventListener('DOMContentLoaded', updateThemeIcon);\n\t\t\t\tdocument.addEventListener('click', function(e) {\n\t\t\t\t\tconst panel = document.getElementById('notif-panel');\n\t\t\t\t\tconst bell = document.querySelector('.notif-bell');\n\t\t\t\t\tif (!panel || panel.classList.contains('hidden')) return;\n\t\t\t\t\tif (bell && !bell.contains(e.target)) {\n\t\t\t\t\t\tpanel.classList.add('hidden');\n\t\t\t\t\t\tconst btn = bell.querySelector('button');\n\t\t\t\t\t\tif (btn) btn.setAttribute('aria-expanded', 'false');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\tdocument.addEventListener('htmx:configRequest', function(evt) {\n\t\t\t\t\tconst token = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\tif (token) evt.detail.headers['X-CSRF-Token'] = token.content;\n\t\t\t\t});\n\t\t\t\tfunction switchCloneTab(btn, tab) {\n\t\t\t\t\tconst menu = btn.closest('.gh-clone-menu');\n\t\t\t\t\tif (!menu) return;\n\t\t\t\t\tmenu.querySelectorAll('[data-clone-tab]').forEach(function(b) {\n\t\t\t\t\t\tconst active = b === btn;\n\t\t\t\t\t\tb.classList.toggle('active', active);\n\t\t\t\t\t\tb.setAttribute('aria-selected', active ? 'true' : 'false');\n\t\t\t\t\t});\n\t\t\t\t\tconst input = menu.querySelector('.gh-clone-url');\n\t\t\t\t\tconst hint = menu.querySelector('.gh-clone-hint');\n\t\t\t\t\tif (input) input.value = tab === 'ssh' ? input.dataset.ssh : input.dataset.https;\n\t\t\t\t\tif (hint) hint.textContent = tab === 'ssh' ? hint.dataset.sshHint : hint.dataset.httpsHint;\n\t\t\t\t}\n\t\t\t\tfunction copyCloneUrl(btn) {\n\t\t\t\t\tconst input = btn.closest('.gh-clone-url-row').querySelector('.gh-clone-url');\n\t\t\t\t\tif (!input) return;\n\t\t\t\t\tnavigator.clipboard.writeText(input.value).then(function() {\n\t\t\t\t\t\tbtn.setAttribute('aria-label', 'Copied');\n\t\t\t\t\t\tsetTimeout(function() { btn.setAttribute('aria-label', 'Copy'); }, 2000);\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tdocument.addEventListener('click', function(e) {\n\t\t\t\t\tdocument.querySelectorAll('.gh-clone-menu[open]').forEach(function(menu) {\n\t\t\t\t\t\tif (!menu.contains(e.target)) menu.removeAttribute('open');\n\t\t\t\t\t});\n\t\t\t\t});\n\n\t\t\t\t/* Markdown preview toggle */\n\t\t\t\tfunction setupMarkdownPreview(container) {\n\t\t\t\t\tif (!container) return;\n\t\t\t\t\tconst tabs = container.querySelector('[data-md-tabs]');\n\t\t\t\t\tconst writePane = container.querySelector('[data-md-write]');\n\t\t\t\t\tconst previewPane = container.querySelector('[data-md-preview]');\n\t\t\t\t\tconst textarea = writePane ? writePane.querySelector('textarea') : null;\n\t\t\t\t\tif (!tabs || !writePane || !previewPane || !textarea) return;\n\n\t\t\t\t\ttabs.addEventListener('click', function(e) {\n\t\t\t\t\t\tconst btn = e.target.closest('[data-md-tab]');\n\t\t\t\t\t\tif (!btn) return;\n\n\t\t\t\t\t\tconst isWrite = btn.getAttribute('data-md-tab') === 'write';\n\t\t\t\t\t\tconst csrf = btn.getAttribute('data-csrf') || '';\n\t\t\t\t\t\tconst metaToken = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\t\tconst token = csrf || (metaToken ? metaToken.content : '');\n\n\t\t\t\t\t\ttabs.querySelectorAll('[data-md-tab]').forEach(function(t) {\n\t\t\t\t\t\t\tt.classList.toggle('active', t === btn);\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tif (isWrite) {\n\t\t\t\t\t\t\twritePane.style.display = '';\n\t\t\t\t\t\t\tpreviewPane.style.display = 'none';\n\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\twritePane.style.display = 'none';\n\t\t\t\t\t\t\tpreviewPane.style.display = '';\n\t\t\t\t\t\t\tconst body = textarea.value;\n\t\t\t\t\t\t\tif (body.trim() === '') {\n\t\t\t\t\t\t\t\tpreviewPane.innerHTML = '<p class=\"text-muted text-sm\">Nothing to preview.</p>';\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tpreviewPane.innerHTML = '<p class=\"text-muted text-sm\">Loading preview...</p>';\n\t\t\t\t\t\t\tfetch('/preview-markdown', {\n\t\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t\t'Content-Type': 'application/x-www-form-urlencoded',\n\t\t\t\t\t\t\t\t\t'X-CSRF-Token': token\n\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\tbody: 'body=' + encodeURIComponent(body)\n\t\t\t\t\t\t\t})\n\t\t\t\t\t\t\t.then(function(r) { return r.text(); })\n\t\t\t\t\t\t\t.then(function(html) { previewPane.innerHTML = html; })\n\t\t\t\t\t\t\t.catch(function() { previewPane.innerHTML = '<p class=\"text-red text-sm\">Preview failed.</p>'; });\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t}\n\n\t\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\t\tdocument.querySelectorAll('[data-md-container]').forEach(setupMarkdownPreview);\n\t\t\t\t});\n\t\t\t\tdocument.addEventListener('htmx:afterSwap', function(evt) {\n\t\t\t\t\tif (evt.detail.target) {\n\t\t\t\t\t\tevt.detail.target.querySelectorAll('[data-md-container]').forEach(setupMarkdownPreview);\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t</script></head><body class=\"min-h-screen\"><a href=\"#main-content\" class=\"skip-link\">Skip to main content</a> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " · Govnohub</title><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script>\n\t\t\t\t(function() {\n\t\t\t\t\tconst stored = localStorage.getItem('theme');\n\t\t\t\t\tif (stored) {\n\t\t\t\t\t\tdocument.documentElement.classList.toggle('dark', stored === 'dark');\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdocument.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t\tfunction toggleTheme() {\n\t\t\t\t\tconst dark = !document.documentElement.classList.contains('dark');\n\t\t\t\t\tdocument.documentElement.classList.toggle('dark', dark);\n\t\t\t\t\tlocalStorage.setItem('theme', dark ? 'dark' : 'light');\n\t\t\t\t\tupdateThemeIcon();\n\t\t\t\t}\n\t\t\t\tfunction updateThemeIcon() {\n\t\t\t\t\tconst dark = document.documentElement.classList.contains('dark');\n\t\t\t\t\tdocument.querySelectorAll('.theme-icon-sun').forEach(el => el.classList.toggle('hidden', dark));\n\t\t\t\t\tdocument.querySelectorAll('.theme-icon-moon').forEach(el => el.classList.toggle('hidden', !dark));\n\t\t\t\t\tconst btn = document.getElementById('theme-toggle');\n\t\t\t\t\tif (btn) btn.setAttribute('aria-pressed', dark ? 'true' : 'false');\n\t\t\t\t}\n\t\t\t\tfunction toggleNotifications(btn) {\n\t\t\t\t\tconst drawer = document.getElementById('notif-drawer');\n\t\t\t\t\tconst overlay = document.getElementById('notif-overlay');\n\t\t\t\t\tif (!drawer) return;\n\t\t\t\t\tconst isOpen = drawer.classList.toggle('open');\n\t\t\t\t\toverlay.classList.toggle('open', isOpen);\n\t\t\t\t\tbtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');\n\t\t\t\t\tif (isOpen && drawer.querySelector('#notif-body').innerHTML.trim() === '') {\n\t\t\t\t\t\thtmx.ajax('GET', '/notifications', {target: '#notif-body', swap: 'innerHTML'});\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tfunction closeNotifications() {\n\t\t\t\t\tconst drawer = document.getElementById('notif-drawer');\n\t\t\t\t\tconst overlay = document.getElementById('notif-overlay');\n\t\t\t\t\tconst btn = document.querySelector('.notif-bell button');\n\t\t\t\t\tif (drawer) drawer.classList.remove('open');\n\t\t\t\t\tif (overlay) overlay.classList.remove('open');\n\t\t\t\t\tif (btn) btn.setAttribute('aria-expanded', 'false');\n\t\t\t\t}\n\t\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\t\tupdateThemeIcon();\n\t\t\t\t\t/* Start auto-polling for new notification count */\n\t\t\t\t\tif (document.querySelector('.notif-bell')) {\n\t\t\t\t\t\tsetInterval(function() {\n\t\t\t\t\t\t\tconst badge = document.getElementById('notif-badge');\n\t\t\t\t\t\t\tif (badge && !document.getElementById('notif-drawer').classList.contains('open')) {\n\t\t\t\t\t\t\t\thtmx.ajax('GET', '/notifications/count', {target: '#notif-badge', swap: 'outerHTML'});\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}, 15000);\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\tdocument.addEventListener('click', function(e) {\n\t\t\t\t\tconst drawer = document.getElementById('notif-drawer');\n\t\t\t\t\tconst bell = document.querySelector('.notif-bell');\n\t\t\t\t\tif (!drawer || !drawer.classList.contains('open')) return;\n\t\t\t\t\tif (bell && !bell.contains(e.target) && !drawer.contains(e.target)) {\n\t\t\t\t\t\tcloseNotifications();\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\tdocument.addEventListener('htmx:configRequest', function(evt) {\n\t\t\t\t\tconst token = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\tif (token) evt.detail.headers['X-CSRF-Token'] = token.content;\n\t\t\t\t});\n\t\t\t\tfunction switchCloneTab(btn, tab) {\n\t\t\t\t\tconst menu = btn.closest('.gh-clone-menu');\n\t\t\t\t\tif (!menu) return;\n\t\t\t\t\tmenu.querySelectorAll('[data-clone-tab]').forEach(function(b) {\n\t\t\t\t\t\tconst active = b === btn;\n\t\t\t\t\t\tb.classList.toggle('active', active);\n\t\t\t\t\t\tb.setAttribute('aria-selected', active ? 'true' : 'false');\n\t\t\t\t\t});\n\t\t\t\t\tconst input = menu.querySelector('.gh-clone-url');\n\t\t\t\t\tconst hint = menu.querySelector('.gh-clone-hint');\n\t\t\t\t\tif (input) input.value = tab === 'ssh' ? input.dataset.ssh : input.dataset.https;\n\t\t\t\t\tif (hint) hint.textContent = tab === 'ssh' ? hint.dataset.sshHint : hint.dataset.httpsHint;\n\t\t\t\t}\n\t\t\t\tfunction copyCloneUrl(btn) {\n\t\t\t\t\tconst input = btn.closest('.gh-clone-url-row').querySelector('.gh-clone-url');\n\t\t\t\t\tif (!input) return;\n\t\t\t\t\tnavigator.clipboard.writeText(input.value).then(function() {\n\t\t\t\t\t\tbtn.setAttribute('aria-label', 'Copied');\n\t\t\t\t\t\tsetTimeout(function() { btn.setAttribute('aria-label', 'Copy'); }, 2000);\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tdocument.addEventListener('click', function(e) {\n\t\t\t\t\tdocument.querySelectorAll('.gh-clone-menu[open]').forEach(function(menu) {\n\t\t\t\t\t\tif (!menu.contains(e.target)) menu.removeAttribute('open');\n\t\t\t\t\t});\n\t\t\t\t});\n\n\t\t\t\t/* Markdown preview toggle */\n\t\t\t\tfunction setupMarkdownPreview(container) {\n\t\t\t\t\tif (!container) return;\n\t\t\t\t\tconst tabs = container.querySelector('[data-md-tabs]');\n\t\t\t\t\tconst writePane = container.querySelector('[data-md-write]');\n\t\t\t\t\tconst previewPane = container.querySelector('[data-md-preview]');\n\t\t\t\t\tconst textarea = writePane ? writePane.querySelector('textarea') : null;\n\t\t\t\t\tif (!tabs || !writePane || !previewPane || !textarea) return;\n\n\t\t\t\t\ttabs.addEventListener('click', function(e) {\n\t\t\t\t\t\tconst btn = e.target.closest('[data-md-tab]');\n\t\t\t\t\t\tif (!btn) return;\n\n\t\t\t\t\t\tconst isWrite = btn.getAttribute('data-md-tab') === 'write';\n\t\t\t\t\t\tconst csrf = btn.getAttribute('data-csrf') || '';\n\t\t\t\t\t\tconst metaToken = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\t\tconst token = csrf || (metaToken ? metaToken.content : '');\n\n\t\t\t\t\t\ttabs.querySelectorAll('[data-md-tab]').forEach(function(t) {\n\t\t\t\t\t\t\tt.classList.toggle('active', t === btn);\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tif (isWrite) {\n\t\t\t\t\t\t\twritePane.style.display = '';\n\t\t\t\t\t\t\tpreviewPane.style.display = 'none';\n\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\twritePane.style.display = 'none';\n\t\t\t\t\t\t\tpreviewPane.style.display = '';\n\t\t\t\t\t\t\tconst body = textarea.value;\n\t\t\t\t\t\t\tif (body.trim() === '') {\n\t\t\t\t\t\t\t\tpreviewPane.innerHTML = '<p class=\"text-muted text-sm\">Nothing to preview.</p>';\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tpreviewPane.innerHTML = '<p class=\"text-muted text-sm\">Loading preview...</p>';\n\t\t\t\t\t\t\tfetch('/preview-markdown', {\n\t\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t\t'Content-Type': 'application/x-www-form-urlencoded',\n\t\t\t\t\t\t\t\t\t'X-CSRF-Token': token\n\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\tbody: 'body=' + encodeURIComponent(body)\n\t\t\t\t\t\t\t})\n\t\t\t\t\t\t\t.then(function(r) { return r.text(); })\n\t\t\t\t\t\t\t.then(function(html) { previewPane.innerHTML = html; })\n\t\t\t\t\t\t\t.catch(function() { previewPane.innerHTML = '<p class=\"text-red text-sm\">Preview failed.</p>'; });\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t}\n\n\t\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\t\tdocument.querySelectorAll('[data-md-container]').forEach(setupMarkdownPreview);\n\t\t\t\t});\n\t\t\t\tdocument.addEventListener('htmx:afterSwap', function(evt) {\n\t\t\t\t\tif (evt.detail.target) {\n\t\t\t\t\t\tevt.detail.target.querySelectorAll('[data-md-container]').forEach(setupMarkdownPreview);\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t</script></head><body class=\"min-h-screen\"><a href=\"#main-content\" class=\"skip-link\">Skip to main content</a> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -210,7 +210,7 @@ func Layout(data LayoutData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if data.User != nil {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"notif-bell\"><button type=\"button\" class=\"gh-header-btn\" aria-label=\"Notifications\" aria-expanded=\"false\" aria-controls=\"notif-panel\" onclick=\"toggleNotifications(this)\" hx-indicator=\"#notif-loading\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"notif-bell\"><button type=\"button\" class=\"gh-header-btn\" aria-label=\"Notifications\" aria-expanded=\"false\" aria-controls=\"notif-drawer\" onclick=\"toggleNotifications(this)\" hx-indicator=\"#notif-loading\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -223,14 +223,14 @@ func Layout(data LayoutData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if data.UnreadNotifs > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<span class=\"notif-count\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<span id=\"notif-badge\" class=\"notif-count\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(unreadLabel(data.UnreadNotifs))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 212, Col: 68}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 230, Col: 85}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
@@ -240,16 +240,21 @@ func Layout(data LayoutData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
+				} else {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<span id=\"notif-badge\" class=\"notif-count\" style=\"display:none\">0</span>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div id=\"notif-panel\" class=\"notif-dropdown card hidden\" aria-live=\"polite\"></div><div id=\"notif-loading\" class=\"htmx-indicator\" style=\"display:inline-flex;align-items:center;gap:0.25rem;padding:0 0.5rem\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</div><!-- Notifications drawer --> <div id=\"notif-overlay\" class=\"notif-overlay\" onclick=\"closeNotifications()\"></div><div id=\"notif-drawer\" class=\"notif-drawer\" aria-labelledby=\"notif-drawer-title\" role=\"dialog\" aria-modal=\"true\"><div class=\"notif-drawer-header\"><h2 id=\"notif-drawer-title\">Notifications</h2><button type=\"button\" class=\"notif-drawer-close\" onclick=\"closeNotifications()\" aria-label=\"Close\"><svg class=\"gh-icon\" aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z\"></path></svg></button></div><div id=\"notif-body\" class=\"notif-drawer-body\"><div class=\"notif-empty\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = LoadingSpinnerSmall().Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = Icon("bell", "").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<span class=\"text-xs\">Loading...</span></div></div><details class=\"gh-user-menu\"><summary>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<p>No notifications</p></div></div></div><details class=\"gh-user-menu\"><summary>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -257,53 +262,53 @@ func Layout(data LayoutData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<span class=\"gh-header-link\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<span class=\"gh-header-link\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(data.User.Username)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 223, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 254, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</span></summary><div class=\"gh-user-dropdown\"><a href=\"/settings\">Settings</a> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span></summary><div class=\"gh-user-dropdown\"><a href=\"/settings\">Settings</a> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if data.User.User != nil && data.User.User.Role == auth.RoleAdmin {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<a href=\"/admin/users\">Admin</a>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<a href=\"/admin/users\">Admin</a>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<form action=\"/logout\" method=\"post\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<form action=\"/logout\" method=\"post\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.CSRF)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 231, Col: 67}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 262, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\"> <button type=\"submit\">Sign out</button></form></div></details>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\"> <button type=\"submit\">Sign out</button></form></div></details>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<a href=\"/login\" class=\"gh-header-link\">Sign in</a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<a href=\"/login\" class=\"gh-header-link\">Sign in</a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</div></div></header>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</div></div></header>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -313,7 +318,7 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<main id=\"main-content\" class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<main id=\"main-content\" class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -326,7 +331,7 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -347,7 +352,7 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</main></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</main></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
