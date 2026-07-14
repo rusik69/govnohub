@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -182,6 +183,22 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	su := userFrom(r.Context())
 	pats, _ := h.deps.Auth.ListPATs(r.Context(), su.ID)
 	keys, _ := h.deps.Auth.ListSSHKeys(r.Context(), su.ID)
+	// Check for PATs expiring within 7 days and create notifications
+	expiring, _ := h.deps.Auth.ListExpiringPATs(r.Context(), 7*24*time.Hour)
+	if patsForUser, ok := expiring[su.ID]; ok && h.deps.Notify != nil {
+		for _, pat := range patsForUser {
+			if pat.ExpiresAt == nil {
+				continue
+			}
+			daysLeft := int(time.Until(*pat.ExpiresAt).Hours() / 24)
+			if daysLeft < 0 {
+				daysLeft = 0
+			}
+			title := "Personal access token expiring soon"
+			body := fmt.Sprintf("Your token \"%s\" expires in %d day(s) on %s. Create a new token before it expires.", pat.Name, daysLeft, pat.ExpiresAt.Format("2006-01-02"))
+			_ = h.deps.Notify.Create(r.Context(), su.ID, title, body, "/settings")
+		}
+	}
 	render(w, r, SettingsPage(h.layout(r, "Settings"), pats, keys, "", ""))
 }
 

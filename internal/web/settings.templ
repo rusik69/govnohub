@@ -1,6 +1,10 @@
 package web
 
-import "github.com/rusik69/govnohub/internal/auth"
+import (
+	"time"
+
+	"github.com/rusik69/govnohub/internal/auth"
+)
 
 templ SettingsPage(layout LayoutData, pats []auth.PATInfo, keys []auth.SSHKeyInfo, newPAT, errMsg string) {
 	@Layout(LayoutData{
@@ -39,12 +43,23 @@ templ SettingsContent(csrf string, pats []auth.PATInfo, keys []auth.SSHKeyInfo, 
 			@EmptyState("No tokens")
 		} else {
 			<table class="card">
-				<thead><tr><th>Name</th><th>Scopes</th><th>Created</th><th></th></tr></thead>
+				<thead><tr><th>Name</th><th>Scopes</th><th>Expires</th><th>Created</th><th></th></tr></thead>
 				<tbody>
 					for _, p := range pats {
 						<tr>
 							<td>{ p.Name }</td>
 							<td class="text-sm">{ joinScopes(p.Scopes) }</td>
+							<td class="text-sm">
+								if p.ExpiresAt != nil {
+									if time.Until(*p.ExpiresAt) < 7*24*time.Hour {
+										<span class="text-danger font-semibold" title="Expiring soon">{ relativeTime(*p.ExpiresAt) }</span>
+									} else {
+										<time datetime={ timeAttr(*p.ExpiresAt) } title={ timeTooltip(*p.ExpiresAt) }>{ relativeTime(*p.ExpiresAt) }</time>
+									}
+								} else {
+									<span class="text-muted">Never</span>
+								}
+							</td>
 							<td class="text-sm text-muted"><time datetime={ timeAttr(p.CreatedAt) } title={ timeTooltip(p.CreatedAt) }>{ relativeTime(p.CreatedAt) }</time></td>
 							<td>
 								<form method="post" action={ templ.SafeURL("/settings/pat/" + p.ID.String() + "/revoke") } onsubmit="return confirm('Revoke this token?')">

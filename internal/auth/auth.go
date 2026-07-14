@@ -49,10 +49,11 @@ type PATIntrospection struct {
 }
 
 type PATInfo struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	Scopes    []string  `json:"scopes"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID  `json:"id"`
+	Name      string     `json:"name"`
+	Scopes    []string   `json:"scopes"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type User struct {
@@ -225,9 +226,10 @@ func (s *Service) CreatePAT(ctx context.Context, userID uuid.UUID, name string, 
 		return "", err
 	}
 	hash := hashToken(raw)
+	expiresAt := time.Now().Add(90 * 24 * time.Hour)
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO personal_access_tokens (user_id, name, token_hash, scopes)
-		VALUES ($1, $2, $3, $4)`, userID, name, hash, scopes)
+		INSERT INTO personal_access_tokens (user_id, name, token_hash, scopes, expires_at)
+		VALUES ($1, $2, $3, $4, $5)`, userID, name, hash, scopes, expiresAt)
 	if err != nil {
 		return "", err
 	}
@@ -311,7 +313,7 @@ func HasScope(scopes []string, required string) bool {
 
 func (s *Service) ListPATs(ctx context.Context, userID uuid.UUID) ([]PATInfo, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, scopes, created_at FROM personal_access_tokens
+		SELECT id, name, scopes, expires_at, created_at FROM personal_access_tokens
 		WHERE user_id=$1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -320,7 +322,7 @@ func (s *Service) ListPATs(ctx context.Context, userID uuid.UUID) ([]PATInfo, er
 	var out []PATInfo
 	for rows.Next() {
 		var p PATInfo
-		if err := rows.Scan(&p.ID, &p.Name, &p.Scopes, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Scopes, &p.ExpiresAt, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -337,6 +339,31 @@ func (s *Service) RevokePAT(ctx context.Context, userID, patID uuid.UUID) error 
 		return ErrUnauthorized
 	}
 	return nil
+}
+
+// ListExpiringPATs returns tokens that expire within the given duration from now.
+// It groups them by user_id so callers can send one notification per user.
+func (s *Service) ListExpiringPATs(ctx context.Context, within time.Duration) (map[uuid.UUID][]PATInfo, error) {
+	cutoff := time.Now().Add(within)
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, user_id, name, scopes, expires_at, created_at
+		FROM personal_access_tokens
+		WHERE expires_at IS NOT NULL AND expires_at <= $1 AND expires_at > NOW()
+		ORDER BY user_id, expires_at`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[uuid.UUID][]PATInfo)
+	for rows.Next() {
+		var userID uuid.UUID
+		var p PATInfo
+		if err := rows.Scan(&p.ID, &userID, &p.Name, &p.Scopes, &p.ExpiresAt, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		result[userID] = append(result[userID], p)
+	}
+	return result, rows.Err()
 }
 
 func (s *Service) GetUserByUsername(ctx context.Context, username string) (*User, error) {
