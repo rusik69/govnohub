@@ -100,13 +100,6 @@ func (rl *RateLimiter) Stop() {
 	close(rl.stopCh)
 }
 
-// Package-level limiters.
-var (
-	coreLimiter   = NewRateLimiter(defaultLimit, defaultWindow)
-	anonLimiter   = NewRateLimiter(anonLimit, anonWindow)
-	searchLimiter = NewRateLimiter(searchLimit, searchWindow)
-)
-
 // rateLimitKey returns the rate-limit key for the request:
 // authenticated users keyed by user ID, anonymous by remote IP.
 func rateLimitKey(r *http.Request, uid uuid.UUID) string {
@@ -218,10 +211,10 @@ func (s *Server) handleRateLimit(w http.ResponseWriter, r *http.Request) {
 	var limiter *RateLimiter
 	var limit int
 	if isAnon {
-		limiter = anonLimiter
+		limiter = s.anonLimiter
 		limit = anonLimit
 	} else {
-		limiter = coreLimiter
+		limiter = s.coreLimiter
 		limit = defaultLimit
 	}
 

@@ -53,6 +53,10 @@ type Server struct {
 	audit    *audit.Service
 	presence *presence.Tracker
 	web      *web.Handler
+
+	anonLimiter   *RateLimiter
+	coreLimiter   *RateLimiter
+	searchLimiter *RateLimiter
 }
 
 func NewServer(
@@ -82,6 +86,9 @@ func NewServer(
 		events: eventsSvc,
 		pool: pool, org: orgSvc, aiReview: aiReviewSvc,
 		notify: notifySvc, wiki: wikiSvc, audit: auditSvc, presence: presenceTracker,
+		anonLimiter:   NewRateLimiter(anonLimit, anonWindow),
+		coreLimiter:   NewRateLimiter(defaultLimit, defaultWindow),
+		searchLimiter: NewRateLimiter(searchLimit, searchWindow),
 	}
 	s.web = web.NewHandler(web.Deps{
 		Auth: authSvc, Repos: repoSvc, Git: gitStore, Issues: issueSvc,
@@ -109,16 +116,16 @@ func (s *Server) Router() http.Handler {
 	})
 
 	// Unauthenticated routes: anon rate limiting (per-IP).
-	r.With(RateLimitMiddleware(anonLimiter)).Post("/api/v1/users", s.handleRegister)
-	r.With(RateLimitMiddleware(anonLimiter)).Post("/api/v1/auth/login", s.handleLogin)
-	r.With(RateLimitMiddleware(anonLimiter)).Get("/api/v1/rate_limit", s.handleRateLimit)
-	r.With(RateLimitMiddleware(anonLimiter)).Get("/api/v1/meta", s.handleMeta)
-	r.With(RateLimitMiddleware(anonLimiter)).Get("/api/v1/events", s.handleEvents)
+	r.With(RateLimitMiddleware(s.anonLimiter)).Post("/api/v1/users", s.handleRegister)
+	r.With(RateLimitMiddleware(s.anonLimiter)).Post("/api/v1/auth/login", s.handleLogin)
+	r.With(RateLimitMiddleware(s.anonLimiter)).Get("/api/v1/rate_limit", s.handleRateLimit)
+	r.With(RateLimitMiddleware(s.anonLimiter)).Get("/api/v1/meta", s.handleMeta)
+	r.With(RateLimitMiddleware(s.anonLimiter)).Get("/api/v1/events", s.handleEvents)
 
 	// Authenticated routes: core rate limiting (per-user).
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(s.authenticate)
-		r.Use(RateLimitMiddleware(coreLimiter))
+		r.Use(RateLimitMiddleware(s.coreLimiter))
 		r.Get("/user", s.handleCurrentUser)
 		r.Post("/user/tokens", s.handleCreatePAT)
 		r.Get("/user/tokens", s.handleListPATs)
