@@ -603,7 +603,7 @@ templ MarkdownTextarea(name, placeholder, value, csrf string) {
 			<button type="button" class="md-tab" data-md-tab="preview" data-csrf={ csrf }>Preview</button>
 		</div>
 		<div class="md-write" data-md-write="true">
-			<textarea name={ name } class="input" rows="4" placeholder={ placeholder } data-mention-enabled="true">{ value }</textarea>
+			<textarea name={ name } class="input" rows="4" placeholder={ placeholder } data-mention-enabled="true" data-emoji-enabled="true">{ value }</textarea>
 		</div>
 		<div class="md-preview-content markdown" data-md-preview="true" style="display:none"></div>
 	</div>

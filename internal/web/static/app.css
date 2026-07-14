@@ -1180,3 +1180,42 @@ html.dark .gh-skeleton::after {
   background: var(--accent);
   color: #fff;
 }
+
+/* Emoji autocomplete dropdown */
+.emoji-dropdown {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+  width: 240px;
+}
+.emoji-item {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.emoji-item:hover,
+.emoji-item.active {
+  background: var(--accent);
+  color: #fff;
+}
+.emoji-item .emoji-char {
+  font-size: 1.125rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.emoji-item .emoji-label {
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+.emoji-item.active .emoji-label,
+.emoji-item:hover .emoji-label {
+  opacity: 0.9;
+}

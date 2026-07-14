@@ -371,12 +371,231 @@ templ Layout(data LayoutData) {
 					dd.remove();
 				}
 			}
+			/* --- Emoji (:shortcode:) autocomplete --- */
+			var _emojiData = null;
+			/* Standard GitHub emoji shortcodes — most commonly used subset */
+			var EMOJI_MAP = {
+				"smile": "\ud83d\ude04", "smiley": "\ud83d\ude03", "grinning": "\ud83d\ude00", "blush": "\ud83d\ude0a",
+				"joy": "\ud83d\ude02", "sweat_smile": "\ud83d\ude05", "laughing": "\ud83d\ude06", "innocent": "\ud83d\ude07",
+				"wink": "\ud83d\ude09", "heart_eyes": "\ud83d\ude0d", "kissing_heart": "\ud83d\ude18", "kissing": "\ud83d\ude17",
+				"yum": "\ud83d\ude0b", "stuck_out_tongue": "\ud83d\ude1b", "sunglasses": "\ud83d\ude0e", "smirk": "\ud83d\ude0f",
+				"unamused": "\ud83d\ude12", "sweat": "\ud83d\ude13", "pensive": "\ud83d\ude14", "confounded": "\ud83d\ude16",
+				"cry": "\ud83d\ude22", "sob": "\ud83d\ude2d", "angry": "\ud83d\ude20", "rage": "\ud83d\ude21",
+				"frowning": "\ud83d\ude26", "anguished": "\ud83d\ude27", "fearful": "\ud83d\ude28", "weary": "\ud83d\ude29",
+				"sleepy": "\ud83d\ude2a", "tired_face": "\ud83d\ude2b", "grimacing": "\ud83d\ude2c", "cold_sweat": "\ud83d\ude30",
+				"scream": "\ud83d\ude31", "astonished": "\ud83d\ude32", "flushed": "\ud83d\ude33", "dizzy_face": "\ud83d\ude35",
+				"mask": "\ud83d\ude37", "neutral_face": "\ud83d\ude10", "expressionless": "\ud83d\ude11", "confused": "\ud83d\ude15",
+				"thinking": "\ud83e\udd14", "slightly_smiling": "\ud83d\ude42", "slightly_frowning": "\ud83d\ude41",
+				"hugging": "\ud83e\udd17", "rolling_eyes": "\ud83d\ude44", "money_mouth": "\ud83e\udd11", "nerd": "\ud83e\udd13",
+				"thumbsup": "\ud83d\udc4d", "+1": "\ud83d\udc4d", "thumbsdown": "\ud83d\udc4e", "-1": "\ud83d\udc4e",
+				"clap": "\ud83d\udc4f", "wave": "\ud83d\udc4b", "ok_hand": "\ud83d\udc4c", "v": "\u270c\ufe0f",
+				"raised_hands": "\ud83d\ude4c", "pray": "\ud83d\ude4f", "point_up": "\u261d\ufe0f", "point_down": "\ud83d\udc47",
+				"point_left": "\ud83d\udc48", "point_right": "\ud83d\udc49", "muscle": "\ud83d\udcaa", "eyes": "\ud83d\udc40",
+				"heart": "\u2764\ufe0f", "broken_heart": "\ud83d\udc94", "two_hearts": "\ud83d\udc95", "sparkling_heart": "\ud83d\udc96",
+				"heartpulse": "\ud83d\udc97", "cupid": "\ud83d\udc98", "star": "\u2b50", "sparkles": "\u2728",
+				"zap": "\u26a1", "fire": "\ud83d\udd25", "rocket": "\ud83d\ude80", "checkered_flag": "\ud83c\udfc1",
+				"tada": "\ud83c\udf89", "party": "\ud83c\udf8a", "confetti": "\ud83c\udf8a", "balloon": "\ud83c\udf88",
+				"gift": "\ud83c\udf81", "crown": "\ud83d\udc51", "medal": "\ud83c\udfc5", "trophy": "\ud83c\udfc6",
+				"100": "\ud83d\udcaf", "bookmark": "\ud83d\udd16", "link": "\ud83d\udd17", "pushpin": "\ud83d\udccc",
+				"round_pushpin": "\ud83d\udccd", "bulb": "\ud83d\udca1", "warning": "\u26a0\ufe0f", "no_entry": "\u26d4",
+				"x": "\u274c", "white_check_mark": "\u2705", "heavy_check_mark": "\u2714\ufe0f", "heavy_multiplication_x": "\u2716\ufe0f",
+				"memo": "\ud83d\udcdd", "pencil": "\ud83d\udcdd", "page_facing_up": "\ud83d\udcc4", "book": "\ud83d\udcd6",
+				"books": "\ud83d\udcda", "mag": "\ud83d\udd0d", "mag_right": "\ud83d\udd0e", "toolbox": "\ud83e\uddf0",
+				"wrench": "\ud83d\udd27", "nut_and_bolt": "\ud83d\udd29", "hammer": "\ud83d\udd28", "gear": "\u2699\ufe0f",
+				"bug": "\ud83d\udc1b", "ant": "\ud83d\udc1c", "beetle": "\ud83d\udc1e", "ladybug": "\ud83d\udc1e",
+				"test_tube": "\ud83e\uddea", "microscope": "\ud83d\udd2c", "telescope": "\ud83d\udd2d", "satellite": "\ud83d\udce1",
+				"computer": "\ud83d\udcbb", "laptop": "\ud83d\udcbb", "keyboard": "\u2328\ufe0f", "mouse": "\ud83d\uddb1\ufe0f",
+				"battery": "\ud83d\udd0b", "electric_plug": "\ud83d\udd0c", "globe": "\ud83c\udf10", "earth": "\ud83c\udf0d",
+				"map": "\ud83d\uddfa\ufe0f", "chart": "\ud83d\udcca", "bar_chart": "\ud83d\udcca", "file_folder": "\ud83d\udcc1",
+				"open_file_folder": "\ud83d\udcc2", "inbox_tray": "\ud83d\udce5", "outbox_tray": "\ud83d\udce4",
+				"envelope": "\u2709\ufe0f", "mailbox": "\ud83d\udceb", "incoming_envelope": "\ud83d\udce8",
+				"phone": "\u260e\ufe0f", "telephone": "\u260e\ufe0f", "camera": "\ud83d\udcf7", "video_camera": "\ud83d\udcf9",
+				"movie_camera": "\ud83c\udfa5", "clapper": "\ud83c\udfac", "musical_note": "\ud83c\udfb5", "notes": "\ud83c\udfb6",
+				"musical_keyboard": "\ud83c\udfb9", "drum": "\ud83e\udd41", "guitar": "\ud83c\udfb8", "trumpet": "\ud83c\udfba",
+				"saxophone": "\ud83c\udfb7", "microphone": "\ud83c\udfa4", "headphones": "\ud83c\udfa7", "radio": "\ud83d\udcfb",
+				"watch": "\u231a", "hourglass": "\u23f3", "alarm_clock": "\u23f0", "calendar": "\ud83d\udcc5",
+				"crystal_ball": "\ud83d\udd2e", "bank": "\ud83c\udfe6", "hospital": "\ud83c\udfe5", "school": "\ud83c\udfeb",
+				"factory": "\ud83c\udfed", "office": "\ud83c\udfe2", "house": "\ud83c\udfe0", "construction": "\ud83c\udfd7\ufe0f",
+				"european_castle": "\ud83c\udff0", "japanese_castle": "\ud83c\udfef", "beach": "\ud83c\udfd6\ufe0f", "desert": "\ud83c\udfdc\ufe0f",
+				"car": "\ud83d\ude97", "taxi": "\ud83d\ude95", "bus": "\ud83d\ude8c", "truck": "\ud83d\ude9a",
+				"ambulance": "\ud83d\ude91", "fire_engine": "\ud83d\ude92", "police_car": "\ud83d\ude93", "bicycle": "\ud83d\udeb2",
+				"airplane": "\u2708\ufe0f", "helicopter": "\ud83d\ude81", "anchor": "\u2693", "ship": "\ud83d\udea2",
+				"train": "\ud83d\ude82", "subway": "\ud83d\ude87", "rocket": "\ud83d\ude80", "star2": "\ud83c\udf1f",
+				"sunny": "\u2600\ufe0f", "moon": "\ud83c\udf19", "cloud": "\u2601\ufe0f", "umbrella": "\u2614",
+				"rainbow": "\ud83c\udf08", "snowflake": "\u2744\ufe0f", "snowman": "\u26c4", "tornado": "\ud83c\udf2a\ufe0f",
+				"dog": "\ud83d\udc36", "cat": "\ud83d\udc31", "mouse": "\ud83d\udc2d", "hamster": "\ud83d\udc39",
+				"rabbit": "\ud83d\udc30", "fox": "\ud83e\udd8a", "bear": "\ud83d\udc3b", "panda_face": "\ud83d\udc3c",
+				"koala": "\ud83d\udc28", "tiger": "\ud83d\udc2f", "lion": "\ud83e\udd81", "cow": "\ud83d\udc2e",
+				"pig": "\ud83d\udc37", "frog": "\ud83d\udc38", "monkey": "\ud83d\udc35", "chicken": "\ud83d\udc14",
+				"baby_chick": "\ud83d\udc24", "bird": "\ud83d\udc26", "penguin": "\ud83d\udc27", "fish": "\ud83d\udc1f",
+				"dolphin": "\ud83d\udc2c", "whale": "\ud83d\udc33", "octopus": "\ud83d\udc19", "turtle": "\ud83d\udc22",
+				"snake": "\ud83d\udc0d", "dragon": "\ud83d\udc09", "unicorn": "\ud83e\udd84", "horse": "\ud83d\udc0e",
+				"cactus": "\ud83c\udf35", "palm_tree": "\ud83c\udf34", "tree": "\ud83c\udf33", "seedling": "\ud83c\udf31",
+				"herb": "\ud83c\udf3f", "four_leaf_clover": "\ud83c\udf40", "mushroom": "\ud83c\udf44", "cherry_blossom": "\ud83c\udf38",
+				"rose": "\ud83c\udf39", "sunflower": "\ud83c\udf3b", "blossom": "\ud83c\udf3c", "tulip": "\ud83c\udf37",
+				"seedling": "\ud83c\udf31", "maple_leaf": "\ud83c\udf41", "fallen_leaf": "\ud83c\udf42", "leaf": "\ud83c\udf43",
+				"grapes": "\ud83c\udf47", "melon": "\ud83c\udf48", "watermelon": "\ud83c\udf49", "tangerine": "\ud83c\udf4a",
+				"lemon": "\ud83c\udf4b", "banana": "\ud83c\udf4c", "pineapple": "\ud83c\udf4d", "apple": "\ud83c\udf4e",
+				"green_apple": "\ud83c\udf4f", "pear": "\ud83c\udf50", "peach": "\ud83c\udf51", "cherries": "\ud83c\udf52",
+				"strawberry": "\ud83c\udf53", "hamburger": "\ud83c\udf54", "pizza": "\ud83c\udf55", "fries": "\ud83c\udf5f",
+				"hotdog": "\ud83c\udf2d", "taco": "\ud83c\udf2e", "burrito": "\ud83c\udf2f", "popcorn": "\ud83c\udf7f",
+				"shrimp": "\ud83e\udd90", "egg": "\ud83e\udd5a", "bread": "\ud83c\udf5e", "cheese": "\ud83e\uddc0",
+				"coffee": "\u2615", "tea": "\ud83c\udf75", "beer": "\ud83c\udf7a", "cocktail": "\ud83c\udf78",
+				"soccer": "\u26bd", "basketball": "\ud83c\udfc0", "football": "\ud83c\udfc8", "baseball": "\u26be",
+				"tennis": "\ud83c\udfbe", "golf": "\u26f3", "ski": "\ud83c\udfbf", "swimmer": "\ud83c\udfca",
+				"surfer": "\ud83c\udfc4", "video_game": "\ud83c\udfae", "game_die": "\ud83c\udfb2", "slot_machine": "\ud83c\udfb0",
+				"flag": "\ud83c\udfc1", "checkered_flag": "\ud83c\udfc1", "rainbow_flag": "\ud83c\udff3\ufe0f\u200d\ud83c\udf08"
+			};
+			/* Build an array of [shortcode, emoji] for ordering/searching */
+			var EMOJI_ENTRIES = [];
+			(function() {
+				for (var key in EMOJI_MAP) {
+					if (EMOJI_MAP.hasOwnProperty(key)) {
+						EMOJI_ENTRIES.push([key, EMOJI_MAP[key]]);
+					}
+				}
+			})();
+			function setupEmojiAutocomplete(container) {
+				if (!container) return;
+				var ta = container.querySelector('textarea[data-emoji-enabled]');
+				if (!ta || ta._emojiSetup) return;
+				ta._emojiSetup = true;
+				ta.addEventListener('input', function(e) {
+					var pos = ta.selectionStart;
+					var val = ta.value;
+					/* Find the : before cursor: look backwards from cursor */
+					var start = val.lastIndexOf(':', pos - 1);
+					if (start === -1 || start === 0 || (start > 0 && val[start-1] !== ' ' && val[start-1] !== '	' && val[start-1] !== '\n' && val[start-1] !== '\r' && val[start-1] !== '(')) {
+						_removeEmojiDropdown();
+						return;
+					}
+					var query = val.substring(start + 1, pos);
+					if (query.length === 0 || !/^[a-zA-Z0-9_+\-]+$/.test(query)) {
+						_removeEmojiDropdown();
+						return;
+					}
+					/* Check if we're inside a word — after the colon we need word chars only */
+					/* If the character before the colon was alphanumeric, this is probably not an emoji */
+					if (start > 0 && /[a-zA-Z0-9_]/.test(val[start-1])) {
+						_removeEmojiDropdown();
+						return;
+					}
+					_emojiData = { ta: ta, start: start, pos: pos, query: query };
+					_showEmojiSuggestions(query, ta);
+				});
+				ta.addEventListener('blur', function() {
+					/* Auto-replace complete shortcodes like :smile: */
+					setTimeout(function() {
+						if (!ta) return;
+						var val = ta.value;
+						ta.value = val.replace(/:([a-zA-Z0-9_+\-]+):/g, function(match, name) {
+							return EMOJI_MAP[name.toLowerCase()] || match;
+						});
+					}, 300);
+				});
+				ta.addEventListener('keydown', function(e) {
+					var dd = document.getElementById('emoji-dropdown');
+					if (!dd || !dd._visible) return;
+					var items = dd.querySelectorAll('.emoji-item');
+					var idx = Array.prototype.indexOf.call(items, dd.querySelector('.emoji-item.active'));
+					if (e.key === 'ArrowDown') {
+						e.preventDefault();
+						var next = idx < items.length - 1 ? idx + 1 : 0;
+						items.forEach(function(i) { i.classList.remove('active'); });
+						items[next].classList.add('active');
+					} else if (e.key === 'ArrowUp') {
+						e.preventDefault();
+						var prev = idx > 0 ? idx - 1 : items.length - 1;
+						items.forEach(function(i) { i.classList.remove('active'); });
+						items[prev].classList.add('active');
+					} else if (e.key === 'Enter' || e.key === 'Tab') {
+						if (idx >= 0 && items[idx]) {
+							e.preventDefault();
+							_applyEmoji(items[idx].dataset.emojiShortcode, items[idx].dataset.emojiChar);
+						}
+					} else if (e.key === 'Escape') {
+						_removeEmojiDropdown();
+					}
+				});
+			}
+			function _showEmojiSuggestions(query, ta) {
+				_removeEmojiDropdown();
+				var lq = query.toLowerCase();
+				var matches = [];
+				for (var i = 0; i < EMOJI_ENTRIES.length; i++) {
+					var entry = EMOJI_ENTRIES[i];
+					if (entry[0].indexOf(lq) !== -1) {
+						matches.push(entry);
+						if (matches.length >= 8) break;
+					}
+				}
+				if (matches.length === 0) return;
+				var dd = document.createElement('div');
+				dd.id = 'emoji-dropdown';
+				dd._visible = true;
+				dd.className = 'emoji-dropdown';
+				matches.forEach(function(m, i) {
+					var item = document.createElement('div');
+					item.className = 'emoji-item' + (i === 0 ? ' active' : '');
+					item.dataset.emojiShortcode = m[0];
+					item.dataset.emojiChar = m[1];
+					var charSpan = document.createElement('span');
+					charSpan.className = 'emoji-char';
+					charSpan.textContent = m[1];
+					var labelSpan = document.createElement('span');
+					labelSpan.className = 'emoji-label';
+					labelSpan.textContent = ':' + m[0] + ':';
+					item.appendChild(charSpan);
+					item.appendChild(labelSpan);
+					item.addEventListener('mousedown', function(e) {
+						e.preventDefault();
+						_applyEmoji(this.dataset.emojiShortcode, this.dataset.emojiChar);
+					});
+					item.addEventListener('mouseenter', function() {
+						dd.querySelectorAll('.emoji-item').forEach(function(el) { el.classList.remove('active'); });
+						this.classList.add('active');
+					});
+					dd.appendChild(item);
+				});
+				/* Position below the textarea */
+				var rect = ta.getBoundingClientRect();
+				dd.style.position = 'fixed';
+				dd.style.left = rect.left + 'px';
+				dd.style.top = (rect.bottom + window.scrollY) + 'px';
+				dd.style.minWidth = Math.max(rect.width * 0.4, 180) + 'px';
+				dd.style.zIndex = '9999';
+				document.body.appendChild(dd);
+			}
+			function _applyEmoji(shortcode, emoji) {
+				if (!_emojiData) return;
+				var ta = _emojiData.ta;
+				var start = _emojiData.start;
+				var pos = _emojiData.pos;
+				var val = ta.value;
+				ta.value = val.substring(0, start) + emoji + ' ' + val.substring(pos);
+				ta.selectionStart = ta.selectionEnd = start + emoji.length + 1;
+				ta.focus();
+				_removeEmojiDropdown();
+				_emojiData = null;
+				/* Trigger input event for HTMX bindings */
+				var evt = new Event('input', { bubbles: true });
+				ta.dispatchEvent(evt);
+			}
+			function _removeEmojiDropdown() {
+				var dd = document.getElementById('emoji-dropdown');
+				if (dd) {
+					dd._visible = false;
+					dd.remove();
+				}
+			}
 			document.addEventListener('DOMContentLoaded', function() {
 				document.querySelectorAll('[data-md-container]').forEach(setupMentionAutocomplete);
+				document.querySelectorAll('[data-md-container]').forEach(setupEmojiAutocomplete);
 			});
 			document.addEventListener('htmx:afterSwap', function(evt) {
 				if (evt.detail.target) {
 					evt.detail.target.querySelectorAll('[data-md-container]').forEach(setupMentionAutocomplete);
+					evt.detail.target.querySelectorAll('[data-md-container]').forEach(setupEmojiAutocomplete);
 				}
 			});
 			</script>
