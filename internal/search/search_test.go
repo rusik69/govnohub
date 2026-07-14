@@ -332,13 +332,12 @@ func TestSearch_ErrorResponse(t *testing.T) {
 	defer ts.Close()
 
 	s := NewService(ts.URL)
-	result, err := s.Search(context.Background(), "test", SearchOptions{Limit: 10})
-	// The current implementation returns empty hits on error, no error
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	_, err := s.Search(context.Background(), "test", SearchOptions{Limit: 10})
+	if err == nil {
+		t.Fatal("expected error for bad request, got nil")
 	}
-	if len(result.Hits) != 0 {
-		t.Errorf("expected 0 hits on error, got %d", len(result.Hits))
+	if !strings.Contains(err.Error(), "400") {
+		t.Errorf("expected 400 in error, got: %s", err.Error())
 	}
 }
 

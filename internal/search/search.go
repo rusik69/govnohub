@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type Document struct {
@@ -43,38 +45,82 @@ type SearchResult struct {
 	Total int
 }
 
+// Service provides search indexing and querying against OpenSearch.
+// HTTP request failures are retried with exponential backoff.
 type Service struct {
-	baseURL string
-	client  *http.Client
+	baseURL    string
+	client     *http.Client
+	maxRetries int
+	baseDelay  time.Duration
 }
 
 func NewService(baseURL string) *Service {
-	return &Service{baseURL: strings.TrimRight(baseURL, "/"), client: http.DefaultClient}
+	return &Service{
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		client:     http.DefaultClient,
+		maxRetries: 3,
+		baseDelay:  500 * time.Millisecond,
+	}
+}
+
+// doRequest performs an HTTP request with exponential backoff retry on
+// network/transport errors (connection refused, DNS failure, timeouts).
+// HTTP error responses (4xx, 5xx) are NOT retried — the caller handles them.
+func (s *Service) doRequest(ctx context.Context, method, url string, body []byte, contentType string) (*http.Response, error) {
+	var lastErr error
+	for attempt := 0; attempt <= s.maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: baseDelay * 2^(attempt-1) with jitter
+			delay := s.baseDelay * (1 << (attempt - 1))
+			jitter := time.Duration(rand.Int63n(int64(delay) / 2))
+			select {
+			case <-time.After(delay + jitter):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		var bodyReader io.Reader
+		if body != nil {
+			bodyReader = bytes.NewReader(body)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+
+		resp, err := s.client.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("request failed after %d retries: %w", s.maxRetries, lastErr)
 }
 
 func (s *Service) Index(ctx context.Context, doc Document) error {
-	body, _ := json.Marshal(doc)
-	url := fmt.Sprintf("%s/govnohub/_doc/%s", s.baseURL, doc.ID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))
+	body, err := json.Marshal(doc)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal document: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.client.Do(req)
+	url := fmt.Sprintf("%s/govnohub/_doc/%s", s.baseURL, doc.ID)
+	resp, err := s.doRequest(ctx, http.MethodPut, url, body, "application/json")
 	if err != nil {
-		return err
+		return fmt.Errorf("index document: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("index failed: %s", string(b))
+		return fmt.Errorf("index failed (status %d): %s", resp.StatusCode, string(b))
 	}
 	return nil
 }
 
 func (s *Service) EnsureIndex(ctx context.Context) error {
-	url := s.baseURL + "/govnohub"
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, url, strings.NewReader(`{
+	mapping := `{
 		"mappings": {"properties": {
 			"type": {"type": "keyword"},
 			"title": {"type": "text"},
@@ -82,17 +128,19 @@ func (s *Service) EnsureIndex(ctx context.Context) error {
 			"repo": {"type": "keyword"},
 			"path": {"type": "keyword"}
 		}}
-	}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.client.Do(req)
+	}`
+	resp, err := s.doRequest(ctx, http.MethodPut, s.baseURL+"/govnohub", []byte(mapping), "application/json")
 	if err != nil {
-		return err
+		return fmt.Errorf("ensure index: %w", err)
 	}
 	resp.Body.Close()
 	return nil
 }
 
 func (s *Service) Search(ctx context.Context, q string, opts SearchOptions) (SearchResult, error) {
+	if q == "" {
+		return SearchResult{}, nil
+	}
 	if opts.Limit <= 0 {
 		opts.Limit = 20
 	}
@@ -123,8 +171,8 @@ func (s *Service) Search(ctx context.Context, q string, opts SearchOptions) (Sea
 	}
 
 	queryBody := map[string]interface{}{
-		"size": opts.Limit,
-		"from": opts.Offset,
+		"size":             opts.Limit,
+		"from":             opts.Offset,
 		"track_total_hits": true,
 	}
 
@@ -147,20 +195,22 @@ func (s *Service) Search(ctx context.Context, q string, opts SearchOptions) (Sea
 	}
 	// best_match = default scoring (no explicit sort needed, ES uses _score by default)
 
-	body, _ := json.Marshal(queryBody)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/govnohub/_search", bytes.NewReader(body))
+	body, err := json.Marshal(queryBody)
 	if err != nil {
-		return SearchResult{}, err
+		return SearchResult{}, fmt.Errorf("marshal query: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.client.Do(req)
+
+	resp, err := s.doRequest(ctx, http.MethodPost, s.baseURL+"/govnohub/_search", body, "application/json")
 	if err != nil {
-		return SearchResult{}, nil
+		return SearchResult{}, fmt.Errorf("search request: %w", err)
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode >= 300 {
-		return SearchResult{}, nil
+		b, _ := io.ReadAll(resp.Body)
+		return SearchResult{}, fmt.Errorf("search failed (status %d): %s", resp.StatusCode, string(b))
 	}
+
 	var result struct {
 		Hits struct {
 			Total struct {
@@ -173,8 +223,9 @@ func (s *Service) Search(ctx context.Context, q string, opts SearchOptions) (Sea
 		} `json:"hits"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return SearchResult{}, nil
+		return SearchResult{}, fmt.Errorf("decode response: %w", err)
 	}
+
 	var hits []Hit
 	for _, h := range result.Hits.Hits {
 		snippet := h.Source.Body
